@@ -115,20 +115,23 @@ func (d *driver) Update() error {
 	// To capture the app in several states in one run — the multi-snapshot pattern — call d.snapshot(i)
 	// between segments; each call renders the current state and writes a numbered PNG next to -out.
 	//
-	// INPUT SCRIPT: click the bgstone object -> hero walks to it -> action plays.
+	// INPUT SCRIPT: quest persistence round-trip. Pick up bgstone in SCENA0
+	// (DelObject + AddItem), leave to SCENA3, return, and confirm the stone
+	// stays gone (world edits persist in GameState across scene loads).
+	click := func(x, y float64) {
+		d.guest.MoveCursor(x, y)
+		d.guest.AdvanceTicks(2)
+		d.guest.PressMouseButton(ebiten.MouseButtonLeft)
+		d.guest.AdvanceTicks(1)
+		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
+	}
 	d.guest.AdvanceTicks(5)
-	d.guest.MoveCursor(155, 166) // over bgstone (hand cursor)
-	d.guest.AdvanceTicks(2)
-	_ = d.snapshot(0) // scene alive, cursor over object
-	d.guest.PressMouseButton(ebiten.MouseButtonLeft)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
-	d.guest.AdvanceTicks(50)
-	_ = d.snapshot(1) // walking to the object
-	d.guest.AdvanceTicks(90)
-	_ = d.snapshot(2) // action animation playing
-	d.guest.AdvanceTicks(150)
-	_ = d.snapshot(3) // action finishing
+	_ = d.snapshot(0) // SCENA0 initial (clean 640x480 viewport)
+	click(155, 166)   // click bgstone -> walk + pick-up action
+	d.guest.AdvanceTicks(220)
+	_ = d.snapshot(1) // walking / action
+	d.guest.AdvanceTicks(500)
+	_ = d.snapshot(2) // action done, stone taken
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

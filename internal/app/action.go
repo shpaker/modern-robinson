@@ -39,6 +39,10 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	if fs.MovieName == "" {
 		return nil
 	}
+	// Click actions are always one-shot; looping is a FonScript (ambient)
+	// property, not a script one (the terminal-command heuristic can mislabel
+	// an action whose world-change fires on an early frame, e.g. ROHANBGS).
+	fs.Looping = false
 	ocx, ocy, ok := g.objCell(objName)
 	if !ok {
 		return nil
@@ -115,35 +119,9 @@ func (g *Game) updateAction(dt float64) {
 		return
 	}
 	g.act.started = true
-	for _, ev := range g.act.player.Update(dt) {
-		g.applyEvent(ev)
-	}
+	g.applyEvents(g.act.player.Update(dt))
 	if g.act.player.Done() {
 		g.act = nil
-	}
-}
-
-// applyEvent runs one frame event. Stage 2 handles presentation + trivial world
-// changes (sound, text, hide, transition); quest logic (Set/If/AddItem/…) is
-// deferred to the interpreter (stage 3).
-func (g *Game) applyEvent(ev types.Command) {
-	switch ev.Kw {
-	case "sound":
-		g.playSound(ev.Args)
-	case "text":
-		if len(ev.Args) > 0 {
-			g.msg, g.msgT = "text #"+ev.Args[0], 3
-		}
-	case "delobject":
-		if len(ev.Args) >= 2 {
-			g.hideObject(ev.Args[1])
-		}
-	case "goscene":
-		g.gosceneFromEvent(ev.Args)
-	case "aproach":
-		// already consumed as the walk target
-	default:
-		// Set/If/AddItem/CreateObject/... — stage 3
 	}
 }
 
@@ -181,7 +159,7 @@ func (g *Game) drawAction(screen *ebiten.Image) bool {
 		return true // playing but this frame is empty
 	}
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(g.act.frames[i].X), float64(g.act.frames[i].Y))
+	op.GeoM.Translate(float64(g.act.frames[i].X-g.camX), float64(g.act.frames[i].Y))
 	screen.DrawImage(g.act.frames[i].Img, op)
 	return true
 }

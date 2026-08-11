@@ -36,17 +36,24 @@ type Game struct {
 
 	sceneName string
 	bg        *ebiten.Image
+	barBG     *ebiten.Image
 	sc        *types.Scene
 	sceneC    interfaces.IContainer
 	grid      interfaces.IGrid
-	w, h      int
+	w, h      int // scene (world) size; the viewport is ViewW x PlayH
+	camX      int // horizontal scroll offset into the scene
 	zper      int
 	objects   map[string]*types.SceneObject
 	sceneObjs []*sceneObj
+	fsByName  map[string][]byte
 	hotspots  []hotspot
 	exitL     types.Exit
 	exitR     types.Exit
 	stepWav   []byte
+
+	gs         *types.GameState
+	interp     use_cases.Interpreter
+	charHidden bool
 
 	act        *actionPlay
 	pendingAct *actionPlay
@@ -76,6 +83,7 @@ func NewGame(res interfaces.IResources) *Game {
 		walkCache: map[int]*adapters.Animation{},
 		curDir:    6,
 		debug:     DebugFlag == "true",
+		gs:        types.NewGameState(),
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.loadScene("SCENA0", nil)
@@ -122,7 +130,13 @@ func (g *Game) loadScene(name string, spawn *[2]int) {
 			}
 		}
 	}
-	g.sceneObjs = loadSceneObjects(g.res, g.parser, c, g.sc, g.objects)
+	g.charHidden = false
+	g.fsByName = fonScripts(c)
+	g.sceneObjs = loadSceneObjects(g.res, g.parser, g.sc, g.objects,
+		g.fsByName, func(obj string) bool { return g.gs.IsGone(name, obj) })
+	for _, sp := range g.gs.Spawns(name) {
+		g.spawnObject(sp.Obj, sp.GX, sp.GY)
+	}
 	g.buildHotspots()
 	g.exitL, g.exitR = g.parser.SceneExits(c)
 
@@ -132,6 +146,7 @@ func (g *Game) loadScene(name string, spawn *[2]int) {
 	g.cell = start
 	px, py := g.grid.ToScreen(start[0], start[1])
 	g.pos = [2]float64{float64(px), float64(py)}
+	g.clampCamera()
 	g.path = nil
 	g.frameI = 0
 
@@ -204,16 +219,20 @@ func (g *Game) click(mx, my int) {
 	if g.act != nil || g.pendingAct != nil {
 		return // ignore input while an action is walking/playing
 	}
-	if mx < 40 && g.exitL.OK {
+	if my >= PlayH {
+		return // inventory-bar click (stage 3d)
+	}
+	wx, wy := mx+g.camX, my // viewport -> world
+	if wx < 40 && g.exitL.OK {
 		g.pending = &g.exitL
 		return
 	}
-	if mx > g.w-40 && g.exitR.OK {
+	if wx > g.w-40 && g.exitR.OK {
 		g.pending = &g.exitR
 		return
 	}
 	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, mx, my) {
+		if pointIn(hs.rect, wx, wy) {
 			switch strings.ToLower(hs.key) {
 			case "goleft":
 				if g.exitL.OK {
@@ -229,14 +248,14 @@ func (g *Game) click(mx, my int) {
 		}
 	}
 	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, mx, my) {
+		if pointIn(hs.rect, wx, wy) {
 			if !g.startObjectAction(hs.ob.Name) {
 				g.msg, g.msgT = hs.ob.Name, 3 // no action script -> examine
 			}
 			return
 		}
 	}
-	cx, cy := g.grid.ToCell(mx, my)
+	cx, cy := g.grid.ToCell(wx, wy)
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
 		if p := g.grid.Path(g.cell, [2]int{tx, ty}); len(p) > 1 {
 			g.path = p[1:]
@@ -274,13 +293,12 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// advance animated scene objects and fire their frame events
+	g.clampCamera()
+
+	// advance animated scene objects and run their frame events through the
+	// interpreter (ambient loops mostly fire Sound)
 	for _, s := range g.sceneObjs {
-		for _, ev := range s.update(dt) {
-			if ev.Kw == "sound" {
-				g.playSound(ev.Args)
-			}
-		}
+		g.applyEvents(s.update(dt))
 	}
 	g.updateAction(dt)
 
@@ -309,11 +327,16 @@ func (g *Game) Update() error {
 // charZCoord gives the character a mid/front sub-slot within its grid row.
 const charZCoord = 7
 
-// Draw renders the scene: background, then objects and the character in
-// back-to-front Z order (gy*ZPerGrid + ZCoord), then HUD/debug.
+// Draw renders one frame: the scrolled scene background, then objects and the
+// character in back-to-front Z order (gy*ZPerGrid + ZCoord), then the inventory
+// bar over the bottom 80px, then HUD/debug/cursor. Everything in world space is
+// shifted left by camX; the bar and cursor are in viewport space.
 func (g *Game) Draw(screen *ebiten.Image) {
-	screen.DrawImage(g.bg, nil)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(-float64(g.camX), 0)
+	screen.DrawImage(g.bg, op)
 
+	xoff := -g.camX
 	type drawable struct {
 		z  int
 		fn func()
@@ -322,7 +345,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for _, s := range g.sceneObjs {
 		if s.visible {
 			s := s
-			items = append(items, drawable{s.z, func() { s.draw(screen) }})
+			items = append(items, drawable{s.z, func() { s.draw(screen, xoff) }})
 		}
 	}
 	items = append(items, drawable{g.cell[1]*g.zper + charZCoord, func() { g.drawCharacter(screen) }})
@@ -331,6 +354,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		it.fn()
 	}
 
+	g.drawBar(screen)
 	if g.msg != "" {
 		ebitenutil.DebugPrintAt(screen, g.msg, 12, 10)
 	}
@@ -340,17 +364,34 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawCursor(screen)
 }
 
+// drawBar renders the inventory bar over the bottom BarH px. Until the real
+// BAR.DAT art is wired (stage 3d) it is a plain strip.
+func (g *Game) drawBar(screen *ebiten.Image) {
+	if g.barBG != nil {
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(0, float64(PlayH))
+		screen.DrawImage(g.barBG, op)
+		return
+	}
+	vector.FillRect(screen, 0, float32(PlayH), float32(ViewW), float32(BarH), rgba(30, 22, 14, 255), false)
+	vector.StrokeLine(screen, 0, float32(PlayH), float32(ViewW), float32(PlayH), 2, rgba(90, 70, 45, 255), false)
+}
+
 // cursorType returns the cursor for the hovered zone: 1..4 = arrows
 // (left/right/up/down), 0 = hand (object action), -1 = default pointer.
 func (g *Game) cursorType(mx, my int) int {
-	if mx < 40 && g.exitL.OK {
+	if my >= PlayH {
+		return -1 // bar area
+	}
+	wx, wy := mx+g.camX, my
+	if wx < 40 && g.exitL.OK {
 		return 1
 	}
-	if mx > g.w-40 && g.exitR.OK {
+	if wx > g.w-40 && g.exitR.OK {
 		return 2
 	}
 	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, mx, my) {
+		if pointIn(hs.rect, wx, wy) {
 			switch strings.ToLower(hs.key) {
 			case "goleft":
 				return 1
@@ -398,6 +439,9 @@ func drawTriangle(dst *ebiten.Image, ax, ay, bx, by, cx, cy float32, fill, outli
 }
 
 func (g *Game) drawCharacter(screen *ebiten.Image) {
+	if g.charHidden {
+		return // HideChar: hero not on stage (cutscene / off-screen)
+	}
 	if g.drawAction(screen) {
 		return // an action movie is playing in place of idle/walk
 	}
@@ -410,7 +454,7 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	}
 	fi := g.frameI % len(a.Frames)
 	frame, anch := a.Frames[fi], a.Anchors[fi]
-	px, py := g.pos[0], g.pos[1]
+	px, py := g.pos[0]-float64(g.camX), g.pos[1]
 	vector.FillCircle(screen, float32(px), float32(py-3), 16, rgba(0, 0, 0, 70), true)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(px-float64(anch[0]), py-float64(anch[1]))
@@ -418,10 +462,12 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 }
 
 func (g *Game) drawDebug(screen *ebiten.Image) {
+	xoff := -g.camX
 	nx, ny := g.grid.Dims()
 	for gy := 0; gy < ny; gy++ {
 		for gx := 0; gx < nx; gx++ {
 			x, y := g.grid.ToScreen(gx, gy)
+			x += xoff
 			var col color.Color
 			switch {
 			case g.grid.Blocked(gx, gy):
@@ -437,32 +483,53 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 	}
 	for _, c := range g.path {
 		x, y := g.grid.ToScreen(c[0], c[1])
-		vector.FillCircle(screen, float32(x), float32(y), 4, rgba(255, 230, 0, 230), true)
+		vector.FillCircle(screen, float32(x+xoff), float32(y), 4, rgba(255, 230, 0, 230), true)
 	}
 	for _, hs := range g.hotspots {
 		r := hs.rect
-		vector.StrokeRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()),
+		vector.StrokeRect(screen, float32(r.Min.X+xoff), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()),
 			1, rgba(255, 230, 0, 200), false)
-		ebitenutil.DebugPrintAt(screen, hs.ob.Name, r.Min.X, r.Min.Y-12)
+		ebitenutil.DebugPrintAt(screen, hs.ob.Name, r.Min.X+xoff, r.Min.Y-12)
 	}
 	rx, ry := g.grid.ToScreen(g.cell[0], g.cell[1])
-	vector.StrokeCircle(screen, float32(rx), float32(ry), 9, 2, rgba(0, 200, 255, 255), true)
+	vector.StrokeCircle(screen, float32(rx+xoff), float32(ry), 9, 2, rgba(0, 200, 255, 255), true)
 
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
-		"DEBUG (F1)  v=%s  scene=%s  cell=%v  dir=%d  moving=%v  fps=%.0f",
-		Version, g.sceneName, g.cell, g.curDir, g.moving, ebiten.ActualFPS()), 8, g.h-32)
+		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  dir=%d  moving=%v  fps=%.0f",
+		Version, g.sceneName, g.cell, g.camX, g.curDir, g.moving, ebiten.ActualFPS()), 8, PlayH-32)
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
 		"exitL=%s(%d,%d) exitR=%s(%d,%d)  objects=%d hotspots=%d",
 		g.exitL.Scene, g.exitL.GX, g.exitL.GY, g.exitR.Scene, g.exitR.GX, g.exitR.GY,
-		len(g.objects), len(g.hotspots)), 8, g.h-18)
+		len(g.objects), len(g.hotspots)), 8, PlayH-18)
 }
 
-// Layout returns the current scene's logical size.
+// Layout is the fixed original window: a 640x400 scene viewport plus the 80px
+// inventory bar. Wide scenes scroll horizontally within it.
 func (g *Game) Layout(_, _ int) (int, int) {
-	if g.w == 0 {
-		return 1024, 400
+	return ViewW, ViewH
+}
+
+// clampCamera centres the camera on the character, clamped to the scene width.
+func (g *Game) clampCamera() {
+	px := int(g.pos[0])
+	g.camX = clampInt(px-ViewW/2, 0, maxInt(0, g.w-ViewW))
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
 	}
-	return g.w, g.h
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func pointIn(r image.Rectangle, x, y int) bool {

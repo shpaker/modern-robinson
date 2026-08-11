@@ -10,3 +10,14 @@ var DebugFlag = "false"
 
 // SampleRate for the audio context (all game WAVs are 22050 Hz).
 const SampleRate = 22050
+
+// The original runs in a fixed 640x480 window: a 640x400 scene viewport that
+// scrolls horizontally across the (up to 1024-wide) scene, above an 80px
+// inventory bar. Object/character sprites are authored on the full 640x480
+// canvas, so their lower parts fall behind the bar.
+const (
+	ViewW = 640 // viewport width
+	ViewH = 480 // window height (play area + bar)
+	PlayH = 400 // scene play-area height
+	BarH  = ViewH - PlayH
+)

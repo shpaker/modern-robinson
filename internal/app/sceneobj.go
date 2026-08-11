@@ -24,43 +24,65 @@ type sceneObj struct {
 	removed bool // taken/consumed (DelObject) — no sprite, no hotspot
 }
 
-// loadSceneObjects builds the live objects for a scene's ObjectList, wiring each
-// object's FonScript to its movie frames and a player.
-func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
-	c interfaces.IContainer, sc *types.Scene, objects map[string]*types.SceneObject,
-) []*sceneObj {
-	fsByName := map[string][]byte{}
+// fonScripts reads every .FS entry of a scene container, keyed by lower-case
+// base name, so objects can wire up their FonScript animations.
+func fonScripts(c interfaces.IContainer) map[string][]byte {
+	out := map[string][]byte{}
 	for _, e := range c.Entries() {
 		if strings.HasSuffix(strings.ToUpper(e.Name), ".FS") {
 			if d, err := c.Extract(e); err == nil {
-				fsByName[strings.ToLower(e.Name[:len(e.Name)-3])] = d
+				out[strings.ToLower(e.Name[:len(e.Name)-3])] = d
 			}
 		}
 	}
+	return out
+}
+
+// buildSceneObj builds one live object, wiring its FonScript to movie frames and
+// a player when the script is a looping ambient animation. Returns nil if the
+// object has no .OB definition.
+func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
+	fsByName map[string][]byte, zper int, ref types.ObjectRef,
+	ob *types.SceneObject,
+) *sceneObj {
+	if ob == nil {
+		return nil
+	}
+	inst := &sceneObj{ref: ref, ob: ob, z: ref.GY*zper + ob.Z}
+	fon := strings.ToLower(ob.FonScript)
+	if raw, ok := fsByName[fon]; fon != "" && fon != "null" && ok {
+		fs := parser.ParseFrameScript(string(raw))
+		inst.shift = fs.Shift
+		// Auto-play only looping FonScripts (ambient loops + 1-frame statics);
+		// one-shot scripts (smoke/cutscenes) stay hidden until triggered.
+		if fs.MovieName != "" && fs.Looping {
+			inst.frames = adapters.LoadDecal(res, fs.MovieName)
+			inst.player = use_cases.NewPlayer(fs)
+			inst.visible = len(inst.frames) > 0
+		}
+	}
+	return inst
+}
+
+// loadSceneObjects builds the live objects for a scene's ObjectList, skipping
+// any the quest state records as already taken.
+func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
+	sc *types.Scene, objects map[string]*types.SceneObject,
+	fsByName map[string][]byte, gone func(obj string) bool,
+) []*sceneObj {
 	zper := sc.ZPerGrid
 	if zper == 0 {
 		zper = 8
 	}
 	var out []*sceneObj
 	for _, ref := range sc.Objects {
-		ob := objects[strings.ToLower(ref.Name)]
-		if ob == nil {
+		if gone(ref.Name) {
 			continue
 		}
-		inst := &sceneObj{ref: ref, ob: ob, z: ref.GY*zper + ob.Z}
-		fon := strings.ToLower(ob.FonScript)
-		if raw, ok := fsByName[fon]; fon != "" && fon != "null" && ok {
-			fs := parser.ParseFrameScript(string(raw))
-			inst.shift = fs.Shift
-			// Auto-play only looping FonScripts (ambient loops + 1-frame statics);
-			// one-shot scripts (smoke/cutscenes) stay hidden until triggered.
-			if fs.MovieName != "" && fs.Looping {
-				inst.frames = adapters.LoadDecal(res, fs.MovieName)
-				inst.player = use_cases.NewPlayer(fs)
-				inst.visible = len(inst.frames) > 0
-			}
+		if inst := buildSceneObj(res, parser, fsByName, zper,
+			ref, objects[strings.ToLower(ref.Name)]); inst != nil {
+			out = append(out, inst)
 		}
-		out = append(out, inst)
 	}
 	return out
 }
@@ -77,8 +99,9 @@ func (s *sceneObj) update(dt float64) []types.Command {
 	return ev
 }
 
-// draw blits the current animation frame at its screen offset.
-func (s *sceneObj) draw(screen *ebiten.Image) {
+// draw blits the current animation frame at its screen offset, shifted by the
+// camera offset xoff (negative camX).
+func (s *sceneObj) draw(screen *ebiten.Image, xoff int) {
 	if !s.visible || s.player == nil || len(s.frames) == 0 {
 		return
 	}
@@ -87,6 +110,6 @@ func (s *sceneObj) draw(screen *ebiten.Image) {
 		return
 	}
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(s.frames[i].X), float64(s.frames[i].Y))
+	op.GeoM.Translate(float64(s.frames[i].X+xoff), float64(s.frames[i].Y))
 	screen.DrawImage(s.frames[i].Img, op)
 }

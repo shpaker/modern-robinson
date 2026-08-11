@@ -24,8 +24,7 @@ func main() {
 	}
 	res := repositories.NewResources(root)
 	g := app.NewGame(res)
-	w, h := g.Size()
-	ebiten.SetWindowSize(w, h)
+	ebiten.SetWindowSize(app.ViewW*2, app.ViewH*2) // 640x480 native, 2x for comfort
 	ebiten.SetWindowTitle("Новый Робинзон — " + app.Version)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
