@@ -21,6 +21,7 @@ type IResources interface {
 	Sound(name string) []byte
 	SceneContainer(name string) IContainer
 	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
+	BarBackground() (*types.NGB, types.Palette)
 }
 
 // ISceneParser parses NGI text scripts into Domain entities.
@@ -28,6 +29,8 @@ type ISceneParser interface {
 	ParseScene(text string) *types.Scene
 	ParseObject(text string) *types.SceneObject
 	ParseFrameScript(text string) *types.FrameScript
+	ParseStartup(text string) (vars map[string]int, charVars map[string]string)
+	ParseBar(text string) *types.Bar
 	SceneExits(c IContainer) (left, right types.Exit)
 }
 

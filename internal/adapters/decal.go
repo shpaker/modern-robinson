@@ -1,10 +1,39 @@
 package adapters
 
 import (
+	"math"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 )
+
+// LoadIcon renders a movie's first frame as an inventory icon: the sprite is
+// cropped to its opaque pixels and fitted (never upscaled) into a w x h image,
+// centred. Returns nil if the movie is missing or empty.
+func LoadIcon(res interfaces.IResources, movie string, w, h int) *ebiten.Image {
+	frames, pal := res.MovieFrames(movie)
+	if len(frames) == 0 {
+		return nil
+	}
+	n := frames[0]
+	src, _, _, ok := cropOpaque(n.RGBA(pal), n.Width, n.Height)
+	if !ok {
+		return nil
+	}
+	b := src.Bounds()
+	s := math.Min(float64(w)/float64(b.Dx()), float64(h)/float64(b.Dy()))
+	if s > 1 {
+		s = 1 // keep small items pixel-accurate
+	}
+	dw, dh := float64(b.Dx())*s, float64(b.Dy())*s
+	icon := ebiten.NewImage(w, h)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(s, s)
+	op.GeoM.Translate((float64(w)-dw)/2, (float64(h)-dh)/2)
+	icon.DrawImage(src, op)
+	return icon
+}
 
 // DecalFrame is one frame of a scene-object animation: its opaque pixels are
 // pre-placed at final screen coordinates, so it draws at offset (X, Y). A nil

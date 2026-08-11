@@ -43,10 +43,19 @@ func NewResources(root string) *Resources {
 		switch {
 		case strings.HasSuffix(up, ".MV"):
 			r.movies[up] = p
-		case strings.HasSuffix(up, ".DAN") && strings.HasPrefix(up, "SCENA"):
+		case strings.HasSuffix(up, ".DAN"):
+			// Every scene/interior/global script container (SCENA*, CAB_*,
+			// INT*, PALACE, STARTUP, BAR, ...) keyed by base name.
 			r.sceneDirs[up[:len(up)-4]] = p
-		case strings.HasSuffix(up, ".DAT") && strings.HasPrefix(up, "SCENA"):
-			r.sceneDat[up[:len(up)-4]] = p
+		case strings.HasSuffix(up, ".DAT"):
+			// Background bitmaps live in DATA/SCEN (scenes) and DATA/BAR (the
+			// inventory bar); ignore the top-level data blobs (CONFIG, LANG,
+			// CHESS, ...) that share the extension.
+			dir := strings.ToUpper(p)
+			sep := string(os.PathSeparator)
+			if strings.Contains(dir, sep+"SCEN"+sep) || strings.Contains(dir, sep+"BAR"+sep) {
+				r.sceneDat[up[:len(up)-4]] = p
+			}
 		}
 		return nil
 	})
@@ -119,6 +128,35 @@ func (r *Resources) Sound(name string) []byte {
 	}
 	b, _ := r.wave.Extract(e)
 	return b
+}
+
+// BarBackground returns the inventory bar's 640x80 background bitmap (BAR0.NGB)
+// and its palette from DATA/BAR/BAR.DAT.
+func (r *Resources) BarBackground() (*types.NGB, types.Palette) {
+	var pal types.Palette
+	p, ok := r.sceneDat["BAR"]
+	if !ok {
+		return nil, pal
+	}
+	c := r.container(p)
+	if c == nil {
+		return nil, pal
+	}
+	var bg *types.NGB
+	for _, e := range c.Entries() {
+		up := strings.ToUpper(e.Name)
+		d, err := c.Extract(e)
+		if err != nil {
+			continue
+		}
+		switch {
+		case up == "BAR0.NGB":
+			bg = codec.DecodeNGB(d)
+		case strings.HasSuffix(up, ".COL"):
+			pal = codec.LoadPalette(d)
+		}
+	}
+	return bg, pal
 }
 
 // SceneContainer returns the .DAN container for a scene (its scripts/objects).

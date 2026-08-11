@@ -30,6 +30,11 @@ var keywords = map[string]bool{
 	"aproach": true, "approach": true, "setvert": true, "shiftscreen": true,
 	"setmouse": true, "hidechar": true, "showchar": true, "map": true, "mouse": true,
 	"setbar": true, "setactive": true, "end": true, "delayfactor": true,
+	// BAR.BAR layout fields
+	"drawbar": true, "bardata": true, "barltwh": true, "characterbox": true,
+	"textbox": true, "inventoryltwh": true, "invmasklt": true, "items": true,
+	"advanceditems": true, "itemwh": true, "itemsdisplayed": true,
+	"leftarrowbox": true, "rightarrowbox": true, "scisorsbox": true, "savebox": true,
 }
 
 var (
@@ -255,6 +260,83 @@ func isLooping(fs *types.FrameScript) bool {
 		}
 	}
 	return true
+}
+
+// ParseBar parses BAR.BAR, the inventory-panel layout.
+func (SceneParser) ParseBar(text string) *types.Bar {
+	b := &types.Bar{}
+	rect4 := func(s string) [4]int {
+		v := ints(s)
+		var r [4]int
+		for i := 0; i < 4 && i < len(v); i++ {
+			r[i] = v[i]
+		}
+		return r
+	}
+	for _, st := range statements(text) {
+		switch st.kw {
+		case "barltwh":
+			b.Rect = rect4(st.args)
+		case "inventoryltwh":
+			b.Inventory = rect4(st.args)
+		case "itemwh":
+			if v := ints(st.args); len(v) >= 2 {
+				b.ItemW, b.ItemH = v[0], v[1]
+			}
+		case "itemsdisplayed":
+			if v := ints(st.args); len(v) > 0 {
+				b.ItemsShown = v[0]
+			}
+		case "characterbox":
+			b.CharBox = rect4(st.args)
+		case "textbox":
+			b.TextBox = rect4(st.args)
+		case "leftarrowbox":
+			b.LeftArrow = rect4(st.args)
+		case "rightarrowbox":
+			b.RightArrow = rect4(st.args)
+		case "scisorsbox":
+			b.ScisorsBox = rect4(st.args)
+		case "savebox":
+			b.SaveBox = rect4(st.args)
+		case "bardata":
+			b.Data = strings.TrimSpace(st.args)
+		case "items":
+			if a := argSplit(st.args); len(a) > 0 {
+				b.Items = append(b.Items, a[0])
+			}
+		}
+	}
+	return b
+}
+
+// ParseStartup reads STARTUP.INF's IntVariables and CharVariables declarations
+// into the quest namespace with their initial values (most flags start 0, but a
+// few — TreeIs=1, MapParts=4, Find6=30 — do not; dialogue selectors point at
+// their first variant script). Seeding these is required for correct If-branching.
+func (SceneParser) ParseStartup(text string) (vars map[string]int, charVars map[string]string) {
+	vars = map[string]int{}
+	charVars = map[string]string{}
+	for _, st := range statements(text) {
+		switch st.kw {
+		case "intvariables":
+			a := argSplit(st.args)
+			if len(a) >= 2 {
+				vars[strings.ToLower(a[0])] = atoiSafe(a[1])
+			}
+		case "charvariables":
+			a := argSplit(st.args)
+			if len(a) >= 2 {
+				charVars[strings.ToLower(a[0])] = a[1]
+			}
+		}
+	}
+	return vars, charVars
+}
+
+func atoiSafe(s string) int {
+	v, _ := strconv.Atoi(strings.TrimSpace(s))
+	return v
 }
 
 // SceneExits scans a scene container's *GOL/*GOR frame scripts for the GoScene

@@ -77,3 +77,43 @@ func TestParseSceneAndExits(t *testing.T) {
 		t.Errorf("exitR = %+v, want SCENA3", right)
 	}
 }
+
+func TestParseStartup(t *testing.T) {
+	inf := "SceneDirectory\t\\SCEN;\n" +
+		"Scenes\t\tINT0,*;\n\t\tSCENA0;\n" +
+		"IntVariables\tCrabNeed,0;\n\t\tTreeIs,1;\n\t\tMapParts,4;\n\t\tFind6,30;\n" +
+		"CharVariables\trohanbgs,\"rohanbgs\";\n\t\trohanpop,\"hirobin\";\n" +
+		"GridDebug 0;\nEnd;\n"
+	vars, chars := SceneParser{}.ParseStartup(inf)
+	if vars["treeis"] != 1 || vars["mapparts"] != 4 || vars["find6"] != 30 {
+		t.Fatalf("int vars = %v", vars)
+	}
+	if vars["crabneed"] != 0 {
+		t.Fatalf("crabneed = %d, want 0", vars["crabneed"])
+	}
+	if chars["rohanbgs"] != "rohanbgs" || chars["rohanpop"] != "hirobin" {
+		t.Fatalf("char vars = %v", chars)
+	}
+}
+
+func TestParseBar(t *testing.T) {
+	txt := "DrawBar 1;\nBarLTWH 0,400,640,80;\nInventoryLTWH 303,410,146,60;\n" +
+		"ItemWH 48,60;\nItemsDisplayed 3;\nLeftArrowBox 267,412,297,469;\n" +
+		"RightArrowBox 457,412,484,467;\nItems hand,\"x\";\n\taxe,\"y\";\nEnd;\n"
+	b := SceneParser{}.ParseBar(txt)
+	if b.Rect != [4]int{0, 400, 640, 80} {
+		t.Fatalf("Rect=%v", b.Rect)
+	}
+	if b.Inventory != [4]int{303, 410, 146, 60} {
+		t.Fatalf("Inventory=%v", b.Inventory)
+	}
+	if b.ItemW != 48 || b.ItemH != 60 || b.ItemsShown != 3 {
+		t.Fatalf("item cell=%dx%d shown=%d", b.ItemW, b.ItemH, b.ItemsShown)
+	}
+	if b.LeftArrow != [4]int{267, 412, 297, 469} || b.RightArrow[0] != 457 {
+		t.Fatalf("arrows L=%v R=%v", b.LeftArrow, b.RightArrow)
+	}
+	if len(b.Items) != 2 || b.Items[0] != "hand" || b.Items[1] != "axe" {
+		t.Fatalf("items=%v", b.Items)
+	}
+}

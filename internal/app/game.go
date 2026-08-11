@@ -55,6 +55,10 @@ type Game struct {
 	interp     use_cases.Interpreter
 	charHidden bool
 
+	bar       *types.Bar
+	itemIcons map[string]*ebiten.Image
+	invScroll int
+
 	act        *actionPlay
 	pendingAct *actionPlay
 
@@ -86,8 +90,30 @@ func NewGame(res interfaces.IResources) *Game {
 		gs:        types.NewGameState(),
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
+	g.seedStartup()
+	g.loadBar()
 	g.loadScene("SCENA0", nil)
 	return g
+}
+
+// seedStartup loads STARTUP.INF's initial quest variables into the game state so
+// early If-checks branch correctly (most flags are 0, some are not).
+func (g *Game) seedStartup() {
+	sc := g.res.SceneContainer("STARTUP")
+	if sc == nil {
+		return
+	}
+	d, err := sc.ExtractName("STARTUP.INF")
+	if err != nil {
+		return
+	}
+	vars, charVars := g.parser.ParseStartup(string(d))
+	for k, v := range vars {
+		g.gs.SetVar(k, v)
+	}
+	for k, v := range charVars {
+		g.gs.SetCharVar(k, v)
+	}
 }
 
 // Size reports the current scene's logical dimensions.
@@ -220,7 +246,8 @@ func (g *Game) click(mx, my int) {
 		return // ignore input while an action is walking/playing
 	}
 	if my >= PlayH {
-		return // inventory-bar click (stage 3d)
+		g.clickBar(mx, my) // inventory-bar click
+		return
 	}
 	wx, wy := mx+g.camX, my // viewport -> world
 	if wx < 40 && g.exitL.OK {
@@ -362,19 +389,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		g.drawDebug(screen)
 	}
 	g.drawCursor(screen)
-}
-
-// drawBar renders the inventory bar over the bottom BarH px. Until the real
-// BAR.DAT art is wired (stage 3d) it is a plain strip.
-func (g *Game) drawBar(screen *ebiten.Image) {
-	if g.barBG != nil {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(0, float64(PlayH))
-		screen.DrawImage(g.barBG, op)
-		return
-	}
-	vector.FillRect(screen, 0, float32(PlayH), float32(ViewW), float32(BarH), rgba(30, 22, 14, 255), false)
-	vector.StrokeLine(screen, 0, float32(PlayH), float32(ViewW), float32(PlayH), 2, rgba(90, 70, 45, 255), false)
 }
 
 // cursorType returns the cursor for the hovered zone: 1..4 = arrows
