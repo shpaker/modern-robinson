@@ -1,0 +1,43 @@
+// Package interfaces defines the contracts between layers. No engine or
+// runtime imports — only the Domain (types). Dependencies point inward.
+package interfaces
+
+import "github.com/shpaker/modern-robinson/internal/types"
+
+// IContainer is a parsed NL resource file (.DAN / .DAT / .MV).
+type IContainer interface {
+	Entries() []types.Entry
+	Find(name string) (types.Entry, bool)
+	FindExt(ext string) (types.Entry, bool)
+	Extract(e types.Entry) ([]byte, error)
+	ExtractName(name string) ([]byte, error)
+}
+
+// IResources indexes the game's resources and resolves assets by name. It is
+// the only door to raw game files (ARCHITECTURE.md: no hardcoded paths elsewhere).
+type IResources interface {
+	Movie(name string) IContainer
+	MovieFrames(name string) ([]*types.NGB, types.Palette)
+	Sound(name string) []byte
+	SceneContainer(name string) IContainer
+	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
+}
+
+// ISceneParser parses NGI text scripts into Domain entities.
+type ISceneParser interface {
+	ParseScene(text string) *types.Scene
+	ParseObject(text string) *types.SceneObject
+	ParseFrameScript(text string) *types.FrameScript
+	SceneExits(c IContainer) (left, right types.Exit)
+}
+
+// IGrid maps between screen pixels and walk-grid cells and finds paths.
+type IGrid interface {
+	ToScreen(gx, gy int) (int, int)
+	ToCell(px, py int) (int, int)
+	Valid(gx, gy int) bool
+	Blocked(gx, gy int) bool
+	NearestFree(gx, gy int) (int, int, bool)
+	Path(start, goal [2]int) [][2]int
+	Dims() (int, int)
+}
