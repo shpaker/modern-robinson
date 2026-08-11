@@ -7,18 +7,18 @@ import (
 	"testing"
 )
 
-// GameRoot returns the extracted game folder, trying a couple of repo-relative
-// depths, or skips the test if the (proprietary) resources aren't present.
+// GameRoot returns the extracted game folder by walking up from the test's cwd
+// until it finds extracted/ROBINSON_ISO/ROBINSON, or skips if not present.
 func GameRoot(t *testing.T) string {
 	t.Helper()
 	rel := filepath.Join("extracted", "ROBINSON_ISO", "ROBINSON")
-	for _, up := range []string{
-		filepath.Join("..", "..", "..", rel),       // internal/<layer>/
-		filepath.Join("..", "..", "..", "..", rel), // internal/<layer>/<sub>/
-	} {
-		if _, err := os.Stat(filepath.Join(up, "DATA", "OPTIONS.DAT")); err == nil {
-			return up
+	dir := "."
+	for i := 0; i < 8; i++ {
+		root := filepath.Join(dir, rel)
+		if _, err := os.Stat(filepath.Join(root, "DATA", "OPTIONS.DAT")); err == nil {
+			return root
 		}
+		dir = filepath.Join(dir, "..")
 	}
 	t.Skip("game resources not present; skipping")
 	return ""
