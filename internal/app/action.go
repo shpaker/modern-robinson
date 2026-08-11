@@ -22,7 +22,8 @@ type actionPlay struct {
 }
 
 // resolveAction builds the default (hand) action for an object: script
-// ROHAN<token> in the scene container, where token = first 3 letters of name.
+// <RO|FR>HAN<token> in the scene container, where token = first 3 letters of
+// the object's name and the prefix follows the active character.
 func (g *Game) resolveAction(objName string) *actionPlay {
 	if g.sceneC == nil {
 		return nil
@@ -31,7 +32,11 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	if len(tok) > 3 {
 		tok = tok[:3]
 	}
-	raw, err := g.sceneC.ExtractName("ROHAN" + tok + ".FS")
+	prefix := "ROHAN"
+	if strings.EqualFold(g.gs.Active, "Frid") {
+		prefix = "FRHAN"
+	}
+	raw, err := g.sceneC.ExtractName(prefix + tok + ".FS")
 	if err != nil {
 		return nil
 	}
@@ -148,11 +153,23 @@ func (g *Game) gosceneFromEvent(args []string) {
 	}
 	gx, _ := strconv.Atoi(args[len(args)-2])
 	gy, _ := strconv.Atoi(args[len(args)-1])
-	entry := ""
-	if len(args) >= 5 {
-		entry = args[2]
+	ex := &types.Exit{Scene: strings.ToUpper(args[0]), GX: gx, GY: gy, OK: true}
+	// scene,char,entry,gx,gy or scene,c1,e1,c2,e2,gx,gy; the pair whose char
+	// is Frid becomes his silent arrival, the other one is the hero's.
+	assign := func(char, entry string) {
+		if strings.EqualFold(char, "Frid") {
+			ex.EntryFrid = entry
+		} else {
+			ex.Entry = entry
+		}
 	}
-	g.pending = &types.Exit{Scene: strings.ToUpper(args[0]), Entry: entry, GX: gx, GY: gy, OK: true}
+	if len(args) >= 5 {
+		assign(args[1], args[2])
+	}
+	if len(args) >= 7 {
+		assign(args[3], args[4])
+	}
+	g.pending = ex
 }
 
 // startEntry plays a scene's arrival script (Roin2, robawake, Int1...) as the

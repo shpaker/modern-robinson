@@ -24,7 +24,11 @@ func (g *Game) applyEvents(cmds []types.Command) {
 // Pure state commands (Set/If/AddItem/…) never reach here — the interpreter
 // consumes them.
 func (g *Game) applyEffect(c types.Command) {
-	switch strings.ToLower(c.Kw) {
+	kw := strings.ToLower(c.Kw)
+	if g.fridEffect(kw, c.Args) {
+		return // a Frid-targeted Set/Aproach/Show/Hide
+	}
+	switch kw {
 	case "sound":
 		g.playSound(c.Args)
 	case "text":

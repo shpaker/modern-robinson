@@ -103,10 +103,12 @@ type FrameScript struct {
 }
 
 // Exit is a scene transition target reached from an edge / arrow object or a
-// GoScene command; Entry names the arrival .FS played on entering.
+// GoScene command; Entry names the hero's arrival .FS, EntryFrid the second
+// character's (7-arg GoScene moves both).
 type Exit struct {
-	Scene  string
-	Entry  string
-	GX, GY int
-	OK     bool
+	Scene     string
+	Entry     string
+	EntryFrid string
+	GX, GY    int
+	OK        bool
 }

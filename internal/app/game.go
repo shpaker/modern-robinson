@@ -56,6 +56,13 @@ type Game struct {
 	interp     use_cases.Interpreter
 	charHidden bool
 
+	fridCell   [2]int
+	fridZ      int
+	fridHidden bool
+	fridIdle   *adapters.Animation
+	fridFrame  int
+	fridT      float64
+
 	bar        *types.Bar
 	itemIcons  map[string]*ebiten.Image
 	barSprites map[string]*ebiten.Image
@@ -111,10 +118,18 @@ func NewGame(res interfaces.IResources) *Game {
 	if s := os.Getenv("ROBINSON_SCENE"); s != "" {
 		start = strings.ToUpper(s)
 	}
-	g.loadScene(start, nil, "")
+	g.loadScene(start, nil, "", "")
 	g.loadScreens()
 	if os.Getenv("ROBINSON_SCENE") != "" {
 		g.mode = modePlay // direct scene entry skips the boot screens
+	}
+	if v := os.Getenv("ROBINSON_VARS"); v != "" {
+		// Debug/test aid: comma-separated name=value quest flags.
+		for _, kv := range strings.Split(v, ",") {
+			if k, val, ok := strings.Cut(kv, "="); ok {
+				g.gs.SetVar(k, atoiArg(val))
+			}
+		}
 	}
 	return g
 }
@@ -152,7 +167,7 @@ func bgImage(n *types.NGB, pal types.Palette) *ebiten.Image {
 	return img
 }
 
-func (g *Game) loadScene(name string, spawn *[2]int, entry string) {
+func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	if g.res.SceneContainer(name) == nil {
 		// Unknown scene target (bad parse or missing container): stay put.
 		g.msg, g.msgT = "?? "+name, 3
@@ -221,6 +236,10 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry string) {
 	g.stepWav = nil
 	if sv, ok := g.sc.SoundVars["step"]; ok {
 		g.stepWav = g.res.Sound(sv[0])
+	}
+	g.fridInit()
+	if entryFrid != "" {
+		g.runFridEntry(entryFrid)
 	}
 	if entry != "" {
 		g.startEntry(entry)
@@ -386,6 +405,7 @@ func (g *Game) Update() error {
 		g.applyEvents(s.update(dt))
 	}
 	g.updateAction(dt)
+	g.updateFrid(dt)
 
 	a, rate := g.idle, 0.09
 	if g.moving {
@@ -404,7 +424,7 @@ func (g *Game) Update() error {
 	if g.pending != nil {
 		p := g.pending
 		g.pending = nil
-		g.loadScene(p.Scene, &[2]int{p.GX, p.GY}, p.Entry)
+		g.loadScene(p.Scene, &[2]int{p.GX, p.GY}, p.Entry, p.EntryFrid)
 	}
 	return nil
 }
@@ -430,7 +450,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		z  int
 		fn func()
 	}
-	items := make([]drawable, 0, len(g.sceneObjs)+1)
+	items := make([]drawable, 0, len(g.sceneObjs)+2)
 	for _, s := range g.sceneObjs {
 		if s.visible {
 			s := s
@@ -438,6 +458,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	}
 	items = append(items, drawable{g.cell[1]*g.zper + charZCoord, func() { g.drawCharacter(screen) }})
+	if g.fridVisible() {
+		items = append(items, drawable{g.fridCell[1]*g.zper + g.fridZ, func() { g.drawFrid(screen) }})
+	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].z < items[j].z })
 	for _, it := range items {
 		it.fn()

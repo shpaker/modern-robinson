@@ -179,6 +179,16 @@ func (g *Game) clickBar(mx, my int) {
 		return
 	}
 	switch {
+	case inBox(g.bar.CharBox, mx, my):
+		// The portrait toggles the controlled character once Friday joined.
+		if g.gs.Var("FridIs") == 1 {
+			if strings.EqualFold(g.gs.Active, "Frid") {
+				g.gs.Active = "Roby"
+			} else {
+				g.gs.Active = "Frid"
+			}
+		}
+		return
 	case inBox(g.bar.LeftArrow, mx, my):
 		if g.invScroll > 0 {
 			g.invScroll--
