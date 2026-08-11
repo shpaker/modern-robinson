@@ -22,6 +22,9 @@ type IResources interface {
 	SceneContainer(name string) IContainer
 	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
 	BarBackground() (*types.NGB, types.Palette)
+	BarSprites() (map[string]*types.NGB, types.Palette)
+	// Texts is the global string table (TEXT.DAT); Text ids are 0-based lines.
+	Texts() []string
 	// InitialVisibility is the start-of-game object visibility for a scene
 	// (from BEGIN.BGI), keyed by lower-case object name; objects absent from
 	// the map default to visible.

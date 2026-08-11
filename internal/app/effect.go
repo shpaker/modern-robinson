@@ -29,7 +29,11 @@ func (g *Game) applyEffect(c types.Command) {
 		g.playSound(c.Args)
 	case "text":
 		if len(c.Args) > 0 {
-			g.msg, g.msgT = "text #"+c.Args[0], 3
+			id, _ := strconv.Atoi(c.Args[0])
+			if s := g.textLine(id); s != "" {
+				// Rough read-time heuristic: base + per-character.
+				g.msg, g.msgT = s, 1.2+0.05*float64(len(s))
+			}
 		}
 	case "createobject":
 		g.createObject(c.Args)

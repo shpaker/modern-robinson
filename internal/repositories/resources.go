@@ -141,16 +141,24 @@ func (r *Resources) Sound(name string) []byte {
 // BarBackground returns the inventory bar's 640x80 background bitmap (BAR0.NGB)
 // and its palette from DATA/BAR/BAR.DAT.
 func (r *Resources) BarBackground() (*types.NGB, types.Palette) {
+	sp, pal := r.BarSprites()
+	return sp["BAR0"], pal
+}
+
+// BarSprites returns every bitmap of DATA/BAR/BAR.DAT keyed by upper-case base
+// name (BAR0 = strip background, BAR1-3 = character portraits, BAR4-5 = text
+// boxes, BAR6-19 = normal/selected icon pairs for the first seven items).
+func (r *Resources) BarSprites() (map[string]*types.NGB, types.Palette) {
 	var pal types.Palette
+	out := map[string]*types.NGB{}
 	p, ok := r.sceneDat["BAR"]
 	if !ok {
-		return nil, pal
+		return out, pal
 	}
 	c := r.container(p)
 	if c == nil {
-		return nil, pal
+		return out, pal
 	}
-	var bg *types.NGB
 	for _, e := range c.Entries() {
 		up := strings.ToUpper(e.Name)
 		d, err := c.Extract(e)
@@ -158,13 +166,13 @@ func (r *Resources) BarBackground() (*types.NGB, types.Palette) {
 			continue
 		}
 		switch {
-		case up == "BAR0.NGB":
-			bg = codec.DecodeNGB(d)
+		case strings.HasSuffix(up, ".NGB"):
+			out[strings.TrimSuffix(up, ".NGB")] = codec.DecodeNGB(d)
 		case strings.HasSuffix(up, ".COL"):
 			pal = codec.LoadPalette(d)
 		}
 	}
-	return bg, pal
+	return out, pal
 }
 
 // SceneContainer returns the .DAN container for a scene (its scripts/objects).

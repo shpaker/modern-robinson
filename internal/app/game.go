@@ -56,9 +56,12 @@ type Game struct {
 	interp     use_cases.Interpreter
 	charHidden bool
 
-	bar       *types.Bar
-	itemIcons map[string]*ebiten.Image
-	invScroll int
+	bar        *types.Bar
+	itemIcons  map[string]*ebiten.Image
+	barSprites map[string]*ebiten.Image
+	texts      []string
+	hover      string
+	invScroll  int
 
 	act        *actionPlay
 	pendingAct *actionPlay
@@ -93,6 +96,10 @@ func NewGame(res interfaces.IResources) *Game {
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.seedStartup()
 	g.loadBar()
+	// Starting inventory per ROBY.CHR (Items hand, hat).
+	g.gs.AddItem("hand")
+	g.gs.AddItem("hat")
+	g.gs.Active = "hand"
 	start := "SCENA0"
 	if s := os.Getenv("ROBINSON_SCENE"); s != "" {
 		start = strings.ToUpper(s)
@@ -296,7 +303,10 @@ func (g *Game) click(mx, my int) {
 	for _, hs := range g.hotspots {
 		if pointIn(hs.rect, wx, wy) {
 			if !g.startObjectAction(hs.ob.Name) {
-				g.msg, g.msgT = hs.ob.Name, 3 // no action script -> examine
+				// No action script: examine — say the object's name.
+				if s := g.textLine(hs.ob.Text); s != "" {
+					g.msg, g.msgT = s, 2.5
+				}
 			}
 			return
 		}
@@ -317,6 +327,7 @@ func (g *Game) Update() error {
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		g.click(ebiten.CursorPosition())
 	}
+	g.updateHover(ebiten.CursorPosition())
 	dt := 1.0 / float64(ebiten.TPS())
 
 	g.moving = len(g.path) > 0
@@ -401,9 +412,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	g.drawBar(screen)
-	if g.msg != "" {
-		ebitenutil.DebugPrintAt(screen, g.msg, 12, 10)
-	}
 	if g.debug {
 		g.drawDebug(screen)
 	}

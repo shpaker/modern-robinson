@@ -126,12 +126,14 @@ func (d *driver) Update() error {
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
 	d.guest.AdvanceTicks(5)
-	_ = d.snapshot(0) // SCENA0 initial (clean 640x480 viewport)
-	click(155, 166)   // click bgstone -> walk + pick-up action
-	d.guest.AdvanceTicks(220)
-	_ = d.snapshot(1) // walking / action
-	d.guest.AdvanceTicks(500)
-	_ = d.snapshot(2) // action done, stone taken
+	d.guest.MoveCursor(355, 250) // hover the palm trunk -> name in the text box
+	d.guest.AdvanceTicks(3)
+	_ = d.snapshot(0)
+	click(355, 250) // click the palm trunk -> approach + climb with dialogue
+	d.guest.AdvanceTicks(300)
+	_ = d.snapshot(1) // mid-action: dialogue line in the text box
+	d.guest.AdvanceTicks(600)
+	_ = d.snapshot(2) // action done
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
