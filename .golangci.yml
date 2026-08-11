@@ -1,9 +1,7 @@
-run:
-  timeout: 3m
+version: "2"
 
 linters:
   enable:
-    - gofumpt
     - govet
     - errcheck
     - staticcheck
@@ -12,56 +10,55 @@ linters:
     - misspell
     - revive
     - depguard
-
-linters-settings:
-  gofumpt:
-    extra-rules: true
-  depguard:
+  settings:
+    depguard:
+      rules:
+        # Domain must not depend on any other internal layer or the engine.
+        domain:
+          files:
+            - "**/internal/types/**"
+          deny:
+            - pkg: github.com/hajimehoshi/ebiten
+              desc: Domain (types) must not import the engine
+            - pkg: github.com/shpaker/modern-robinson/internal/interfaces
+            - pkg: github.com/shpaker/modern-robinson/internal/use_cases
+            - pkg: github.com/shpaker/modern-robinson/internal/adapters
+            - pkg: github.com/shpaker/modern-robinson/internal/repositories
+            - pkg: github.com/shpaker/modern-robinson/internal/app
+        # Contracts: only the Domain, never the engine or outer layers.
+        contracts:
+          files:
+            - "**/internal/interfaces/**"
+          deny:
+            - pkg: github.com/hajimehoshi/ebiten
+              desc: interfaces must not import the engine
+            - pkg: github.com/shpaker/modern-robinson/internal/adapters
+            - pkg: github.com/shpaker/modern-robinson/internal/repositories
+            - pkg: github.com/shpaker/modern-robinson/internal/app
+            - pkg: github.com/shpaker/modern-robinson/internal/use_cases
+        # Application logic: no engine, no presentation/infrastructure/root.
+        application:
+          files:
+            - "**/internal/use_cases/**"
+          deny:
+            - pkg: github.com/hajimehoshi/ebiten
+              desc: use_cases must not import the engine
+            - pkg: github.com/shpaker/modern-robinson/internal/adapters
+            - pkg: github.com/shpaker/modern-robinson/internal/repositories
+            - pkg: github.com/shpaker/modern-robinson/internal/app
+        # Presentation may use the engine but not infrastructure/root.
+        presentation:
+          files:
+            - "**/internal/adapters/**"
+          deny:
+            - pkg: github.com/shpaker/modern-robinson/internal/repositories
+            - pkg: github.com/shpaker/modern-robinson/internal/app
+  exclusions:
     rules:
-      # Domain must not depend on any other internal layer.
-      domain:
-        files:
-          - "**/internal/types/**"
-        deny:
-          - pkg: github.com/shpaker/modern-robinson/internal/interfaces
-            desc: Domain (types) must not depend on other layers
-          - pkg: github.com/shpaker/modern-robinson/internal/use_cases
-          - pkg: github.com/shpaker/modern-robinson/internal/adapters
-          - pkg: github.com/shpaker/modern-robinson/internal/repositories
-          - pkg: github.com/shpaker/modern-robinson/internal/app
-          - pkg: github.com/hajimehoshi/ebiten
-            desc: Domain must not import the engine
-      # Contracts must not depend on the engine or outer layers.
-      contracts:
-        files:
-          - "**/internal/interfaces/**"
-        deny:
-          - pkg: github.com/hajimehoshi/ebiten
-            desc: interfaces must not import the engine
-          - pkg: github.com/shpaker/modern-robinson/internal/adapters
-          - pkg: github.com/shpaker/modern-robinson/internal/repositories
-          - pkg: github.com/shpaker/modern-robinson/internal/app
-          - pkg: github.com/shpaker/modern-robinson/internal/use_cases
-      # Application logic: no engine, no presentation/infrastructure/root.
-      application:
-        files:
-          - "**/internal/use_cases/**"
-        deny:
-          - pkg: github.com/hajimehoshi/ebiten
-            desc: use_cases must not import the engine
-          - pkg: github.com/shpaker/modern-robinson/internal/adapters
-          - pkg: github.com/shpaker/modern-robinson/internal/repositories
-          - pkg: github.com/shpaker/modern-robinson/internal/app
-      # Presentation may use the engine but not infrastructure/root/app.
-      presentation:
-        files:
-          - "**/internal/adapters/**"
-        deny:
-          - pkg: github.com/shpaker/modern-robinson/internal/repositories
-          - pkg: github.com/shpaker/modern-robinson/internal/app
+      - path: _test\.go
+        linters:
+          - errcheck
 
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+formatters:
+  enable:
+    - gofumpt

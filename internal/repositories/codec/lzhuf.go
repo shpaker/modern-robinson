@@ -14,8 +14,10 @@ const (
 	maxFreq  = 0x8000
 )
 
-var dCode [256]int
-var dLen [256]int
+var (
+	dCode [256]int
+	dLen  [256]int
+)
 
 func init() {
 	// build d_code / d_len from StartHuff's count tables
@@ -219,7 +221,6 @@ func lzhufDecompress(src []byte, outSize int) []byte {
 					ebp |= (rd() & 0xFF) << uint(cl)
 					cl -= 8
 				}
-				stateRefill = false
 			}
 			ebp <<= 1
 			ch--
