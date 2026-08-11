@@ -1,26 +1,26 @@
-# --- proprietary game data (never commit; players supply their own disc) ---
+# proprietary game data (players supply their own disc)
 /Noviy_Robinson_ISO.rar
 *.iso
 *.rar
 /extracted/
 
-# --- Python (reverse-engineering tools + legacy prototype) ---
+# Python auxiliary tools
 /.venv/
 __pycache__/
 *.pyc
 
-# --- Go build output ---
-/remake-go/nrobinson
-/remake-go/nrobinson_*
-/remake-go/_build/
-/remake-go/dist/
-/remake-go/coverage.out
-/remake-go/coverage.html
-/remake-go/cov-*.out
+# Go build output
+/robinson
+/robinson_*
+/_build/
+/dist/
+coverage.out
+coverage.html
+cov-*.out
 
-# --- editor / OS ---
+# editor / OS
 .DS_Store
 *.swp
 
-# --- session ---
+# session
 /.claude/
