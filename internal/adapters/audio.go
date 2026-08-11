@@ -14,6 +14,7 @@ type Audio struct {
 	ctx   *audio.Context
 	cache map[string][]byte
 	chans map[int]*audio.Player
+	music string // key of the looping track on the music channel
 }
 
 // NewAudio creates an audio adapter at the given sample rate.
@@ -52,4 +53,36 @@ func (a *Audio) Play(key string, wavBytes []byte, channel int) {
 	p := a.ctx.NewPlayerF32FromBytes(pcm)
 	a.chans[channel] = p
 	p.Play()
+}
+
+// musicChannel is a reserved channel for the looping background track.
+const musicChannel = 0
+
+// PlayMusic loops a track on the music channel until replaced or stopped.
+// Re-triggering the same key keeps the current playback.
+func (a *Audio) PlayMusic(key string, wavBytes []byte) {
+	if a.music == key {
+		return
+	}
+	pcm := a.decode(key, wavBytes)
+	if pcm == nil {
+		return
+	}
+	a.StopMusic()
+	loop := audio.NewInfiniteLoopF32(bytes.NewReader(pcm), int64(len(pcm)))
+	p, err := a.ctx.NewPlayerF32(loop)
+	if err != nil {
+		return
+	}
+	a.music = key
+	a.chans[musicChannel] = p
+	p.Play()
+}
+
+// StopMusic silences the music channel.
+func (a *Audio) StopMusic() {
+	if old := a.chans[musicChannel]; old != nil {
+		old.Pause()
+	}
+	a.music = ""
 }

@@ -237,6 +237,10 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	if sv, ok := g.sc.SoundVars["step"]; ok {
 		g.stepWav = g.res.Sound(sv[0])
 	}
+	// Scene music: "continue" keeps the current track playing across scenes.
+	if m := strings.ToLower(strings.TrimSpace(g.sc.Music)); m != "" && m != "continue" {
+		g.startMusic(m)
+	}
 	g.fridInit()
 	if entryFrid != "" {
 		g.runFridEntry(entryFrid)

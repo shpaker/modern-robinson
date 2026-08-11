@@ -63,6 +63,8 @@ func (g *Game) applyEffect(c types.Command) {
 		g.startMinigame(c.Args)
 	case "set":
 		g.setCharCoord(c.Args)
+	case "setmusic":
+		g.setMusic(c.Args)
 	}
 	// aproach/shift still drive the walk+action phase.
 }
@@ -204,6 +206,28 @@ func (g *Game) setRest(args []string) {
 		g.idle = a
 		g.frameI = 0
 	}
+}
+
+// setMusic switches the looping background track: SetMusic id|none. Track ids
+// are WAV names in the wave bank (music1 -> MUSIC1.WAV, mpalace, mfrid, ...).
+func (g *Game) setMusic(args []string) {
+	if len(args) < 1 {
+		return
+	}
+	g.startMusic(args[0])
+}
+
+// startMusic resolves and loops a music track by id; "none" stops music.
+func (g *Game) startMusic(id string) {
+	if strings.EqualFold(id, "none") || id == "" {
+		g.audio.StopMusic()
+		return
+	}
+	file := id
+	if !strings.Contains(file, ".") {
+		file += ".wav"
+	}
+	g.audio.PlayMusic(strings.ToLower(file), g.res.Sound(file))
 }
 
 // robyTarget reports whether a HideChar/ShowChar/SetRest command targets the
