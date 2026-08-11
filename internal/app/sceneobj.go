@@ -53,19 +53,22 @@ func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
 	if raw, ok := fsByName[fon]; fon != "" && fon != "null" && ok {
 		fs := parser.ParseFrameScript(string(raw))
 		inst.shift = fs.Shift
-		// Auto-play only looping FonScripts (ambient loops + 1-frame statics);
-		// one-shot scripts (smoke/cutscenes) stay hidden until triggered.
-		if fs.MovieName != "" && fs.Looping {
+		if fs.MovieName != "" {
 			inst.frames = adapters.LoadDecal(res, fs.MovieName)
-			inst.player = use_cases.NewPlayer(fs)
 			inst.visible = len(inst.frames) > 0
+			// Looping FonScripts animate forever; one-shot ones (smoke,
+			// cutscene inserts) sit on their first frame until triggered.
+			if fs.Looping {
+				inst.player = use_cases.NewPlayer(fs)
+			}
 		}
 	}
 	return inst
 }
 
 // loadSceneObjects builds the live objects for a scene's ObjectList, skipping
-// any the quest state records as already taken.
+// any the quest state records as taken plus any BEGIN.BGI marks as initially
+// hidden (they wait for a CreateObject).
 func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
 	sc *types.Scene, objects map[string]*types.SceneObject,
 	fsByName map[string][]byte, gone func(obj string) bool,
@@ -74,10 +77,18 @@ func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
 	if zper == 0 {
 		zper = 8
 	}
+	names := make([]string, len(sc.Objects))
+	for i, ref := range sc.Objects {
+		names[i] = ref.Name
+	}
+	initial := res.InitialVisibility(names)
 	var out []*sceneObj
 	for _, ref := range sc.Objects {
 		if gone(ref.Name) {
 			continue
+		}
+		if v, ok := initial[strings.ToLower(ref.Name)]; ok && !v {
+			continue // hidden at game start until a CreateObject
 		}
 		if inst := buildSceneObj(res, parser, fsByName, zper,
 			ref, objects[strings.ToLower(ref.Name)]); inst != nil {
@@ -88,6 +99,7 @@ func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
 }
 
 // update advances the object's animation and returns the events it fired.
+// Static objects (no player) just sit on their first frame.
 func (s *sceneObj) update(dt float64) []types.Command {
 	if s.player == nil {
 		return nil
@@ -99,13 +111,16 @@ func (s *sceneObj) update(dt float64) []types.Command {
 	return ev
 }
 
-// draw blits the current animation frame at its screen offset, shifted by the
-// camera offset xoff (negative camX).
+// draw blits the current animation frame (or the static first frame) at its
+// screen offset, shifted by the camera offset xoff (negative camX).
 func (s *sceneObj) draw(screen *ebiten.Image, xoff int) {
-	if !s.visible || s.player == nil || len(s.frames) == 0 {
+	if !s.visible || len(s.frames) == 0 {
 		return
 	}
-	i := s.player.FrameIndex()
+	i := 0
+	if s.player != nil {
+		i = s.player.FrameIndex()
+	}
 	if i < 0 || i >= len(s.frames) || s.frames[i].Img == nil {
 		return
 	}

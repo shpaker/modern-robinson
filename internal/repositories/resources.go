@@ -22,6 +22,14 @@ type Resources struct {
 	cache     map[string]*codec.Container
 	wave      *codec.Container
 	waveIndex map[string]types.Entry
+	bgi       [][]bgiRecord // BEGIN.BGI initial object states, lazily parsed
+}
+
+// readFileUpper reads a file under root joining path elements, trying the exact
+// name (game files ship upper-case on the ISO).
+func readFileUpper(root string, parts ...string) ([]byte, error) {
+	p := filepath.Join(append([]string{root}, parts...)...)
+	return os.ReadFile(p)
 }
 
 var _ interfaces.IResources = (*Resources)(nil)

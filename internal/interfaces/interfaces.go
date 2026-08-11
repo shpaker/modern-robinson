@@ -22,6 +22,10 @@ type IResources interface {
 	SceneContainer(name string) IContainer
 	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
 	BarBackground() (*types.NGB, types.Palette)
+	// InitialVisibility is the start-of-game object visibility for a scene
+	// (from BEGIN.BGI), keyed by lower-case object name; objects absent from
+	// the map default to visible.
+	InitialVisibility(objectNames []string) map[string]bool
 }
 
 // ISceneParser parses NGI text scripts into Domain entities.

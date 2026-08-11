@@ -165,7 +165,13 @@ func (g *Game) loadScene(name string, spawn *[2]int) {
 		if strings.HasSuffix(strings.ToUpper(e.Name), ".OB") {
 			if d, err := c.Extract(e); err == nil {
 				ob := g.parser.ParseObject(string(d))
-				g.objects[strings.ToLower(ob.Name)] = ob
+				// Key by file base name: ObjectList references the file, and
+				// the inner ObjectName may differ (GORGHT.OB is "gobanan").
+				key := strings.ToLower(e.Name[:len(e.Name)-3])
+				g.objects[key] = ob
+				if inner := strings.ToLower(ob.Name); inner != key {
+					g.objects[inner] = ob
+				}
 			}
 		}
 	}
