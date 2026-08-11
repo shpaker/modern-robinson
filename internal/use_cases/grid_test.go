@@ -87,6 +87,30 @@ func TestPath(t *testing.T) {
 	}
 }
 
+func TestSetVert(t *testing.T) {
+	g := scena0Grid()
+	// Close an open cell, then reopen it.
+	if !g.Valid(2, 0) {
+		t.Fatal("(2,0) should start walkable")
+	}
+	g.SetVert(2, 0, false)
+	if g.Valid(2, 0) {
+		t.Error("(2,0) should be blocked after SetVert close")
+	}
+	g.SetVert(2, 0, true)
+	if !g.Valid(2, 0) {
+		t.Error("(2,0) should be walkable after SetVert open")
+	}
+	// Open a cell that was closed_vert at load (a door clearing).
+	if g.Valid(4, 2) {
+		t.Fatal("(4,2) should start blocked")
+	}
+	g.SetVert(4, 2, true)
+	if !g.Valid(4, 2) {
+		t.Error("(4,2) should open after SetVert open")
+	}
+}
+
 func TestScreenToNumpad(t *testing.T) {
 	cases := []struct {
 		dx, dy float64

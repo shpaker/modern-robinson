@@ -49,6 +49,17 @@ func (g *Grid) Dims() (int, int) { return g.nx, g.ny }
 // Blocked reports whether a cell is in the scene's closed_vert list.
 func (g *Grid) Blocked(gx, gy int) bool { return g.blocked[[2]int{gx, gy}] }
 
+// SetVert toggles a cell's passability at runtime (the SetVert command): open
+// makes it walkable, close/closed blocks it. Doors and cleared obstacles use
+// this to reshape the walk grid mid-scene.
+func (g *Grid) SetVert(gx, gy int, open bool) {
+	if open {
+		delete(g.blocked, [2]int{gx, gy})
+	} else {
+		g.blocked[[2]int{gx, gy}] = true
+	}
+}
+
 func round(x float64) int {
 	if x < 0 {
 		return int(x - 0.5)

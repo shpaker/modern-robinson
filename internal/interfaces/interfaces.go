@@ -37,6 +37,7 @@ type IGrid interface {
 	ToCell(px, py int) (int, int)
 	Valid(gx, gy int) bool
 	Blocked(gx, gy int) bool
+	SetVert(gx, gy int, open bool)
 	NearestFree(gx, gy int) (int, int, bool)
 	Path(start, goal [2]int) [][2]int
 	Dims() (int, int)
