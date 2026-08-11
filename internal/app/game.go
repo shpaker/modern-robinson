@@ -105,11 +105,13 @@ func NewGame(res interfaces.IResources) *Game {
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
 	g.gs.Active = "hand"
-	start := "SCENA0"
+	// STARTUP.INF marks INT0 as the start scene (the home-room cutscene that
+	// chains into the island); ROBINSON_SCENE overrides for direct entry.
+	start := "INT0"
 	if s := os.Getenv("ROBINSON_SCENE"); s != "" {
 		start = strings.ToUpper(s)
 	}
-	g.loadScene(start, nil)
+	g.loadScene(start, nil, "")
 	g.loadScreens()
 	if os.Getenv("ROBINSON_SCENE") != "" {
 		g.mode = modePlay // direct scene entry skips the boot screens
@@ -150,7 +152,12 @@ func bgImage(n *types.NGB, pal types.Palette) *ebiten.Image {
 	return img
 }
 
-func (g *Game) loadScene(name string, spawn *[2]int) {
+func (g *Game) loadScene(name string, spawn *[2]int, entry string) {
+	if g.res.SceneContainer(name) == nil {
+		// Unknown scene target (bad parse or missing container): stay put.
+		g.msg, g.msgT = "?? "+name, 3
+		return
+	}
 	bg, pal, _ := g.res.SceneBackground(name)
 	g.sceneName = name
 	if bg != nil {
@@ -214,6 +221,9 @@ func (g *Game) loadScene(name string, spawn *[2]int) {
 	g.stepWav = nil
 	if sv, ok := g.sc.SoundVars["step"]; ok {
 		g.stepWav = g.res.Sound(sv[0])
+	}
+	if entry != "" {
+		g.startEntry(entry)
 	}
 }
 
@@ -394,7 +404,7 @@ func (g *Game) Update() error {
 	if g.pending != nil {
 		p := g.pending
 		g.pending = nil
-		g.loadScene(p.Scene, &[2]int{p.GX, p.GY})
+		g.loadScene(p.Scene, &[2]int{p.GX, p.GY}, p.Entry)
 	}
 	return nil
 }

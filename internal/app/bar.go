@@ -101,7 +101,17 @@ func (g *Game) portrait() *ebiten.Image {
 
 // drawBar renders the inventory panel: background, portrait, the text box
 // (dialogue line or hovered object name), and the visible inventory icons.
+// SetBar OFF (cutscenes) hides it; dialogue then overlays the scene bottom.
 func (g *Game) drawBar(screen *ebiten.Image) {
+	if !g.gs.UI["bar"] {
+		if g.msg != "" {
+			w := adapters.TextWidth(g.msg)
+			x := (float64(ViewW) - w) / 2
+			vector.FillRect(screen, float32(x-8), float32(ViewH-30), float32(w+16), 20, rgba(0, 0, 0, 190), false)
+			adapters.DrawText(screen, g.msg, x, float64(ViewH-26), rgba(255, 255, 255, 255))
+		}
+		return
+	}
 	vector.FillRect(screen, 0, float32(PlayH), float32(ViewW), float32(BarH), rgba(24, 18, 12, 255), false)
 	if g.barBG != nil {
 		op := &ebiten.DrawImageOptions{}

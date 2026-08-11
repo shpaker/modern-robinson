@@ -125,15 +125,17 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	d.guest.AdvanceTicks(5)
-	click(597, 440) // disk button -> save
-	d.guest.AdvanceTicks(5)
-	_ = d.snapshot(0) // "Игра сохранена" in the text box
-	d.guest.PressKey(ebiten.KeyF9)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseKey(ebiten.KeyF9)
-	d.guest.AdvanceTicks(5)
-	_ = d.snapshot(1) // "Игра загружена"
+	// Boot flow: logo -> (click) title -> (click) INT0 -> INT1 cutscene.
+	d.guest.AdvanceTicks(30)
+	_ = d.snapshot(0) // logo
+	click(320, 240)   // skip logo
+	d.guest.AdvanceTicks(10)
+	_ = d.snapshot(1) // title
+	click(320, 240)   // skip title -> play (INT0 chains to INT1)
+	d.guest.AdvanceTicks(60)
+	_ = d.snapshot(2) // INT1 cutscene running
+	d.guest.AdvanceTicks(600)
+	_ = d.snapshot(3) // cutscene later frames
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

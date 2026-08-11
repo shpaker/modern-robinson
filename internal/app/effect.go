@@ -55,8 +55,43 @@ func (g *Game) applyEffect(c types.Command) {
 		g.setRest(c.Args)
 	case "setmouse", "setmap", "lockbar", "setbar", "showcursor", "interrupt":
 		g.setToggle(strings.ToLower(c.Kw), c.Args)
+	case "startgame":
+		g.startMinigame(c.Args)
+	case "set":
+		g.setCharCoord(c.Args)
 	}
-	// aproach/shift/set drive the walk+action already.
+	// aproach/shift still drive the walk+action phase.
+}
+
+// setCharCoord teleports a character's grid coordinate: Set char,X|Y|Z,n.
+// Entry scripts use it to place the hero on arrival. Friday is stage 3e.
+func (g *Game) setCharCoord(args []string) {
+	if len(args) < 3 || !strings.EqualFold(args[0], "Roby") {
+		return
+	}
+	n := atoiArg(args[2])
+	switch strings.ToUpper(args[1]) {
+	case "X":
+		g.cell[0] = n
+	case "Y":
+		g.cell[1] = n
+	default:
+		return // Z: draw-order tweak, charZCoord covers the common case
+	}
+	px, py := g.grid.ToScreen(g.cell[0], g.cell[1])
+	g.pos = [2]float64{float64(px), float64(py)}
+	g.clampCamera()
+}
+
+// startMinigame handles StartGame gameId,resultVar,paramVar. The five original
+// minigames live in MINIGAME.DLL, which is not reimplemented yet, so the
+// result variable is set to success to keep the quest passable.
+func (g *Game) startMinigame(args []string) {
+	if len(args) < 2 {
+		return
+	}
+	g.gs.SetVar(args[1], 1)
+	g.msg, g.msgT = "Мини-игра пока пропускается", 2.5
 }
 
 // setToggle records an ON/OFF UI switch (map access, mouse lock, bar lock...).

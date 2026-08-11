@@ -56,11 +56,10 @@ func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
 		if fs.MovieName != "" {
 			inst.frames = adapters.LoadDecal(res, fs.MovieName)
 			inst.visible = len(inst.frames) > 0
-			// Looping FonScripts animate forever; one-shot ones (smoke,
-			// cutscene inserts) sit on their first frame until triggered.
-			if fs.Looping {
-				inst.player = use_cases.NewPlayer(fs)
-			}
+			// Looping FonScripts animate forever; one-shot ones play once on
+			// entry (cutscene drivers like START.FS/INT1.FS) and then hold
+			// their last frame unless a DelObject removed them.
+			inst.player = use_cases.NewPlayer(fs)
 		}
 	}
 	return inst
@@ -99,16 +98,13 @@ func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
 }
 
 // update advances the object's animation and returns the events it fired.
-// Static objects (no player) just sit on their first frame.
+// A finished one-shot holds its last frame (self-removing scripts end with a
+// DelObject which hides the object through the interpreter).
 func (s *sceneObj) update(dt float64) []types.Command {
 	if s.player == nil {
 		return nil
 	}
-	ev := s.player.Update(dt)
-	if s.player.Done() {
-		s.visible = false // one-shot finished (e.g. smoke self-deletes)
-	}
-	return ev
+	return s.player.Update(dt)
 }
 
 // draw blits the current animation frame (or the static first frame) at its

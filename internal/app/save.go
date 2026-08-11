@@ -37,6 +37,6 @@ func (g *Game) load() {
 		return
 	}
 	g.gs = types.Restore(sd)
-	g.loadScene(sd.Scene, &sd.Cell)
+	g.loadScene(sd.Scene, &sd.Cell, "")
 	g.msg, g.msgT = "Игра загружена", 2
 }

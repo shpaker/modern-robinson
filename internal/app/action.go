@@ -138,15 +138,41 @@ func (g *Game) hideObject(name string) {
 	g.buildHotspots()
 }
 
-// gosceneFromEvent queues a scene transition from a GoScene event's args
-// (last two ints = spawn cell, first = scene name).
+// gosceneFromEvent queues a scene transition from a GoScene event's args:
+// scene,char,entry,gx,gy (5-arg) or scene,c1,e1,c2,e2,gx,gy (7-arg; both
+// characters travel). The last two ints are the spawn cell; args[2] is the
+// hero's arrival script.
 func (g *Game) gosceneFromEvent(args []string) {
 	if len(args) < 3 {
 		return
 	}
 	gx, _ := strconv.Atoi(args[len(args)-2])
 	gy, _ := strconv.Atoi(args[len(args)-1])
-	g.pending = &types.Exit{Scene: strings.ToUpper(args[0]), GX: gx, GY: gy, OK: true}
+	entry := ""
+	if len(args) >= 5 {
+		entry = args[2]
+	}
+	g.pending = &types.Exit{Scene: strings.ToUpper(args[0]), Entry: entry, GX: gx, GY: gy, OK: true}
+}
+
+// startEntry plays a scene's arrival script (Roin2, robawake, Int1...) as the
+// current character action, without a walk phase.
+func (g *Game) startEntry(name string) {
+	raw, err := g.sceneC.ExtractName(strings.ToUpper(name) + ".FS")
+	if err != nil {
+		return
+	}
+	fs := g.parser.ParseFrameScript(string(raw))
+	if fs.MovieName == "" {
+		return
+	}
+	fs.Looping = false
+	g.act = &actionPlay{
+		fs:      fs,
+		frames:  adapters.LoadDecal(g.res, fs.MovieName),
+		player:  use_cases.NewPlayer(fs),
+		started: true,
+	}
 }
 
 // drawAction draws the current action-movie frame (decal) if one is playing.

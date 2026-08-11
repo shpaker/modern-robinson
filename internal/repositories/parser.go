@@ -27,6 +27,9 @@ var keywords = map[string]bool{
 	"frame": true, "delay": true, "sound": true, "setrest": true, "set": true,
 	"setvar": true, "setcharvar": true, "if": true, "endif": true, "goscene": true,
 	"additem": true, "deleteitem": true, "createobject": true, "delobject": true,
+	"deleteobject": true, "addvar": true, "setmap": true, "setmusic": true,
+	"lockbar": true, "showcursor": true, "interrupt": true, "clearscreen": true,
+	"startgame": true, "endgame": true, "shownav": true,
 	"aproach": true, "approach": true, "setvert": true, "shiftscreen": true,
 	"setmouse": true, "hidechar": true, "showchar": true, "map": true, "mouse": true,
 	"setbar": true, "setactive": true, "end": true, "delayfactor": true,
@@ -41,7 +44,7 @@ var (
 	wordRe    = regexp.MustCompile(`^([A-Za-z_]\w*)(.*)$`)
 	intRe     = regexp.MustCompile(`-?\d+`)
 	soundRe   = regexp.MustCompile(`(\w+)\s*,\s*"([^"]+)"\s*,?\s*(\d*)`)
-	goSceneRe = regexp.MustCompile(`(?is)GoScene\s+(\w+)\s*,.*?,\s*(-?\d+)\s*,\s*(-?\d+)\s*;`)
+	goSceneRe = regexp.MustCompile(`(?is)GoScene\s+(\w+)\s*,\s*\w+\s*,\s*(\w+).*?,\s*(-?\d+)\s*,\s*(-?\d+)\s*;`)
 )
 
 type stmt struct {
@@ -361,9 +364,9 @@ func (SceneParser) SceneExits(c interfaces.IContainer) (left, right types.Exit) 
 		if m == nil {
 			continue
 		}
-		gx, _ := strconv.Atoi(m[2])
-		gy, _ := strconv.Atoi(m[3])
-		ex := types.Exit{Scene: strings.ToUpper(m[1]), GX: gx, GY: gy, OK: true}
+		gx, _ := strconv.Atoi(m[3])
+		gy, _ := strconv.Atoi(m[4])
+		ex := types.Exit{Scene: strings.ToUpper(m[1]), Entry: m[2], GX: gx, GY: gy, OK: true}
 		if isL {
 			left = ex
 		} else {

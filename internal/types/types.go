@@ -102,9 +102,11 @@ type FrameScript struct {
 	Looping bool
 }
 
-// Exit is a scene transition target reached from an edge / arrow object.
+// Exit is a scene transition target reached from an edge / arrow object or a
+// GoScene command; Entry names the arrival .FS played on entering.
 type Exit struct {
 	Scene  string
+	Entry  string
 	GX, GY int
 	OK     bool
 }
