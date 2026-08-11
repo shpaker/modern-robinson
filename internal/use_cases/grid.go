@@ -122,7 +122,16 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-var dirs8 = [8][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}
+var dirs8 = [8][2]int{
+	{-1, -1},
+	{0, -1},
+	{1, -1},
+	{-1, 0},
+	{1, 0},
+	{-1, 1},
+	{0, 1},
+	{1, 1},
+}
 
 // Path returns cells from start to goal (inclusive) via BFS, or nil if none.
 func (g *Grid) Path(start, goal [2]int) [][2]int {

@@ -58,7 +58,10 @@ func LoadDecal(res interfaces.IResources, movie string) []DecalFrame {
 
 // cropOpaque crops an RGBA buffer (h*w*4) to its opaque bounding box, returning
 // the Ebiten image and its top-left offset, or ok=false if fully transparent.
-func cropOpaque(rgba []byte, w, h int) (img *ebiten.Image, ox, oy int, ok bool) {
+func cropOpaque(
+	rgba []byte,
+	w, h int,
+) (img *ebiten.Image, ox, oy int, ok bool) {
 	minx, miny, maxx, maxy := w, h, -1, -1
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {

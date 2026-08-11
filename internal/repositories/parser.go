@@ -44,7 +44,9 @@ var (
 	wordRe    = regexp.MustCompile(`^([A-Za-z_]\w*)(.*)$`)
 	intRe     = regexp.MustCompile(`-?\d+`)
 	soundRe   = regexp.MustCompile(`(\w+)\s*,\s*"([^"]+)"\s*,?\s*(\d*)`)
-	goSceneRe = regexp.MustCompile(`(?is)GoScene\s+(\w+)\s*,\s*\w+\s*,\s*(\w+).*?,\s*(-?\d+)\s*,\s*(-?\d+)\s*;`)
+	goSceneRe = regexp.MustCompile(
+		`(?is)GoScene\s+(\w+)\s*,\s*\w+\s*,\s*(\w+).*?,\s*(-?\d+)\s*,\s*(-?\d+)\s*;`,
+	)
 )
 
 type stmt struct {
@@ -139,8 +141,15 @@ func (SceneParser) ParseScene(text string) *types.Scene {
 		case "objectlist":
 			name := strings.TrimSpace(strings.SplitN(st.args, ",", 2)[0])
 			if name != "" && len(v) >= 2 {
-				sc.Objects = append(sc.Objects,
-					types.ObjectRef{Name: name, GX: v[0], GY: v[1], Flag: strings.Contains(st.args, "*")})
+				sc.Objects = append(
+					sc.Objects,
+					types.ObjectRef{
+						Name: name,
+						GX:   v[0],
+						GY:   v[1],
+						Flag: strings.Contains(st.args, "*"),
+					},
+				)
 			}
 		case "soundvariables":
 			if m := soundRe.FindStringSubmatch(st.args); m != nil {
@@ -244,7 +253,10 @@ func (SceneParser) ParseFrameScript(text string) *types.FrameScript {
 			// no-op
 		default:
 			if cur != nil {
-				cur.Events = append(cur.Events, types.Command{Kw: st.kw, Args: argSplit(st.args)})
+				cur.Events = append(
+					cur.Events,
+					types.Command{Kw: st.kw, Args: argSplit(st.args)},
+				)
 			}
 		}
 	}
@@ -317,7 +329,9 @@ func (SceneParser) ParseBar(text string) *types.Bar {
 // into the quest namespace with their initial values (most flags start 0, but a
 // few — TreeIs=1, MapParts=4, Find6=30 — do not; dialogue selectors point at
 // their first variant script). Seeding these is required for correct If-branching.
-func (SceneParser) ParseStartup(text string) (vars map[string]int, charVars map[string]string) {
+func (SceneParser) ParseStartup(
+	text string,
+) (vars map[string]int, charVars map[string]string) {
 	vars = map[string]int{}
 	charVars = map[string]string{}
 	for _, st := range statements(text) {
@@ -344,7 +358,9 @@ func atoiSafe(s string) int {
 
 // SceneExits scans a scene container's *GOL/*GOR frame scripts for the GoScene
 // targets that define its left/right neighbours.
-func (SceneParser) SceneExits(c interfaces.IContainer) (left, right types.Exit) {
+func (SceneParser) SceneExits(
+	c interfaces.IContainer,
+) (left, right types.Exit) {
 	for _, e := range c.Entries() {
 		up := strings.ToUpper(e.Name)
 		if !strings.HasSuffix(up, ".FS") {
@@ -366,7 +382,13 @@ func (SceneParser) SceneExits(c interfaces.IContainer) (left, right types.Exit) 
 		}
 		gx, _ := strconv.Atoi(m[3])
 		gy, _ := strconv.Atoi(m[4])
-		ex := types.Exit{Scene: strings.ToUpper(m[1]), Entry: m[2], GX: gx, GY: gy, OK: true}
+		ex := types.Exit{
+			Scene: strings.ToUpper(m[1]),
+			Entry: m[2],
+			GX:    gx,
+			GY:    gy,
+			OK:    true,
+		}
 		if isL {
 			left = ex
 		} else {

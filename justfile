@@ -127,10 +127,15 @@ clean:
     rm -rf {{binary_name}} _build dist coverage.out coverage.html
 
 # --- self-test через headless vmhost (без окна) ------------------------------
-# Снимок одного кадра игры
+# Снимок одного кадра игры (окно как в оригинале: 640x480)
 snapshot ticks="30" out="/tmp/frame.png":
-    {{gocmd}} run ./.vmdriver -pkg ./cmd -ticks {{ticks}} -out {{out}} -w 1024 -h 400
+    {{gocmd}} run ./.vmdriver -pkg ./cmd -ticks {{ticks}} -out {{out}} -w 640 -h 480
 
-# Демонстрационный прогон: F1-debug + ходьба + переход, пишет dbg_00..03.png
+# Демонстрационный прогон со вводом, пишет dbg_00..03.png
 demo:
-    {{gocmd}} run ./.vmdriver-game -pkg ./cmd -ticks 140 -out /tmp/dbg.png -w 1024 -h 400
+    {{gocmd}} run ./.vmdriver-game -pkg ./cmd -ticks 800 -out /tmp/dbg.png -w 640 -h 480
+
+# Кадр конкретной сцены: just scene PALACE
+scene name="SCENA0" ticks="40":
+    ROBINSON_SCENE={{name}} {{gocmd}} run ./.vmdriver-game -pkg ./cmd \
+        -ticks {{ticks}} -out /tmp/{{name}}.png -w 640 -h 480

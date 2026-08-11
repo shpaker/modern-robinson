@@ -238,7 +238,8 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 		g.stepWav = g.res.Sound(sv[0])
 	}
 	// Scene music: "continue" keeps the current track playing across scenes.
-	if m := strings.ToLower(strings.TrimSpace(g.sc.Music)); m != "" && m != "continue" {
+	if m := strings.ToLower(strings.TrimSpace(g.sc.Music)); m != "" &&
+		m != "continue" {
 		g.startMusic(m)
 	}
 	g.fridInit()
@@ -458,14 +459,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for _, s := range g.sceneObjs {
 		if s.visible {
 			s := s
-			items = append(items, drawable{s.z, func() { s.draw(screen, xoff) }})
+			items = append(
+				items,
+				drawable{s.z, func() { s.draw(screen, xoff) }},
+			)
 		}
 	}
-	items = append(items, drawable{g.cell[1]*g.zper + charZCoord, func() { g.drawCharacter(screen) }})
+	items = append(
+		items,
+		drawable{
+			g.cell[1]*g.zper + charZCoord,
+			func() { g.drawCharacter(screen) },
+		},
+	)
 	if g.fridVisible() {
-		items = append(items, drawable{g.fridCell[1]*g.zper + g.fridZ, func() { g.drawFrid(screen) }})
+		items = append(
+			items,
+			drawable{
+				g.fridCell[1]*g.zper + g.fridZ,
+				func() { g.drawFrid(screen) },
+			},
+		)
 	}
-	sort.SliceStable(items, func(i, j int) bool { return items[i].z < items[j].z })
+	sort.SliceStable(
+		items,
+		func(i, j int) bool { return items[i].z < items[j].z },
+	)
 	for _, it := range items {
 		it.fn()
 	}
@@ -529,7 +548,11 @@ func (g *Game) drawCursor(screen *ebiten.Image) {
 	}
 }
 
-func drawTriangle(dst *ebiten.Image, ax, ay, bx, by, cx, cy float32, fill, outline color.Color) {
+func drawTriangle(
+	dst *ebiten.Image,
+	ax, ay, bx, by, cx, cy float32,
+	fill, outline color.Color,
+) {
 	vector.StrokeLine(dst, ax, ay, bx, by, 3, outline, true)
 	vector.StrokeLine(dst, bx, by, cx, cy, 3, outline, true)
 	vector.StrokeLine(dst, cx, cy, ax, ay, 3, outline, true)
@@ -555,7 +578,14 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	fi := g.frameI % len(a.Frames)
 	frame, anch := a.Frames[fi], a.Anchors[fi]
 	px, py := g.pos[0]-float64(g.camX), g.pos[1]
-	vector.FillCircle(screen, float32(px), float32(py-3), 16, rgba(0, 0, 0, 70), true)
+	vector.FillCircle(
+		screen,
+		float32(px),
+		float32(py-3),
+		16,
+		rgba(0, 0, 0, 70),
+		true,
+	)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(px-float64(anch[0]), py-float64(anch[1]))
 	screen.DrawImage(frame, op)
@@ -578,29 +608,71 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 				continue
 			}
 			vector.FillCircle(screen, float32(x), float32(y), 3, col, true)
-			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d,%d", gx, gy), x+4, y-6)
+			ebitenutil.DebugPrintAt(
+				screen,
+				fmt.Sprintf("%d,%d", gx, gy),
+				x+4,
+				y-6,
+			)
 		}
 	}
 	for _, c := range g.path {
 		x, y := g.grid.ToScreen(c[0], c[1])
-		vector.FillCircle(screen, float32(x+xoff), float32(y), 4, rgba(255, 230, 0, 230), true)
+		vector.FillCircle(
+			screen,
+			float32(x+xoff),
+			float32(y),
+			4,
+			rgba(255, 230, 0, 230),
+			true,
+		)
 	}
 	for _, hs := range g.hotspots {
 		r := hs.rect
-		vector.StrokeRect(screen, float32(r.Min.X+xoff), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()),
-			1, rgba(255, 230, 0, 200), false)
+		vector.StrokeRect(
+			screen,
+			float32(r.Min.X+xoff),
+			float32(r.Min.Y),
+			float32(r.Dx()),
+			float32(r.Dy()),
+			1,
+			rgba(255, 230, 0, 200),
+			false,
+		)
 		ebitenutil.DebugPrintAt(screen, hs.ob.Name, r.Min.X+xoff, r.Min.Y-12)
 	}
 	rx, ry := g.grid.ToScreen(g.cell[0], g.cell[1])
-	vector.StrokeCircle(screen, float32(rx+xoff), float32(ry), 9, 2, rgba(0, 200, 255, 255), true)
+	vector.StrokeCircle(
+		screen,
+		float32(rx+xoff),
+		float32(ry),
+		9,
+		2,
+		rgba(0, 200, 255, 255),
+		true,
+	)
 
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
 		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  dir=%d  moving=%v  fps=%.0f",
-		Version, g.sceneName, g.cell, g.camX, g.curDir, g.moving, ebiten.ActualFPS()), 8, PlayH-32)
+		Version,
+		g.sceneName,
+		g.cell,
+		g.camX,
+		g.curDir,
+		g.moving,
+		ebiten.ActualFPS(),
+	), 8, PlayH-32)
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
 		"exitL=%s(%d,%d) exitR=%s(%d,%d)  objects=%d hotspots=%d",
-		g.exitL.Scene, g.exitL.GX, g.exitL.GY, g.exitR.Scene, g.exitR.GX, g.exitR.GY,
-		len(g.objects), len(g.hotspots)), 8, PlayH-18)
+		g.exitL.Scene,
+		g.exitL.GX,
+		g.exitL.GY,
+		g.exitR.Scene,
+		g.exitR.GX,
+		g.exitR.GY,
+		len(g.objects),
+		len(g.hotspots),
+	), 8, PlayH-18)
 }
 
 // Layout is the fixed original window: a 640x400 scene viewport plus the 80px

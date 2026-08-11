@@ -10,7 +10,13 @@ func TestPlayerLoop(t *testing.T) {
 	fs := &types.FrameScript{
 		Looping: true,
 		Frames: []*types.Frame{
-			{Index: 0, Delay: 100, Events: []types.Command{{Kw: "sound", Args: []string{"fire", "4"}}}},
+			{
+				Index: 0,
+				Delay: 100,
+				Events: []types.Command{
+					{Kw: "sound", Args: []string{"fire", "4"}},
+				},
+			},
 			{Index: 1, Delay: 100},
 			{Index: 2, Delay: 100},
 		},
@@ -54,7 +60,10 @@ func TestPlayerNegativeDelay(t *testing.T) {
 	// negative Delay (ambient) uses |Delay|
 	fs := &types.FrameScript{
 		Looping: true,
-		Frames:  []*types.Frame{{Index: 0, Delay: -457}, {Index: 1, Delay: -457}},
+		Frames: []*types.Frame{
+			{Index: 0, Delay: -457},
+			{Index: 1, Delay: -457},
+		},
 	}
 	p := NewPlayer(fs)
 	p.Update(0)

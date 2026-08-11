@@ -63,7 +63,8 @@ func NewResources(root string) *Resources {
 			// packs; the rest (CONFIG, LANG, ...) fail codec.Open harmlessly.
 			dir := strings.ToUpper(p)
 			sep := string(os.PathSeparator)
-			if strings.Contains(dir, sep+"SCEN"+sep) || strings.Contains(dir, sep+"BAR"+sep) {
+			if strings.Contains(dir, sep+"SCEN"+sep) ||
+				strings.Contains(dir, sep+"BAR"+sep) {
 				r.sceneDat[up[:len(up)-4]] = p
 			} else {
 				r.screenDat[up[:len(up)-4]] = p
@@ -228,7 +229,9 @@ func (r *Resources) SceneContainer(name string) interfaces.IContainer {
 }
 
 // SceneBackground returns the scene's background bitmap, palette, and fade table.
-func (r *Resources) SceneBackground(name string) (*types.NGB, types.Palette, []byte) {
+func (r *Resources) SceneBackground(
+	name string,
+) (*types.NGB, types.Palette, []byte) {
 	var pal types.Palette
 	p, ok := r.sceneDat[strings.ToUpper(name)]
 	if !ok {

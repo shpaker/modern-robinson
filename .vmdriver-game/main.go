@@ -42,11 +42,31 @@ import (
 )
 
 var (
-	pkg      = flag.String("pkg", "", "package path of the guest app to test, e.g. ./examples/paint")
-	ticks    = flag.Int("ticks", 60, "number of ticks to run before dumping the frame and exiting")
-	out      = flag.String("out", "frame.png", "PNG output path for the final frame")
-	logicalW = flag.Int("w", 320, "logical screen width in device-independent pixels")
-	logicalH = flag.Int("h", 240, "logical screen height in device-independent pixels")
+	pkg = flag.String(
+		"pkg",
+		"",
+		"package path of the guest app to test, e.g. ./examples/paint",
+	)
+	ticks = flag.Int(
+		"ticks",
+		60,
+		"number of ticks to run before dumping the frame and exiting",
+	)
+	out = flag.String(
+		"out",
+		"frame.png",
+		"PNG output path for the final frame",
+	)
+	logicalW = flag.Int(
+		"w",
+		320,
+		"logical screen width in device-independent pixels",
+	)
+	logicalH = flag.Int(
+		"h",
+		240,
+		"logical screen height in device-independent pixels",
+	)
 )
 
 // driver is the host: an ebiten.Game that drives one guest and composites its final frame into its own
@@ -73,10 +93,15 @@ func (d *driver) onAudioStream(s *vmhost.GuestAudioStream) {
 // appendAudioStreams appends the guest's currently-open audio streams to dst and returns the extended
 // slice, dropping any the guest has closed (IsClosed) — a closed stream never plays again and its Read is
 // at io.EOF — so the tracked set stays live instead of growing without bound. Safe to call from Update.
-func (d *driver) appendAudioStreams(dst []*vmhost.GuestAudioStream) []*vmhost.GuestAudioStream {
-	d.audioStreams = slices.DeleteFunc(d.audioStreams, func(s *vmhost.GuestAudioStream) bool {
-		return s.IsClosed()
-	})
+func (d *driver) appendAudioStreams(
+	dst []*vmhost.GuestAudioStream,
+) []*vmhost.GuestAudioStream {
+	d.audioStreams = slices.DeleteFunc(
+		d.audioStreams,
+		func(s *vmhost.GuestAudioStream) bool {
+			return s.IsClosed()
+		},
+	)
 	return append(dst, d.audioStreams...)
 }
 
@@ -91,7 +116,10 @@ func (d *driver) Update() error {
 	// Create the host-owned screen and size the guest to it. SetOutsideScreen must precede AdvanceTicks.
 	// The guest renders at the host's device scale factor, so the image is sized in physical pixels.
 	scale := ebiten.Monitor().DeviceScaleFactor()
-	d.screen = ebiten.NewImage(int(float64(*logicalW)*scale), int(float64(*logicalH)*scale))
+	d.screen = ebiten.NewImage(
+		int(float64(*logicalW)*scale),
+		int(float64(*logicalH)*scale),
+	)
 	if err := d.guest.SetOutsideScreen(d.screen); err != nil {
 		return err
 	}
@@ -163,12 +191,18 @@ func (d *driver) Update() error {
 func (d *driver) snapshot(index int) error {
 	d.guest.AdvanceFrame()
 	if !d.guest.WaitFrame() {
-		return fmt.Errorf("rendering snapshot %d failed: %w", index, d.guest.Err())
+		return fmt.Errorf(
+			"rendering snapshot %d failed: %w",
+			index,
+			d.guest.Err(),
+		)
 	}
 	if !d.guest.CompositeFrame() {
 		return fmt.Errorf("compositing snapshot %d failed", index)
 	}
-	return d.dump(fmt.Sprintf("%s_%02d.png", strings.TrimSuffix(*out, ".png"), index))
+	return d.dump(
+		fmt.Sprintf("%s_%02d.png", strings.TrimSuffix(*out, ".png"), index),
+	)
 }
 
 // dump writes the current screen to a PNG at path. ReadPixels returns premultiplied-alpha RGBA, which is
@@ -206,7 +240,9 @@ func main() {
 func xmain() error {
 	flag.Parse()
 	if *pkg == "" {
-		return errors.New("specify the guest package with -pkg, e.g. -pkg ./examples/paint")
+		return errors.New(
+			"specify the guest package with -pkg, e.g. -pkg ./examples/paint",
+		)
 	}
 
 	// A short temp dir keeps the unix socket path within the OS limit (~104 bytes on macOS).
@@ -234,7 +270,15 @@ func xmain() error {
 	// Build the guest with the ebitenginevm tag so its RunGame connects to this host instead of opening
 	// a window. The app's own source is unchanged.
 	guestBin := filepath.Join(dir, "guest")
-	build := exec.Command("go", "build", "-tags", "ebitenginevm", "-o", guestBin, *pkg)
+	build := exec.Command(
+		"go",
+		"build",
+		"-tags",
+		"ebitenginevm",
+		"-o",
+		guestBin,
+		*pkg,
+	)
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
 		return fmt.Errorf("building the guest failed: %w", err)
@@ -318,9 +362,14 @@ func xmain() error {
 		// Reachable when the guest terminated itself (its Update returned ebiten.Termination) before the
 		// final frame rendered, or when the run advanced no ticks so no frame was requested.
 		if err := guest.Err(); err != nil {
-			return fmt.Errorf("the guest ended before the frame was captured: %w", err)
+			return fmt.Errorf(
+				"the guest ended before the frame was captured: %w",
+				err,
+			)
 		}
-		return errors.New("no frame was captured; the run must advance at least one tick")
+		return errors.New(
+			"no frame was captured; the run must advance at least one tick",
+		)
 	}
 	slog.Info("wrote frame", "path", *out, "ticks", *ticks)
 	return nil
@@ -347,6 +396,9 @@ func waitForGuestExit(cmd *exec.Cmd) error {
 	case <-time.After(guestExitTimeout):
 		_ = cmd.Process.Kill()
 		<-done
-		return fmt.Errorf("the guest did not exit within %v of its session being closed (is its Update wedged?)", guestExitTimeout)
+		return fmt.Errorf(
+			"the guest did not exit within %v of its session being closed (is its Update wedged?)",
+			guestExitTimeout,
+		)
 	}
 }

@@ -107,7 +107,11 @@ func (c *Container) Extract(e types.Entry) ([]byte, error) {
 		defer func() { _ = r.Close() }()
 		return io.ReadAll(r)
 	default:
-		return nil, fmt.Errorf("method %#x for %q not implemented", e.Method, e.Name)
+		return nil, fmt.Errorf(
+			"method %#x for %q not implemented",
+			e.Method,
+			e.Name,
+		)
 	}
 }
 

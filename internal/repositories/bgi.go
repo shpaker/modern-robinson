@@ -65,7 +65,10 @@ func parseBGI(d []byte) [][]bgiRecord {
 			clusters = append(clusters, cur)
 			cur = nil
 		}
-		cur = append(cur, bgiRecord{Name: strings.ToLower(nm), Visible: vis != 0})
+		cur = append(
+			cur,
+			bgiRecord{Name: strings.ToLower(nm), Visible: vis != 0},
+		)
 		off += bgiRecSize
 		lastEnd = off
 	}

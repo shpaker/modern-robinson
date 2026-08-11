@@ -43,7 +43,15 @@ func TestToScreen(t *testing.T) {
 	}
 	for _, c := range cases {
 		if x, y := g.ToScreen(c.gx, c.gy); x != c.x || y != c.y {
-			t.Errorf("ToScreen(%d,%d) = (%d,%d), want (%d,%d)", c.gx, c.gy, x, y, c.x, c.y)
+			t.Errorf(
+				"ToScreen(%d,%d) = (%d,%d), want (%d,%d)",
+				c.gx,
+				c.gy,
+				x,
+				y,
+				c.x,
+				c.y,
+			)
 		}
 	}
 }
@@ -124,7 +132,13 @@ func TestScreenToNumpad(t *testing.T) {
 	}
 	for _, c := range cases {
 		if got := ScreenToNumpad(c.dx, c.dy); got != c.want {
-			t.Errorf("ScreenToNumpad(%v,%v) = %d, want %d", c.dx, c.dy, got, c.want)
+			t.Errorf(
+				"ScreenToNumpad(%v,%v) = %d, want %d",
+				c.dx,
+				c.dy,
+				got,
+				c.want,
+			)
 		}
 	}
 }

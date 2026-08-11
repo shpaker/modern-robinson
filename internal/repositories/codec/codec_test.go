@@ -121,7 +121,12 @@ func TestDeflate0x100(t *testing.T) {
 // TestPositionTables checks the non-canonical LZHUF position tables.
 func TestPositionTables(t *testing.T) {
 	if dLen[0] != 1 || dLen[31] != 1 || dLen[32] != 2 {
-		t.Errorf("d_len prefix = %d,%d,%d, want 1,1,2", dLen[0], dLen[31], dLen[32])
+		t.Errorf(
+			"d_len prefix = %d,%d,%d, want 1,1,2",
+			dLen[0],
+			dLen[31],
+			dLen[32],
+		)
 	}
 	if dCode[255] != 63 {
 		t.Errorf("d_code[255] = %d, want 63", dCode[255])

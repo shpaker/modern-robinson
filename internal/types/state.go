@@ -40,19 +40,41 @@ func NewGameState() *GameState {
 }
 
 // Var returns the flag's value, or 0 if it was never set.
-func (g *GameState) Var(name string) int { return g.Vars[strings.ToLower(name)] }
+func (g *GameState) Var(
+	name string,
+) int {
+	return g.Vars[strings.ToLower(name)]
+}
 
 // SetVar assigns a flag.
-func (g *GameState) SetVar(name string, v int) { g.Vars[strings.ToLower(name)] = v }
+func (g *GameState) SetVar(
+	name string,
+	v int,
+) {
+	g.Vars[strings.ToLower(name)] = v
+}
 
 // AddVar increments a counter by d (SetVar with 0 first if unset).
-func (g *GameState) AddVar(name string, d int) { g.Vars[strings.ToLower(name)] += d }
+func (g *GameState) AddVar(
+	name string,
+	d int,
+) {
+	g.Vars[strings.ToLower(name)] += d
+}
 
 // CharVar returns the dialogue-variant selector, or "" if unset.
-func (g *GameState) CharVar(name string) string { return g.CharVars[strings.ToLower(name)] }
+func (g *GameState) CharVar(
+	name string,
+) string {
+	return g.CharVars[strings.ToLower(name)]
+}
 
 // SetCharVar assigns a dialogue-variant selector.
-func (g *GameState) SetCharVar(name, v string) { g.CharVars[strings.ToLower(name)] = v }
+func (g *GameState) SetCharVar(
+	name, v string,
+) {
+	g.CharVars[strings.ToLower(name)] = v
+}
 
 // HasItem reports whether the item is in the inventory.
 func (g *GameState) HasItem(item string) bool {

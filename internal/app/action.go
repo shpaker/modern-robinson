@@ -202,7 +202,10 @@ func (g *Game) drawAction(screen *ebiten.Image) bool {
 		return true // playing but this frame is empty
 	}
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(g.act.frames[i].X-g.camX), float64(g.act.frames[i].Y))
+	op.GeoM.Translate(
+		float64(g.act.frames[i].X-g.camX),
+		float64(g.act.frames[i].Y),
+	)
 	screen.DrawImage(g.act.frames[i].Img, op)
 	return true
 }

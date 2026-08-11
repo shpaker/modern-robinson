@@ -13,7 +13,8 @@ func TestParseFrameScript(t *testing.T) {
 		"Frame 1,1;\nDelay 142;\nSound fire,4;\n" +
 		"Frame 2,1;\nDelay 142;\nSound fire,4;\nEnd;"
 	fs := p.ParseFrameScript(fire)
-	if fs.MovieName != "Fire.mv" || fs.Shift != [2]int{90, 227} || fs.Total != 3 {
+	if fs.MovieName != "Fire.mv" || fs.Shift != [2]int{90, 227} ||
+		fs.Total != 3 {
 		t.Fatalf("header = %q %v %d", fs.MovieName, fs.Shift, fs.Total)
 	}
 	if len(fs.Frames) != 3 {

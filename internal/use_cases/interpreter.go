@@ -23,7 +23,10 @@ type Interpreter struct{}
 // If/EndIf nest as logical AND: a command runs only when every enclosing If is
 // true. Unbalanced blocks (rare author edits) are tolerated — a missing EndIf
 // simply ends with the run, a stray EndIf is ignored.
-func (Interpreter) Exec(cmds []types.Command, st *types.GameState) []types.Command {
+func (Interpreter) Exec(
+	cmds []types.Command,
+	st *types.GameState,
+) []types.Command {
 	var out []types.Command
 	depth := 0  // current If nesting depth
 	skipAt := 0 // depth at which skipping began (0 = not skipping)

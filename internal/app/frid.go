@@ -34,7 +34,8 @@ func (g *Game) fridInit() {
 
 // fridVisible reports whether Friday should be drawn in the current scene.
 func (g *Game) fridVisible() bool {
-	return !g.fridHidden && g.gs.Var("FridIs") == 1 && g.fridIdle != nil && g.fridIdle.OK()
+	return !g.fridHidden && g.gs.Var("FridIs") == 1 && g.fridIdle != nil &&
+		g.fridIdle.OK()
 }
 
 // updateFrid advances Friday's idle loop.
@@ -100,7 +101,10 @@ func (g *Game) fridEffect(kw string, args []string) bool {
 			g.fridCell = [2]int{atoiArg(args[1]), atoiArg(args[2])}
 		case 4:
 			if cx, cy, ok := g.objCell(args[1]); ok {
-				g.fridCell = [2]int{cx + atoiArg(args[2]), cy + atoiArg(args[3])}
+				g.fridCell = [2]int{
+					cx + atoiArg(args[2]),
+					cy + atoiArg(args[3]),
+				}
 			}
 		}
 	case "hidechar":

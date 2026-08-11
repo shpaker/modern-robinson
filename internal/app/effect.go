@@ -189,7 +189,11 @@ func (g *Game) setVert(args []string) {
 	if len(args) < 3 {
 		return
 	}
-	g.grid.SetVert(atoiArg(args[0]), atoiArg(args[1]), strings.EqualFold(args[2], "open"))
+	g.grid.SetVert(
+		atoiArg(args[0]),
+		atoiArg(args[1]),
+		strings.EqualFold(args[2], "open"),
+	)
 }
 
 // setRest swaps the character's idle animation after an action. Form:
