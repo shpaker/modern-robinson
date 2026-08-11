@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -92,7 +93,11 @@ func NewGame(res interfaces.IResources) *Game {
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.seedStartup()
 	g.loadBar()
-	g.loadScene("SCENA0", nil)
+	start := "SCENA0"
+	if s := os.Getenv("ROBINSON_SCENE"); s != "" {
+		start = strings.ToUpper(s)
+	}
+	g.loadScene(start, nil)
 	return g
 }
 
@@ -132,14 +137,22 @@ func bgImage(n *types.NGB, pal types.Palette) *ebiten.Image {
 func (g *Game) loadScene(name string, spawn *[2]int) {
 	bg, pal, _ := g.res.SceneBackground(name)
 	g.sceneName = name
-	g.bg = bgImage(bg, pal)
+	if bg != nil {
+		g.bg = bgImage(bg, pal)
+	} else {
+		g.bg = ebiten.NewImage(ViewW, PlayH) // interiors/cutscenes without a .DAT
+	}
 	c := g.res.SceneContainer(name)
 	g.sceneC = c
 	g.act, g.pendingAct = nil, nil
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
 	if g.sc.Size == [2]int{0, 0} {
-		g.sc.Size = [2]int{bg.Width, bg.Height}
+		if bg != nil {
+			g.sc.Size = [2]int{bg.Width, bg.Height}
+		} else {
+			g.sc.Size = [2]int{ViewW, PlayH}
+		}
 	}
 	g.w, g.h = g.sc.Size[0], g.sc.Size[1]
 	g.zper = g.sc.ZPerGrid
