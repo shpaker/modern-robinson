@@ -98,6 +98,26 @@ func TestNGBRLESprite(t *testing.T) {
 	}
 }
 
+// TestDeflate0x100 covers method 0x100 (raw DEFLATE) via a HOUSE.DAT sprite.
+func TestDeflate0x100(t *testing.T) {
+	root := testutil.GameRoot(t)
+	c, err := Open(filepath.Join(root, "HOUSE.DAT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := c.ExtractName("H11.NGB")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d) != 2252 {
+		t.Errorf("H11.NGB size = %d, want 2252", len(d))
+	}
+	n := DecodeNGB(d)
+	if n.Width != 70 || n.Height != 45 {
+		t.Errorf("H11.NGB dims = %dx%d, want 70x45", n.Width, n.Height)
+	}
+}
+
 // TestPositionTables checks the non-canonical LZHUF position tables.
 func TestPositionTables(t *testing.T) {
 	if dLen[0] != 1 || dLen[31] != 1 || dLen[32] != 2 {

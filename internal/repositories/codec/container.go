@@ -4,8 +4,11 @@
 package codec
 
 import (
+	"bytes"
+	"compress/flate"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -98,6 +101,11 @@ func (c *Container) Extract(e types.Entry) ([]byte, error) {
 		return lzhufDecompress(blob, int(e.USize)), nil
 	case e.Method&0x1E0 == 0x40:
 		return lzssDecompress(blob, int(e.USize)), nil
+	case e.Method&0x1E0 == 0x100:
+		// graphics variant = raw DEFLATE (RFC 1951, no zlib header)
+		r := flate.NewReader(bytes.NewReader(blob))
+		defer func() { _ = r.Close() }()
+		return io.ReadAll(r)
 	default:
 		return nil, fmt.Errorf("method %#x for %q not implemented", e.Method, e.Name)
 	}

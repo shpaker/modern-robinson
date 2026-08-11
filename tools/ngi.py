@@ -102,7 +102,9 @@ class Container:
             return lzhuf_decompress(blob, e.usize)
         if (m & 0x1E0) == 0x40:                # classic LZSS
             return lzss_decompress(blob, e.usize)
-        # method 0x100 graphics variant not decoded yet
+        if (m & 0x1E0) == 0x100:               # graphics variant = raw DEFLATE
+            import zlib
+            return zlib.decompressobj(-15).decompress(blob)
         raise NotImplementedError(f"method {m:#06x} for {e.name!r} not implemented")
 
     def __iter__(self):

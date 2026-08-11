@@ -27,15 +27,14 @@
 | Кодек `0x00` — raw (звук WAV) | ✅ реализован | [02-compression.md](02-compression.md) |
 | Кодек `0x40` — LZSS (текстовые скрипты) | ✅ реализован | [02-compression.md](02-compression.md) |
 | Кодек `0x80` — LZHUF (графика, палитры, ~75%) | ✅ реализован | [02-compression.md](02-compression.md) |
-| Кодек `0x100` — графический вариант (227 записей) | ⏳ не разобран | [02-compression.md](02-compression.md) |
-| Формат спрайта `.NGB` (внутренний RLE) | 🟡 частично | [03-resource-types.md](03-resource-types.md) |
+| Кодек `0x100` — raw DEFLATE (227 записей) | ✅ реализован | [02-compression.md](02-compression.md) |
+| Формат спрайта `.NGB` (оба подтипа) | ✅ вскрыт | [03-resource-types.md](03-resource-types.md) |
 | Скриптовый язык (`.FS`/`.SCN`/`.OB`) | ✅ читается | [04-script-language.md](04-script-language.md) |
-| Формат бинарного скрипта `.SCR` | ⏳ не разобран | [04-script-language.md](04-script-language.md) |
-| Формат сейва `.SAV`/`.BGI` | 🟡 частично | [03-resource-types.md](03-resource-types.md) |
+| Формат бинарного скрипта `.SCR` | 🟡 разобран структурно | [04-script-language.md](04-script-language.md) |
+| Формат сейва `.SAV`/`.BGI` | 🟡 разобран структурно | [03-resource-types.md](03-resource-types.md) |
 
-**Декодируемость сейчас: 99.2 %** всех записей (27 826 из 28 053).
-Проверено массово: 2058 записей из 60 случайных контейнеров распаковались
-без единой ошибки, длины совпали с заявленными.
+**Декодируемость: 100 %** всех записей (все четыре кодека реализованы:
+`0x00` raw, `0x40` LZSS, `0x80` LZHUF, `0x100` DEFLATE).
 
 ## Ремейк
 
