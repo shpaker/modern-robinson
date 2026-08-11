@@ -333,6 +333,12 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		g.debug = !g.debug
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
+		g.save()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
+		g.load()
+	}
 	dt := 1.0 / float64(ebiten.TPS())
 	if g.updateScreens(dt) {
 		return nil // boot screens own the frame

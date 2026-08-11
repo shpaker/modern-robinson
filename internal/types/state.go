@@ -119,3 +119,60 @@ func (g *GameState) MarkSpawn(scene, obj string, gx, gy int) {
 func (g *GameState) Spawns(scene string) []Spawn {
 	return g.spawned[strings.ToLower(scene)]
 }
+
+// SaveData is a serialisable snapshot of the quest state plus the party's
+// location — the whole save file.
+type SaveData struct {
+	Scene     string              `json:"scene"`
+	Cell      [2]int              `json:"cell"`
+	Vars      map[string]int      `json:"vars"`
+	CharVars  map[string]string   `json:"charVars"`
+	Inventory []string            `json:"inventory"`
+	Active    string              `json:"active"`
+	UI        map[string]bool     `json:"ui"`
+	Gone      map[string][]string `json:"gone"`
+	Spawned   map[string][]Spawn  `json:"spawned"`
+}
+
+// Snapshot captures the full state for saving.
+func (g *GameState) Snapshot(scene string, cell [2]int) SaveData {
+	sd := SaveData{
+		Scene: scene, Cell: cell,
+		Vars: g.Vars, CharVars: g.CharVars,
+		Inventory: g.Inventory, Active: g.Active, UI: g.UI,
+		Gone: map[string][]string{}, Spawned: g.spawned,
+	}
+	for sc, m := range g.gone {
+		for obj, v := range m {
+			if v {
+				sd.Gone[sc] = append(sd.Gone[sc], obj)
+			}
+		}
+	}
+	return sd
+}
+
+// Restore rebuilds a GameState from a snapshot.
+func Restore(sd SaveData) *GameState {
+	g := NewGameState()
+	if sd.Vars != nil {
+		g.Vars = sd.Vars
+	}
+	if sd.CharVars != nil {
+		g.CharVars = sd.CharVars
+	}
+	g.Inventory = sd.Inventory
+	g.Active = sd.Active
+	if sd.UI != nil {
+		g.UI = sd.UI
+	}
+	for sc, objs := range sd.Gone {
+		for _, o := range objs {
+			g.MarkGone(sc, o)
+		}
+	}
+	if sd.Spawned != nil {
+		g.spawned = sd.Spawned
+	}
+	return g
+}

@@ -126,14 +126,14 @@ func (d *driver) Update() error {
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
 	d.guest.AdvanceTicks(5)
-	d.guest.MoveCursor(355, 250) // hover the palm trunk -> name in the text box
-	d.guest.AdvanceTicks(3)
-	_ = d.snapshot(0)
-	click(355, 250) // click the palm trunk -> approach + climb with dialogue
-	d.guest.AdvanceTicks(300)
-	_ = d.snapshot(1) // mid-action: dialogue line in the text box
-	d.guest.AdvanceTicks(600)
-	_ = d.snapshot(2) // action done
+	click(597, 440) // disk button -> save
+	d.guest.AdvanceTicks(5)
+	_ = d.snapshot(0) // "Игра сохранена" in the text box
+	d.guest.PressKey(ebiten.KeyF9)
+	d.guest.AdvanceTicks(1)
+	d.guest.ReleaseKey(ebiten.KeyF9)
+	d.guest.AdvanceTicks(5)
+	_ = d.snapshot(1) // "Игра загружена"
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

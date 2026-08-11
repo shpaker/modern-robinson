@@ -16,6 +16,7 @@ type IContainer interface {
 // IResources indexes the game's resources and resolves assets by name. It is
 // the only door to raw game files (ARCHITECTURE.md: no hardcoded paths elsewhere).
 type IResources interface {
+	Root() string
 	Movie(name string) IContainer
 	MovieFrames(name string) ([]*types.NGB, types.Palette)
 	Sound(name string) []byte

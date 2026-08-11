@@ -86,6 +86,9 @@ func (r *Resources) container(path string) *codec.Container {
 	return c
 }
 
+// Root is the game folder this Resources indexes.
+func (r *Resources) Root() string { return r.root }
+
 // Movie returns the container for a movie by name (e.g. "Roby1.mv").
 func (r *Resources) Movie(name string) interfaces.IContainer {
 	p, ok := r.movies[strings.ToUpper(name)]

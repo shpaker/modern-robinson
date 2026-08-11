@@ -179,6 +179,15 @@ func (g *Game) clickBar(mx, my int) {
 			g.invScroll++
 		}
 		return
+	case inBox(g.bar.SaveBox, mx, my):
+		g.save()
+		return
+	case inBox(g.bar.ScisorsBox, mx, my):
+		// The map button: enabled once the island map opens (SetMap ON).
+		if g.gs.UI["map"] && !strings.EqualFold(g.sceneName, "MAPSCR") {
+			g.pending = &types.Exit{Scene: "MAPSCR", GX: 0, GY: 0, OK: true}
+		}
+		return
 	}
 	ix, iy := g.bar.Inventory[0], g.bar.Inventory[1]
 	iw, ih := g.itemCell()
