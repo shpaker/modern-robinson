@@ -80,6 +80,11 @@ type Game struct {
 	msg     string
 	msgT    float64
 	debug   bool
+
+	mode     int // boot sequence: logo -> title -> play
+	modeT    float64
+	logoImg  *ebiten.Image
+	titleImg *ebiten.Image
 }
 
 // NewGame builds a game over the given resources and starts at SCENA0.
@@ -105,6 +110,10 @@ func NewGame(res interfaces.IResources) *Game {
 		start = strings.ToUpper(s)
 	}
 	g.loadScene(start, nil)
+	g.loadScreens()
+	if os.Getenv("ROBINSON_SCENE") != "" {
+		g.mode = modePlay // direct scene entry skips the boot screens
+	}
 	return g
 }
 
@@ -324,11 +333,14 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		g.debug = !g.debug
 	}
+	dt := 1.0 / float64(ebiten.TPS())
+	if g.updateScreens(dt) {
+		return nil // boot screens own the frame
+	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		g.click(ebiten.CursorPosition())
 	}
 	g.updateHover(ebiten.CursorPosition())
-	dt := 1.0 / float64(ebiten.TPS())
 
 	g.moving = len(g.path) > 0
 	if g.moving {
@@ -389,6 +401,10 @@ const charZCoord = 7
 // bar over the bottom 80px, then HUD/debug/cursor. Everything in world space is
 // shifted left by camX; the bar and cursor are in viewport space.
 func (g *Game) Draw(screen *ebiten.Image) {
+	if g.mode != modePlay {
+		g.drawScreens(screen)
+		return
+	}
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(-float64(g.camX), 0)
 	screen.DrawImage(g.bg, op)

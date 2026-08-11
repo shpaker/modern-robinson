@@ -19,6 +19,7 @@ type Resources struct {
 	movies    map[string]string
 	sceneDirs map[string]string
 	sceneDat  map[string]string
+	screenDat map[string]string
 	cache     map[string]*codec.Container
 	wave      *codec.Container
 	waveIndex map[string]types.Entry
@@ -41,6 +42,7 @@ func NewResources(root string) *Resources {
 		movies:    map[string]string{},
 		sceneDirs: map[string]string{},
 		sceneDat:  map[string]string{},
+		screenDat: map[string]string{},
 		cache:     map[string]*codec.Container{},
 	}
 	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
@@ -57,12 +59,14 @@ func NewResources(root string) *Resources {
 			r.sceneDirs[up[:len(up)-4]] = p
 		case strings.HasSuffix(up, ".DAT"):
 			// Background bitmaps live in DATA/SCEN (scenes) and DATA/BAR (the
-			// inventory bar); ignore the top-level data blobs (CONFIG, LANG,
-			// CHESS, ...) that share the extension.
+			// inventory bar); top-level .DAT (LOGO, OPTIONS, ...) are screen
+			// packs; the rest (CONFIG, LANG, ...) fail codec.Open harmlessly.
 			dir := strings.ToUpper(p)
 			sep := string(os.PathSeparator)
 			if strings.Contains(dir, sep+"SCEN"+sep) || strings.Contains(dir, sep+"BAR"+sep) {
 				r.sceneDat[up[:len(up)-4]] = p
+			} else {
+				r.screenDat[up[:len(up)-4]] = p
 			}
 		}
 		return nil
@@ -173,6 +177,39 @@ func (r *Resources) BarSprites() (map[string]*types.NGB, types.Palette) {
 		}
 	}
 	return out, pal
+}
+
+// Screen returns a named full-screen bitmap from a top-level screen pack:
+// Screen("LOGO", "ROBINSON") is the title image of LOGO.DAT (pairs NAME.NGB +
+// NAME.COL). Returns nil if the pack or the image is absent.
+func (r *Resources) Screen(pack, name string) (*types.NGB, types.Palette) {
+	var pal types.Palette
+	p, ok := r.screenDat[strings.ToUpper(pack)]
+	if !ok {
+		return nil, pal
+	}
+	c := r.container(p)
+	if c == nil {
+		return nil, pal
+	}
+	up := strings.ToUpper(name)
+	var ngb *types.NGB
+	for _, e := range c.Entries() {
+		eu := strings.ToUpper(e.Name)
+		if eu != up+".NGB" && eu != up+".COL" {
+			continue
+		}
+		d, err := c.Extract(e)
+		if err != nil {
+			continue
+		}
+		if strings.HasSuffix(eu, ".NGB") {
+			ngb = codec.DecodeNGB(d)
+		} else {
+			pal = codec.LoadPalette(d)
+		}
+	}
+	return ngb, pal
 }
 
 // SceneContainer returns the .DAN container for a scene (its scripts/objects).

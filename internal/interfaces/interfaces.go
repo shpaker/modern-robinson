@@ -23,6 +23,8 @@ type IResources interface {
 	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
 	BarBackground() (*types.NGB, types.Palette)
 	BarSprites() (map[string]*types.NGB, types.Palette)
+	// Screen is a named full-screen image from a top-level pack (LOGO, OPTIONS).
+	Screen(pack, name string) (*types.NGB, types.Palette)
 	// Texts is the global string table (TEXT.DAT); Text ids are 0-based lines.
 	Texts() []string
 	// InitialVisibility is the start-of-game object visibility for a scene

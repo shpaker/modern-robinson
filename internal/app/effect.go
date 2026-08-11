@@ -53,8 +53,32 @@ func (g *Game) applyEffect(c types.Command) {
 		g.setVert(c.Args)
 	case "setrest":
 		g.setRest(c.Args)
+	case "setmouse", "setmap", "lockbar", "setbar", "showcursor", "interrupt":
+		g.setToggle(strings.ToLower(c.Kw), c.Args)
 	}
-	// aproach/shift/set drive the walk+action already; UI toggles are stage 5.
+	// aproach/shift/set drive the walk+action already.
+}
+
+// setToggle records an ON/OFF UI switch (map access, mouse lock, bar lock...).
+func (g *Game) setToggle(kw string, args []string) {
+	if len(args) < 1 {
+		return
+	}
+	on := strings.EqualFold(args[0], "ON")
+	switch kw {
+	case "setmouse":
+		g.gs.UI["mouse"] = on
+	case "setmap":
+		g.gs.UI["map"] = on
+	case "lockbar":
+		g.gs.UI["barlock"] = on
+	case "setbar":
+		g.gs.UI["bar"] = on
+	case "showcursor":
+		g.gs.UI["cursor"] = on
+	case "interrupt":
+		g.gs.UI["interrupt"] = on
+	}
 }
 
 // createObject spawns an object into a scene (persisting it) and, when that is

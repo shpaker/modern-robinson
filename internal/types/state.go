@@ -22,15 +22,20 @@ type GameState struct {
 
 	gone    map[string]map[string]bool // scene -> object -> removed (DelObject)
 	spawned map[string][]Spawn         // scene -> objects added (CreateObject)
+
+	UI map[string]bool // SetMouse/SetMap/LockBar/SetBar/ShowCursor/Interrupt toggles
 }
 
-// NewGameState returns an empty state with initialised maps.
+// NewGameState returns an empty state with initialised maps. UI toggles that
+// default on: mouse input, the bar, and the cursor; the island map opens later
+// (SetMap ON).
 func NewGameState() *GameState {
 	return &GameState{
 		Vars:     map[string]int{},
 		CharVars: map[string]string{},
 		gone:     map[string]map[string]bool{},
 		spawned:  map[string][]Spawn{},
+		UI:       map[string]bool{"mouse": true, "bar": true, "cursor": true},
 	}
 }
 
