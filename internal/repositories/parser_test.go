@@ -6,6 +6,39 @@ import (
 	"github.com/shpaker/modern-robinson/internal/testutil"
 )
 
+func TestParseFrameScript(t *testing.T) {
+	p := SceneParser{}
+	fire := "ScriptName\tDO NOTE;\nMovieName\tFire.mv;\nShift\t90,227;\n" +
+		"TotalFrames\t3;\nFrame 0,1;\nDelay 142;\nSound fire,4;\n" +
+		"Frame 1,1;\nDelay 142;\nSound fire,4;\n" +
+		"Frame 2,1;\nDelay 142;\nSound fire,4;\nEnd;"
+	fs := p.ParseFrameScript(fire)
+	if fs.MovieName != "Fire.mv" || fs.Shift != [2]int{90, 227} || fs.Total != 3 {
+		t.Fatalf("header = %q %v %d", fs.MovieName, fs.Shift, fs.Total)
+	}
+	if len(fs.Frames) != 3 {
+		t.Fatalf("frames = %d, want 3", len(fs.Frames))
+	}
+	if !fs.Looping {
+		t.Error("fire (no terminal command) must loop")
+	}
+	f0 := fs.Frames[0]
+	if f0.Delay != 142 || len(f0.Events) != 1 || f0.Events[0].Kw != "sound" ||
+		len(f0.Events[0].Args) != 2 || f0.Events[0].Args[0] != "fire" {
+		t.Errorf("frame0 = %+v", f0)
+	}
+
+	action := "ScriptName x;\nMovieName a.mv;\nShift 0,0;\nTotalFrames 1;\n" +
+		"Frame 0,1;\nDelay 200;\nDelObject SCENA0, smoke, Roby,0,0;\nEnd;"
+	fs2 := p.ParseFrameScript(action)
+	if fs2.Looping {
+		t.Error("action with DelObject must be one-shot")
+	}
+	if fs2.Frames[0].Events[0].Kw != "delobject" {
+		t.Errorf("event = %q", fs2.Frames[0].Events[0].Kw)
+	}
+}
+
 func TestParseSceneAndExits(t *testing.T) {
 	root := testutil.GameRoot(t)
 	res := NewResources(root)

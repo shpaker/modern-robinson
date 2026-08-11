@@ -176,39 +176,85 @@ func (SceneParser) ParseObject(text string) *types.SceneObject {
 	return ob
 }
 
-// ParseFrameScript parses a .FS.
+// terminalKw are commands whose presence in the LAST frame marks a one-shot
+// script; without them a FonScript loops (ambient fire/waves/crab).
+var terminalKw = map[string]bool{
+	"delobject": true, "deleteobject": true, "goscene": true,
+	"setrest": true, "showchar": true, "endgame": true, "startgame": true,
+}
+
+// argSplit splits a comma-separated argument list, stripping quotes and spaces.
+func argSplit(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if len(p) >= 2 && p[0] == '"' && p[len(p)-1] == '"' {
+			p = p[1 : len(p)-1]
+		}
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ParseFrameScript parses a .FS into a header plus per-frame event commands.
 func (SceneParser) ParseFrameScript(text string) *types.FrameScript {
 	fs := &types.FrameScript{}
 	var cur *types.Frame
 	for _, st := range statements(text) {
-		v := ints(st.args)
 		switch st.kw {
 		case "scriptname":
 			fs.ScriptName = strings.TrimSpace(st.args)
 		case "moviename":
 			fs.MovieName = strings.Trim(strings.TrimSpace(st.args), `"`)
-		case "shift":
-			if len(v) >= 2 {
-				fs.Shift = [2]int{v[0], v[1]}
-			}
 		case "totalframes":
-			if len(v) > 0 {
+			if v := ints(st.args); len(v) > 0 {
 				fs.Total = v[0]
 			}
 		case "frame":
+			v := ints(st.args)
 			cur = &types.Frame{Index: at(v, 0), Sub: at(v, 1)}
 			fs.Frames = append(fs.Frames, cur)
 		case "delay":
-			if cur != nil && len(v) > 0 {
-				cur.Delay = v[0]
-			}
-		case "text":
 			if cur != nil {
-				cur.Texts = append(cur.Texts, [2]int{at(v, 0), at(v, 1)})
+				if v := ints(st.args); len(v) > 0 {
+					cur.Delay = v[0]
+				}
+			}
+		case "shift":
+			// header Shift (before any frame) vs in-frame Shift event
+			if cur == nil {
+				if v := ints(st.args); len(v) >= 2 {
+					fs.Shift = [2]int{v[0], v[1]}
+				}
+			} else {
+				cur.Events = append(cur.Events, types.Command{Kw: "shift", Args: argSplit(st.args)})
+			}
+		case "end":
+			// no-op
+		default:
+			if cur != nil {
+				cur.Events = append(cur.Events, types.Command{Kw: st.kw, Args: argSplit(st.args)})
 			}
 		}
 	}
+	fs.Looping = isLooping(fs)
 	return fs
+}
+
+// isLooping reports whether the last frame has no terminal command.
+func isLooping(fs *types.FrameScript) bool {
+	if len(fs.Frames) == 0 {
+		return false
+	}
+	for _, ev := range fs.Frames[len(fs.Frames)-1].Events {
+		if terminalKw[ev.Kw] {
+			return false
+		}
+	}
+	return true
 }
 
 // SceneExits scans a scene container's *GOL/*GOR frame scripts for the GoScene

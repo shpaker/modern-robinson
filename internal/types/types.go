@@ -77,10 +77,16 @@ type SceneObject struct {
 	Text       int
 }
 
-// Frame is one frame of a .FS frame script.
+// Command is one event line inside a frame (e.g. Sound, Text, Set, GoScene).
+type Command struct {
+	Kw   string
+	Args []string
+}
+
+// Frame is one frame of a .FS frame script: a delay plus its event commands.
 type Frame struct {
 	Index, Sub, Delay int
-	Texts             [][2]int
+	Events            []Command
 }
 
 // FrameScript is a parsed .FS (a movie's per-frame timeline).
@@ -90,6 +96,10 @@ type FrameScript struct {
 	Shift      [2]int
 	Total      int
 	Frames     []*Frame
+	// Looping is true when the last frame carries no terminal command
+	// (DelObject/GoScene/SetRest/ShowChar/EndGame/StartGame) — an ambient
+	// FonScript that repeats (fire, waves, crab).
+	Looping bool
 }
 
 // Exit is a scene transition target reached from an edge / arrow object.
