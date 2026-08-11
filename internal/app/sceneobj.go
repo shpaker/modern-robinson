@@ -20,7 +20,8 @@ type sceneObj struct {
 	z       int    // draw order = gy*ZPerGrid + ZCoord
 	frames  []adapters.DecalFrame
 	player  *use_cases.Player
-	visible bool
+	visible bool // has a frame to draw this tick
+	removed bool // taken/consumed (DelObject) — no sprite, no hotspot
 }
 
 // loadSceneObjects builds the live objects for a scene's ObjectList, wiring each

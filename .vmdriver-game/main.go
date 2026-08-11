@@ -115,29 +115,20 @@ func (d *driver) Update() error {
 	// To capture the app in several states in one run — the multi-snapshot pattern — call d.snapshot(i)
 	// between segments; each call renders the current state and writes a numbered PNG next to -out.
 	//
-	// INPUT SCRIPT: toggle F1 debug, snapshot, then walk right and snapshot the gait.
-	d.guest.AdvanceTicks(5) // settle
-	d.guest.PressKey(ebiten.KeyF1)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseKey(ebiten.KeyF1)
-	d.guest.AdvanceTicks(2)
-	_ = d.snapshot(0) // debug overlay, idle
-	// walk toward cell (5,1) ~ screen (781,231)
-	d.guest.MoveCursor(781, 231)
-	d.guest.PressMouseButton(ebiten.MouseButtonLeft)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
-	d.guest.AdvanceTicks(40)
-	_ = d.snapshot(1) // mid-walk
-	d.guest.AdvanceTicks(80)
-	_ = d.snapshot(2) // arrived
-	// click the right edge -> transition to SCENA3
-	d.guest.MoveCursor(1010, 200)
-	d.guest.PressMouseButton(ebiten.MouseButtonLeft)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
+	// INPUT SCRIPT: click the bgstone object -> hero walks to it -> action plays.
 	d.guest.AdvanceTicks(5)
-	_ = d.snapshot(3) // new scene SCENA3
+	d.guest.MoveCursor(155, 166) // over bgstone (hand cursor)
+	d.guest.AdvanceTicks(2)
+	_ = d.snapshot(0) // scene alive, cursor over object
+	d.guest.PressMouseButton(ebiten.MouseButtonLeft)
+	d.guest.AdvanceTicks(1)
+	d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
+	d.guest.AdvanceTicks(50)
+	_ = d.snapshot(1) // walking to the object
+	d.guest.AdvanceTicks(90)
+	_ = d.snapshot(2) // action animation playing
+	d.guest.AdvanceTicks(150)
+	_ = d.snapshot(3) // action finishing
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

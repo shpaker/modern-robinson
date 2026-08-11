@@ -1,0 +1,187 @@
+package app
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/shpaker/modern-robinson/internal/types"
+	"github.com/shpaker/modern-robinson/internal/use_cases"
+)
+
+// actionPlay is a character action triggered by clicking an object: the hero
+// walks to the target cell, then the action movie plays (frames + events).
+type actionPlay struct {
+	fs      *types.FrameScript
+	frames  []adapters.DecalFrame
+	player  *use_cases.Player
+	target  [2]int
+	started bool // true once the walk finished and the movie is playing
+}
+
+// resolveAction builds the default (hand) action for an object: script
+// ROHAN<token> in the scene container, where token = first 3 letters of name.
+func (g *Game) resolveAction(objName string) *actionPlay {
+	if g.sceneC == nil {
+		return nil
+	}
+	tok := strings.ToUpper(objName)
+	if len(tok) > 3 {
+		tok = tok[:3]
+	}
+	raw, err := g.sceneC.ExtractName("ROHAN" + tok + ".FS")
+	if err != nil {
+		return nil
+	}
+	fs := g.parser.ParseFrameScript(string(raw))
+	if fs.MovieName == "" {
+		return nil
+	}
+	ocx, ocy, ok := g.objCell(objName)
+	if !ok {
+		return nil
+	}
+	tx, ty := aproachTarget(fs, ocx, ocy)
+	fx, fy, _ := g.grid.NearestFree(tx, ty)
+	return &actionPlay{
+		fs:     fs,
+		frames: adapters.LoadDecal(g.res, fs.MovieName),
+		player: use_cases.NewPlayer(fs),
+		target: [2]int{fx, fy},
+	}
+}
+
+// aproachTarget reads the first Aproach event to find the action's target cell.
+// Forms: (Roby, obj, dx, dy) -> object cell + offset; (Roby, gx, gy) -> absolute.
+func aproachTarget(fs *types.FrameScript, ocx, ocy int) (int, int) {
+	for _, fr := range fs.Frames {
+		for _, ev := range fr.Events {
+			if ev.Kw != "aproach" {
+				continue
+			}
+			a := ev.Args
+			switch len(a) {
+			case 4:
+				dx, _ := strconv.Atoi(a[2])
+				dy, _ := strconv.Atoi(a[3])
+				return ocx + dx, ocy + dy
+			case 3:
+				gx, _ := strconv.Atoi(a[1])
+				gy, _ := strconv.Atoi(a[2])
+				return gx, gy
+			}
+		}
+	}
+	return ocx, ocy
+}
+
+// objCell returns the scene-grid cell of an object by name.
+func (g *Game) objCell(name string) (int, int, bool) {
+	name = strings.ToLower(name)
+	for _, s := range g.sceneObjs {
+		if strings.ToLower(s.ref.Name) == name {
+			return s.ref.GX, s.ref.GY, true
+		}
+	}
+	return 0, 0, false
+}
+
+// startObjectAction resolves and begins an object's action; returns false if
+// there is no action script (caller falls back to examine).
+func (g *Game) startObjectAction(objName string) bool {
+	ap := g.resolveAction(objName)
+	if ap == nil {
+		return false
+	}
+	g.pendingAct = ap
+	if p := g.grid.Path(g.cell, ap.target); len(p) > 1 {
+		g.path = p[1:]
+	} else {
+		g.path = nil
+	}
+	return true
+}
+
+// updateAction advances an in-progress action: start it once the walk ends,
+// then play frames, apply their events, and clear it when finished.
+func (g *Game) updateAction(dt float64) {
+	if g.pendingAct != nil && len(g.path) == 0 {
+		g.act = g.pendingAct
+		g.pendingAct = nil
+	}
+	if g.act == nil {
+		return
+	}
+	g.act.started = true
+	for _, ev := range g.act.player.Update(dt) {
+		g.applyEvent(ev)
+	}
+	if g.act.player.Done() {
+		g.act = nil
+	}
+}
+
+// applyEvent runs one frame event. Stage 2 handles presentation + trivial world
+// changes (sound, text, hide, transition); quest logic (Set/If/AddItem/…) is
+// deferred to the interpreter (stage 3).
+func (g *Game) applyEvent(ev types.Command) {
+	switch ev.Kw {
+	case "sound":
+		g.playSound(ev.Args)
+	case "text":
+		if len(ev.Args) > 0 {
+			g.msg, g.msgT = "text #"+ev.Args[0], 3
+		}
+	case "delobject":
+		if len(ev.Args) >= 2 {
+			g.hideObject(ev.Args[1])
+		}
+	case "goscene":
+		g.gosceneFromEvent(ev.Args)
+	case "aproach":
+		// already consumed as the walk target
+	default:
+		// Set/If/AddItem/CreateObject/... — stage 3
+	}
+}
+
+// hideObject removes an object's sprite and hotspot (picked up / consumed).
+func (g *Game) hideObject(name string) {
+	name = strings.ToLower(name)
+	for _, s := range g.sceneObjs {
+		if strings.ToLower(s.ref.Name) == name {
+			s.visible = false
+			s.removed = true
+			s.player = nil
+		}
+	}
+	g.buildHotspots()
+}
+
+// gosceneFromEvent queues a scene transition from a GoScene event's args
+// (last two ints = spawn cell, first = scene name).
+func (g *Game) gosceneFromEvent(args []string) {
+	if len(args) < 3 {
+		return
+	}
+	gx, _ := strconv.Atoi(args[len(args)-2])
+	gy, _ := strconv.Atoi(args[len(args)-1])
+	g.pending = &types.Exit{Scene: strings.ToUpper(args[0]), GX: gx, GY: gy, OK: true}
+}
+
+// drawAction draws the current action-movie frame (decal) if one is playing.
+func (g *Game) drawAction(screen *ebiten.Image) bool {
+	if g.act == nil || !g.act.started || len(g.act.frames) == 0 {
+		return false
+	}
+	i := g.act.player.FrameIndex()
+	if i < 0 || i >= len(g.act.frames) || g.act.frames[i].Img == nil {
+		return true // playing but this frame is empty
+	}
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(g.act.frames[i].X), float64(g.act.frames[i].Y))
+	screen.DrawImage(g.act.frames[i].Img, op)
+	return true
+}

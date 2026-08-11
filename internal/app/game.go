@@ -37,6 +37,7 @@ type Game struct {
 	sceneName string
 	bg        *ebiten.Image
 	sc        *types.Scene
+	sceneC    interfaces.IContainer
 	grid      interfaces.IGrid
 	w, h      int
 	zper      int
@@ -46,6 +47,9 @@ type Game struct {
 	exitL     types.Exit
 	exitR     types.Exit
 	stepWav   []byte
+
+	act        *actionPlay
+	pendingAct *actionPlay
 
 	idle      *adapters.Animation
 	walkCache map[int]*adapters.Animation
@@ -73,6 +77,7 @@ func NewGame(res interfaces.IResources) *Game {
 		curDir:    6,
 		debug:     DebugFlag == "true",
 	}
+	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.loadScene("SCENA0", nil)
 	return g
 }
@@ -95,6 +100,8 @@ func (g *Game) loadScene(name string, spawn *[2]int) {
 	g.sceneName = name
 	g.bg = bgImage(bg, pal)
 	c := g.res.SceneContainer(name)
+	g.sceneC = c
+	g.act, g.pendingAct = nil, nil
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
 	if g.sc.Size == [2]int{0, 0} {
@@ -139,6 +146,9 @@ func (g *Game) buildHotspots() {
 	g.hotspots = nil
 	gsx, gsy := g.sc.GridShift[0], g.sc.GridShift[1]
 	for _, s := range g.sceneObjs {
+		if s.removed {
+			continue // taken objects are no longer clickable
+		}
 		az := s.ob.ActiveZone
 		x, y := az[0]+s.shift[0]-gsx, az[1]+s.shift[1]-gsy
 		w, h := max(az[2], 8), max(az[3], 8)
@@ -191,6 +201,9 @@ func (g *Game) walkAnim(dir int) *adapters.Animation {
 }
 
 func (g *Game) click(mx, my int) {
+	if g.act != nil || g.pendingAct != nil {
+		return // ignore input while an action is walking/playing
+	}
 	if mx < 40 && g.exitL.OK {
 		g.pending = &g.exitL
 		return
@@ -217,7 +230,9 @@ func (g *Game) click(mx, my int) {
 	}
 	for _, hs := range g.hotspots {
 		if pointIn(hs.rect, mx, my) {
-			g.msg, g.msgT = hs.ob.Name, 3
+			if !g.startObjectAction(hs.ob.Name) {
+				g.msg, g.msgT = hs.ob.Name, 3 // no action script -> examine
+			}
 			return
 		}
 	}
@@ -267,6 +282,7 @@ func (g *Game) Update() error {
 			}
 		}
 	}
+	g.updateAction(dt)
 
 	a, rate := g.idle, 0.09
 	if g.moving {
@@ -321,9 +337,70 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.debug {
 		g.drawDebug(screen)
 	}
+	g.drawCursor(screen)
+}
+
+// cursorType returns the cursor for the hovered zone: 1..4 = arrows
+// (left/right/up/down), 0 = hand (object action), -1 = default pointer.
+func (g *Game) cursorType(mx, my int) int {
+	if mx < 40 && g.exitL.OK {
+		return 1
+	}
+	if mx > g.w-40 && g.exitR.OK {
+		return 2
+	}
+	for _, hs := range g.hotspots {
+		if pointIn(hs.rect, mx, my) {
+			switch strings.ToLower(hs.key) {
+			case "goleft":
+				return 1
+			case "gorght":
+				return 2
+			}
+			return hs.ob.Cursor
+		}
+	}
+	return -1
+}
+
+// drawCursor draws our own cursor (the game's are proprietary) by zone type.
+func (g *Game) drawCursor(screen *ebiten.Image) {
+	mx, my := ebiten.CursorPosition()
+	x, y := float32(mx), float32(my)
+	white := rgba(255, 255, 255, 255)
+	dark := rgba(0, 0, 0, 200)
+	switch g.cursorType(mx, my) {
+	case 1: // ◄
+		drawTriangle(screen, x-10, y, x+4, y-8, x+4, y+8, white, dark)
+	case 2: // ►
+		drawTriangle(screen, x+10, y, x-4, y-8, x-4, y+8, white, dark)
+	case 3: // ▲
+		drawTriangle(screen, x, y-10, x-8, y+4, x+8, y+4, white, dark)
+	case 4: // ▼
+		drawTriangle(screen, x, y+10, x-8, y-4, x+8, y-4, white, dark)
+	case 0: // hand / action
+		vector.FillCircle(screen, x, y, 6, white, true)
+		vector.StrokeCircle(screen, x, y, 6, 1.5, dark, true)
+		vector.FillCircle(screen, x, y, 2, dark, true)
+	default: // pointer
+		vector.StrokeCircle(screen, x, y, 5, 1.5, white, true)
+		vector.FillCircle(screen, x, y, 1.5, white, true)
+	}
+}
+
+func drawTriangle(dst *ebiten.Image, ax, ay, bx, by, cx, cy float32, fill, outline color.Color) {
+	vector.StrokeLine(dst, ax, ay, bx, by, 3, outline, true)
+	vector.StrokeLine(dst, bx, by, cx, cy, 3, outline, true)
+	vector.StrokeLine(dst, cx, cy, ax, ay, 3, outline, true)
+	vector.StrokeLine(dst, ax, ay, bx, by, 1.5, fill, true)
+	vector.StrokeLine(dst, bx, by, cx, cy, 1.5, fill, true)
+	vector.StrokeLine(dst, cx, cy, ax, ay, 1.5, fill, true)
 }
 
 func (g *Game) drawCharacter(screen *ebiten.Image) {
+	if g.drawAction(screen) {
+		return // an action movie is playing in place of idle/walk
+	}
 	a := g.idle
 	if g.moving {
 		a = g.walkAnim(g.curDir)
@@ -334,7 +411,7 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	fi := g.frameI % len(a.Frames)
 	frame, anch := a.Frames[fi], a.Anchors[fi]
 	px, py := g.pos[0], g.pos[1]
-	vector.DrawFilledCircle(screen, float32(px), float32(py-3), 16, rgba(0, 0, 0, 70), true)
+	vector.FillCircle(screen, float32(px), float32(py-3), 16, rgba(0, 0, 0, 70), true)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(px-float64(anch[0]), py-float64(anch[1]))
 	screen.DrawImage(frame, op)
@@ -354,13 +431,13 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 			default:
 				continue
 			}
-			vector.DrawFilledCircle(screen, float32(x), float32(y), 3, col, true)
+			vector.FillCircle(screen, float32(x), float32(y), 3, col, true)
 			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d,%d", gx, gy), x+4, y-6)
 		}
 	}
 	for _, c := range g.path {
 		x, y := g.grid.ToScreen(c[0], c[1])
-		vector.DrawFilledCircle(screen, float32(x), float32(y), 4, rgba(255, 230, 0, 230), true)
+		vector.FillCircle(screen, float32(x), float32(y), 4, rgba(255, 230, 0, 230), true)
 	}
 	for _, hs := range g.hotspots {
 		r := hs.rect
@@ -393,10 +470,3 @@ func pointIn(r image.Rectangle, x, y int) bool {
 }
 
 func rgba(r, g, b, a uint8) color.Color { return color.RGBA{r, g, b, a} }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
