@@ -230,7 +230,8 @@ func (g *Game) clickBar(mx, my int) {
 		}
 		return
 	case inBox(g.bar.SaveBox, mx, my):
-		g.save()
+		// The disk button opens the authored save screen.
+		g.mode, g.slotHover = modeSave, -1
 		return
 	case inBox(g.bar.ScisorsBox, mx, my):
 		// The map button: enabled once the island map opens (SetMap ON).

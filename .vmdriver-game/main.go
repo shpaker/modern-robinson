@@ -153,20 +153,17 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Translator puzzle: pick the first pictogram, then assign a letter.
+	// Organ: carry tube 0 into mouth 2, then hit the listen hotspot.
 	d.guest.AdvanceTicks(10)
-	_ = d.snapshot(0) // the encoded message
-	click(66, 48)     // first pictogram of the message ("С")
+	_ = d.snapshot(0) // tubes in the top row, organ frame on the beach
+	click(40, 44)     // pick tube 0
 	d.guest.AdvanceTicks(4)
-	_ = d.snapshot(1) // selected (red frame)
-	click(106, 332)   // the letter "С" in the palette (row 2, col 3)
+	click(185, 430) // drop it into mouth 2
 	d.guest.AdvanceTicks(6)
-	_ = d.snapshot(2) // every "С" in the text turns into the letter
-	click(66, 48)
-	d.guest.AdvanceTicks(3)
-	click(20, 430) // erase button
-	d.guest.AdvanceTicks(6)
-	_ = d.snapshot(3) // erased: back to the pictogram
+	_ = d.snapshot(1) // seated on the rail
+	click(230, 250)   // the drummer: play the phrase
+	d.guest.AdvanceTicks(30)
+	_ = d.snapshot(2) // mid-phrase
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

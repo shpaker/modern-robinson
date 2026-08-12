@@ -2,52 +2,58 @@ package app
 
 import (
 	"image"
+	"math/rand"
 	"strconv"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 )
 
-// The translator puzzle (StartGame 5 -> Translt). CRYPT.DAT holds the whole
-// game: CRYPT.TXT is the 30-letter alphabet, its uppercase twin and the
-// castaway's message; C1..C30 are the pictograms of that alien alphabet, R1..R30
-// the Cyrillic letters they stand for, and S1..S5 the punctuation (, . - ! and
-// a blank for space). The message is written in pictograms and the player has to
-// work out which letter each one is.
+// The translator puzzle (StartGame 5 -> Translt), rebuilt to the original's
+// rules. CRYPT.TXT carries the 30-letter alphabet, its uppercase twin and the
+// castaway's message; C1..C30 are the pictograms, R1..R30 the Cyrillic letters,
+// S1..S5 the punctuation. The pictogram<->letter permutation is generated at
+// runtime — it is not in the data — so every session scrambles differently.
+//
+// Cell values use the engine's own encoding: 0..n-1 a cipher pictogram,
+// n..n+4 punctuation, n+5.. a placed letter, -1 an empty cell.
 type cryptGame struct {
 	sprites map[string]*ebiten.Image
-	lower   []rune // alphabet, index -> lower-case letter
-	upper   []rune
-	lines   []string // the message, one screen line each
+	n       int   // alphabet size (30)
+	perm    []int // letter index -> pictogram index
 
-	guess    map[int]int // pictogram index -> guessed letter index (1-based)
-	selected int         // pictogram currently being guessed, 0 = none
-	solved   bool
-	solvedT  float64
+	pristine []int // the untouched cipher text, row-major 26x10
+	working  []int // what is drawn and edited
+	used     []bool
+	sel      int // letter being carried, -1 = none
+
+	solved  bool
+	solvedT float64
 }
 
-// Layout: the message sits in the upper parchment, the letter palette below it,
-// and the authored bar (erase / exit) occupies the bottom 80 px.
+// The grid and strip geometry, verbatim from the engine: a 26x10 glyph grid
+// from (48,84) with a 21x30 pitch, and the letter strip along y 26..46.
 const (
-	cryptCellW  = 20
-	cryptCellH  = 19
-	cryptLineH  = 26
-	cryptTextX  = 60
-	cryptTextY  = 40
-	cryptPalX   = 60
-	cryptPalY   = 300
-	cryptPalCol = 15
+	cryptCols   = 26
+	cryptRows   = 10
+	cryptGridX  = 48
+	cryptGridY  = 84
+	cryptPitchX = 21
+	cryptPitchY = 30
+	cryptStripY = 26
+	cryptStripH = 21
 )
 
+// The toolbar hit rectangles the engine tests.
 var (
-	cryptEraseBtn = image.Rect(5, 405, 74, 471)
-	cryptExitBtn  = image.Rect(564, 405, 633, 471)
+	cryptEraseBtn = image.Rect(6, 406, 76, 465)
+	cryptExitBtn  = image.Rect(550, 406, 633, 465)
 )
 
-// newCryptGame loads CRYPT.DAT and prepares the puzzle.
+// newCryptGame loads CRYPT.DAT, scrambles the alphabet and typesets the text.
 func newCryptGame(g *Game) minigame {
 	raw := g.res.ScreenFile("CRYPT", "CRYPT.TXT")
 	if raw == nil {
@@ -58,57 +64,92 @@ func newCryptGame(g *Game) minigame {
 	if len(lines) < 3 {
 		return nil
 	}
+	lower := []rune(strings.TrimSpace(lines[0]))
 	c := &cryptGame{
 		sprites: g.packImages("CRYPT"),
-		lower:   []rune(lines[0]),
-		upper:   []rune(lines[1]),
-		guess:   map[int]int{},
+		n:       len(lower),
+		sel:     -1,
 	}
-	for _, l := range lines[2:] {
-		l = strings.TrimSuffix(l, "~")
-		if l != "" {
-			c.lines = append(c.lines, l)
-		}
-	}
-	if len(c.lower) == 0 || len(c.lines) == 0 {
+	if c.n == 0 || c.sprites["CRYPT"] == nil {
 		return nil
 	}
+	c.perm = rand.Perm(c.n)
+	c.used = make([]bool, c.n)
+
+	upper := []rune(strings.TrimSpace(lines[1]))
+	letterIdx := func(r rune) int {
+		for i, l := range lower {
+			if r == l || (i < len(upper) && r == upper[i]) {
+				return i
+			}
+		}
+		return -1
+	}
+	// Typeset the message: one text line per row, wrapping at column 26 the
+	// way the engine's SetText does (the long line 9 wraps onto row 10).
+	c.pristine = make([]int, cryptCols*cryptRows)
+	for i := range c.pristine {
+		c.pristine[i] = -1
+	}
+	row := 0
+	for _, line := range lines[2:] {
+		line = strings.TrimSuffix(line, "~")
+		if line == "" || row >= cryptRows {
+			continue
+		}
+		col := 0
+		for _, r := range line {
+			if col == cryptCols {
+				col = 0
+				if row++; row >= cryptRows {
+					break
+				}
+			}
+			c.pristine[row*cryptCols+col] = c.encode(r, letterIdx(r))
+			col++
+		}
+		row++
+	}
+	c.working = make([]int, len(c.pristine))
+	copy(c.working, c.pristine)
 	return c
 }
 
-// letterIndex maps a message character to its 1-based alphabet index, or 0 when
-// it is punctuation (see punctSprite).
-func (c *cryptGame) letterIndex(r rune) int {
-	for i, l := range c.lower {
-		if r == l || (i < len(c.upper) && r == c.upper[i]) {
-			return i + 1
-		}
+// encode turns a message character into its cell value.
+func (c *cryptGame) encode(r rune, letter int) int {
+	if letter >= 0 {
+		return c.perm[letter] // the pictogram standing for this letter
 	}
-	return 0
-}
-
-// punctSprite maps the five non-letter characters to their S sprites.
-func punctSprite(r rune) string {
 	switch r {
 	case ',':
-		return "S1"
+		return c.n
 	case '.':
-		return "S2"
+		return c.n + 1
 	case '-':
-		return "S3"
+		return c.n + 2
 	case '!':
-		return "S4"
-	case ' ':
-		return "S5"
+		return c.n + 3
+	default:
+		return c.n + 4 // space
 	}
-	return ""
 }
 
-// update handles clicks: pick a pictogram, assign a letter, erase, or give up.
+// stripX is the left edge of the letter strip: centred for n letters.
+func (c *cryptGame) stripX() int {
+	return (ViewW - cryptPitchX*c.n) / 2
+}
+
+// update implements the engine's click logic.
 func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 	if c.solved {
 		c.solvedT += dt
-		return c.solvedT > 2.5, 1
+		if c.solvedT > 3 || clickedThisTick() {
+			return true, 1
+		}
+		return false, 0
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		return true, 0
 	}
 	if !clickedThisTick() {
 		return false, 0
@@ -116,124 +157,130 @@ func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 	mx, my := ebiten.CursorPosition()
 	switch {
 	case pointIn(cryptExitBtn, mx, my):
-		return true, 0 // gave up: Translt stays 0, the scene offers a retry
+		return true, 0
 	case pointIn(cryptEraseBtn, mx, my):
-		if c.selected > 0 {
-			delete(c.guess, c.selected)
+		// The erase button is a full reset, not an undo.
+		copy(c.working, c.pristine)
+		for i := range c.used {
+			c.used[i] = false
 		}
-		c.selected = 0
+		c.sel = -1
+		g.playSound([]string{"r_all.wav", "1"})
 		return false, 0
 	}
-	if i := c.pictogramAt(mx, my); i > 0 {
-		c.selected = i
+	if c.sel < 0 {
+		// Take a letter from the strip...
+		if my >= cryptStripY && my < cryptStripY+cryptStripH {
+			i := (mx - c.stripX()) / cryptPitchX
+			if mx >= c.stripX() && i >= 0 && i < c.n && !c.used[i] {
+				c.sel = i
+				c.used[i] = true
+				g.playSound([]string{"r_take.wav", "1"})
+				return false, 0
+			}
+		}
+		// ...or pull a placed letter back, reverting all its cells.
+		if v, ok := c.cellAt(mx, my); ok && v >= c.n+5 {
+			letter := v - c.n - 5
+			for i, w := range c.working {
+				if w == v {
+					c.working[i] = c.pristine[i]
+				}
+			}
+			c.used[letter] = false
+			g.playSound([]string{"r_back.wav", "1"})
+		}
 		return false, 0
 	}
-	if l := c.letterAt(mx, my); l > 0 && c.selected > 0 {
-		c.guess[c.selected] = l
-		c.selected = 0
+	// A letter is in hand: it lands only on a pictogram cell.
+	v, ok := c.cellAt(mx, my)
+	if ok && v >= 0 && v < c.n {
+		placed := c.n + 5 + c.sel
+		for i, w := range c.working {
+			if w == v {
+				c.working[i] = placed
+			}
+		}
 		g.playSound([]string{"r_put.wav", "1"})
+		c.sel = -1
 		if c.check() {
 			c.solved = true
 			g.playSound([]string{"final5.wav", "1"})
 		}
+		return false, 0
 	}
+	// Dropped anywhere else: the letter goes back to the strip.
+	c.used[c.sel] = false
+	c.sel = -1
+	g.playSound([]string{"r_error.wav", "1"})
 	return false, 0
 }
 
-// pictogramAt returns the alphabet index of the message glyph under the cursor.
-func (c *cryptGame) pictogramAt(mx, my int) int {
-	for row, line := range c.lines {
-		y := cryptTextY + row*cryptLineH
-		if my < y || my >= y+cryptCellH {
-			continue
-		}
-		col := (mx - cryptTextX) / cryptCellW
-		runes := []rune(line)
-		if col < 0 || col >= len(runes) {
-			return 0
-		}
-		return c.letterIndex(runes[col])
+// cellAt maps a point to its grid cell value.
+func (c *cryptGame) cellAt(mx, my int) (int, bool) {
+	if mx < cryptGridX || mx >= cryptGridX+cryptCols*cryptPitchX ||
+		my < cryptGridY || my >= cryptGridY+cryptRows*cryptPitchY {
+		return 0, false
 	}
-	return 0
+	col := (mx - cryptGridX) / cryptPitchX
+	row := (my - cryptGridY) / cryptPitchY
+	return c.working[row*cryptCols+col], true
 }
 
-// letterAt returns the alphabet index of the palette letter under the cursor.
-func (c *cryptGame) letterAt(mx, my int) int {
-	col := (mx - cryptPalX) / cryptCellW
-	row := (my - cryptPalY) / cryptLineH
-	if col < 0 || col >= cryptPalCol || row < 0 {
-		return 0
-	}
-	i := row*cryptPalCol + col + 1
-	if i > len(c.lower) {
-		return 0
-	}
-	if my >= cryptPalY+row*cryptLineH+cryptCellH {
-		return 0
-	}
-	return i
-}
-
-// check reports whether every pictogram used in the message is now guessed
-// correctly — the puzzle's win condition.
+// check is the win test: no pictogram left, and every placed letter is the one
+// the permutation says its pristine pictogram stands for.
 func (c *cryptGame) check() bool {
-	for _, line := range c.lines {
-		for _, r := range line {
-			i := c.letterIndex(r)
-			if i == 0 {
-				continue
-			}
-			if c.guess[i] != i {
-				return false
+	for i, w := range c.working {
+		switch {
+		case w < 0:
+		case w < c.n:
+			return false // still enciphered
+		case w < c.n+5:
+		default:
+			if c.perm[w-c.n-5] != c.pristine[i] {
+				return false // guessed wrong
 			}
 		}
 	}
 	return true
 }
 
-// draw paints the parchment, the message (pictograms turning into letters as
-// they are guessed), the letter palette and the selection.
+// glyphSprite names the sprite for a cell value.
+func (c *cryptGame) glyphSprite(v int) string {
+	switch {
+	case v < 0:
+		return ""
+	case v < c.n:
+		return "C" + strconv.Itoa(v+1)
+	case v < c.n+4:
+		return "S" + strconv.Itoa(v-c.n+1)
+	case v == c.n+4:
+		return "" // space (S5 is fully transparent)
+	default:
+		return "R" + strconv.Itoa(v-c.n-5+1)
+	}
+}
+
+// draw paints the parchment, the text grid, the letter strip and the letter in
+// hand following the cursor.
 func (c *cryptGame) draw(_ *Game, screen *ebiten.Image) {
 	blitAt(screen, c.sprites["CRYPT"], 0, 0)
-	for row, line := range c.lines {
-		y := cryptTextY + row*cryptLineH
-		for col, r := range []rune(line) {
-			x := cryptTextX + col*cryptCellW
-			if s := punctSprite(r); s != "" {
-				blitAt(screen, c.sprites[s], x, y)
-				continue
-			}
-			i := c.letterIndex(r)
-			if i == 0 {
-				continue
-			}
-			name := "C" + strconv.Itoa(i)
-			if c.guess[i] == i {
-				name = "R" + strconv.Itoa(i) // solved: show the real letter
-			}
-			blitAt(screen, c.sprites[name], x, y)
-			if i == c.selected {
-				strokeRect(
-					screen,
-					image.Rect(x-1, y-1, x+cryptCellW, y+cryptCellH),
-					2,
-					rgba(200, 40, 30, 255),
-				)
+	for row := 0; row < cryptRows; row++ {
+		for col := 0; col < cryptCols; col++ {
+			if s := c.glyphSprite(c.working[row*cryptCols+col]); s != "" {
+				blitAt(screen, c.sprites[s],
+					cryptGridX+col*cryptPitchX, cryptGridY+row*cryptPitchY)
 			}
 		}
 	}
-	// The palette of Cyrillic letters to assign.
-	for i := 1; i <= len(c.lower); i++ {
-		x := cryptPalX + ((i-1)%cryptPalCol)*cryptCellW
-		y := cryptPalY + ((i-1)/cryptPalCol)*cryptLineH
-		blitAt(screen, c.sprites["R"+strconv.Itoa(i)], x, y)
+	for i := 0; i < c.n; i++ {
+		if !c.used[i] {
+			blitAt(screen, c.sprites["R"+strconv.Itoa(i+1)],
+				c.stripX()+i*cryptPitchX, cryptStripY)
+		}
 	}
-	hint := "Выбери значок, затем букву"
-	if c.selected > 0 {
-		hint = "Какая это буква?"
+	if c.sel >= 0 {
+		mx, my := ebiten.CursorPosition()
+		blitAt(screen, c.sprites["R"+strconv.Itoa(c.sel+1)], mx-10, my-9)
 	}
-	if c.solved {
-		hint = "Послание разгадано!"
-	}
-	adapters.DrawText(screen, hint, 96, 420, rgba(40, 30, 20, 255))
 }

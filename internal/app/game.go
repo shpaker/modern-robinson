@@ -407,8 +407,8 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
 		g.load()
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-		g.toggleOptions()
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.mg == nil {
+		g.toggleOptions() // inside a minigame Esc is the game's own quit
 	}
 	if g.quit {
 		return ebiten.Termination

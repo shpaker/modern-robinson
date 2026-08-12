@@ -2,194 +2,205 @@ package app
 
 import (
 	"image"
-	"math/rand"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
-
-	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// The bamboo organ (StartGame 4 -> OrganOK). PIPE.DAT draws the beach with the
-// chief's organ: eight tube slots along the top and eight playable mouths on the
-// rail at the bottom, each sounding PIPE00..PIPE07. The chief plays a phrase and
-// the player repeats it; every correct round adds one note.
+// The bamboo organ (StartGame 4 -> OrganOK), rebuilt to the original's rules:
+// this is an assembly puzzle, not a repeat-after-me. The eight tubes start in
+// the top row and are carried (click to pick, click to drop) into the mouths on
+// the bottom rail. The listen hotspot plays a fifteen-note phrase over the
+// mouths; a mouth sounds its tube's note, an empty mouth plays the dud note.
+// The organ is solved when the tubes stand in the right order.
 type pipeGame struct {
 	sprites map[string]*ebiten.Image
-	seq     []int // the phrase to repeat, grown one note per round
-	pos     int   // how much of it the player has echoed back
-	round   int
+	avail   [8]bool // which tubes the hero has (the Tubs mask)
+	mouth   [8]int  // tube -> mouth, -1 = at home
+	inMouth [8]int  // mouth -> tube, -1 = empty
+	held    int     // tube being carried, -1 = none
 
-	playing  bool    // the organ is demonstrating the phrase
-	playIdx  int     // which note of the demo is due
-	timer    float64 // countdown to the next demo note
-	pressed  int     // key lit this instant, -1 = none
-	pressT   float64
-	done     bool
-	result   int
-	finishT  float64
-	rng      *rand.Rand
-	keyCount int
+	playing bool // the phrase is sounding
+	noteIdx int
+	noteT   float64
+
+	done    bool
+	result  int
+	finishT float64
 }
 
-// pipeRounds is how many phrases must be echoed back to win.
-const pipeRounds = 4
-
-// pipeKeyX are the mouths' left edges on the bottom rail; each is 23 px wide.
-var pipeKeyX = [8]int{28, 103, 178, 253, 328, 403, 478, 553}
-
+// Geometry from the engine: tube homes at (80i, 5) in 78x78 cells, mouth m's
+// hit rectangle (75m-2, 400)-(75m+73, 470), and per-tube seating offsets.
 const (
-	pipeKeyY = 443
-	pipeKeyW = 23
-	pipeKeyH = 35
+	pipeHomeY  = 5
+	pipeHomeDX = 80
+	pipeCell   = 78
 )
 
-// pipeSlotX are the eight item slots along the top (interiors, 74x67).
-var pipeSlotX = [8]int{6, 86, 165, 244, 323, 402, 481, 560}
+var pipeSeat = [8][2]int{
+	{-2, -14}, {0, -5}, {2, 0}, {2, -4}, {2, -8}, {0, -5}, {9, -4}, {-3, 0},
+}
 
-const (
-	pipeSlotY = 6
-	pipeSlotW = 74
-	pipeSlotH = 67
+// pipeListen is the "play the melody" hotspot on the drummer.
+var pipeListen = image.Rect(201, 199, 264, 302)
+
+// The phrase: which mouth sounds on each beat, and for how many 150 ms ticks.
+var (
+	pipeTune = [15]int{0, 1, 0, 1, 3, 0, 2, 4, 4, 4, 5, 6, 1, 1, 7}
+	pipeBeat = [15]int{2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 1, 1, 2, 2, 4}
 )
 
-// newPipeGame builds the organ puzzle. paramVar (Tubs) counts the tubes the
-// hero has fitted, which is how many mouths actually sound.
+const pipeTick = 0.150
+
+// The two tube arrangements the engine accepts (tubes 0 and 7 sound alike).
+var pipeWins = [2][8]int{
+	{2, 0, 1, 3, 4, 5, 6, 7},
+	{2, 7, 1, 3, 4, 5, 6, 0},
+}
+
+// newPipeGame builds the organ. The Tubs variable is a bit mask: bit 2 grants
+// tubes 0-5, bit 1 tube 7, bit 0 tube 6 — the quest reaches 7 (all of them).
 func newPipeGame(g *Game) minigame {
-	p := &pipeGame{
-		sprites:  g.packImages("PIPE"),
-		pressed:  -1,
-		rng:      rand.New(rand.NewSource(int64(g.mgParam)*7919 + 13)),
-		keyCount: len(pipeKeyX),
-	}
+	p := &pipeGame{held: -1}
+	p.sprites = g.packImages("PIPE")
 	if p.sprites["BACK"] == nil {
 		return nil
 	}
-	p.nextRound(g)
+	mask := g.mgParam
+	for i := 0; i < 6; i++ {
+		p.avail[i] = mask&4 != 0
+	}
+	p.avail[7] = mask&2 != 0
+	p.avail[6] = mask&1 != 0
+	for i := range p.mouth {
+		p.mouth[i] = -1
+		p.inMouth[i] = -1
+	}
 	return p
 }
 
-// nextRound appends a note and starts the demonstration.
-func (p *pipeGame) nextRound(g *Game) {
-	p.seq = append(p.seq, p.rng.Intn(p.keyCount))
-	p.pos, p.round = 0, p.round+1
-	p.playing, p.playIdx, p.timer = true, 0, 0.6
-	_ = g
+// mouthRect is mouth m's hit rectangle on the bottom rail.
+func mouthRect(m int) image.Rectangle {
+	return image.Rect(75*m-2, 400, 75*m+73, 470)
 }
 
-// note plays a mouth's sound and lights it.
-func (p *pipeGame) note(g *Game, i int) {
-	if i < 0 || i >= p.keyCount {
-		return
+// tubeRect is the tube's current 78x78 cell on screen.
+func (p *pipeGame) tubeRect(i int) image.Rectangle {
+	var x, y int
+	if m := p.mouth[i]; m >= 0 {
+		x = 75*m - 2 + pipeSeat[i][0]
+		y = 400 + pipeSeat[i][1] - pipeCell + 70 // seat the cell on the rail
+	} else {
+		x, y = pipeHomeDX*i, pipeHomeY
 	}
-	g.playSound([]string{"pipe0" + strconv.Itoa(i) + ".wav", "3"})
-	p.pressed, p.pressT = i, 0.25
+	return image.Rect(x, y, x+pipeCell, y+pipeCell)
 }
 
-// update demonstrates the phrase, then takes the player's echo.
-func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
-	if p.pressT > 0 {
-		if p.pressT -= dt; p.pressT <= 0 {
-			p.pressed = -1
+// note sounds mouth m with whatever tube sits in it (the dud when empty).
+func (p *pipeGame) note(g *Game, m int) {
+	t := p.inMouth[m]
+	name := "pipe00.wav"
+	if t >= 0 {
+		name = "pipe0" + strconv.Itoa(t+1) + ".wav"
+	}
+	g.playSound([]string{name, "3"})
+}
+
+// solvedNow tests the two accepted arrangements.
+func (p *pipeGame) solvedNow() bool {
+	for _, w := range pipeWins {
+		ok := true
+		for m, t := range w {
+			if p.inMouth[m] != t {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
 		}
 	}
+	return false
+}
+
+// update carries tubes and drives the phrase playback.
+func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
 	if p.done {
 		p.finishT += dt
-		return p.finishT > 2, p.result
+		return p.finishT > 2 || clickedThisTick(), p.result
 	}
 	if p.playing {
-		p.timer -= dt
-		if p.timer <= 0 {
-			if p.playIdx < len(p.seq) {
-				p.note(g, p.seq[p.playIdx])
-				p.playIdx++
-				p.timer = 0.75
+		p.noteT -= dt
+		if p.noteT <= 0 {
+			if p.noteIdx < len(pipeTune) {
+				p.note(g, pipeTune[p.noteIdx])
+				p.noteT = pipeTick * float64(pipeBeat[p.noteIdx])
+				p.noteIdx++
 			} else {
 				p.playing = false
+				if p.solvedNow() {
+					p.done, p.result = true, 1
+				}
 			}
 		}
 		return false, 0
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		return true, 0
 	}
 	if !clickedThisTick() {
 		return false, 0
 	}
 	mx, my := ebiten.CursorPosition()
-	if pointIn(image.Rect(560, 400, 640, 480), mx, my) {
-		p.done, p.result = true, 0 // the floppy corner leaves the game
+	if p.held < 0 {
+		if pointIn(pipeListen, mx, my) {
+			p.playing, p.noteIdx, p.noteT = true, 0, 0.4
+			return false, 0
+		}
+		// Pick the tube under the cursor (top row or seated in a mouth).
+		for i := 0; i < 8; i++ {
+			if !p.avail[i] || !pointIn(p.tubeRect(i), mx, my) {
+				continue
+			}
+			if m := p.mouth[i]; m >= 0 {
+				p.inMouth[m] = -1
+				p.mouth[i] = -1
+			}
+			p.held = i
+			return false, 0
+		}
 		return false, 0
 	}
-	k := p.keyAt(mx, my)
-	if k < 0 {
-		return false, 0
+	// Carrying a tube: drop it into an empty mouth, else send it home.
+	for m := 0; m < 8; m++ {
+		if pointIn(mouthRect(m), mx, my) && p.inMouth[m] < 0 {
+			p.mouth[p.held] = m
+			p.inMouth[m] = p.held
+			p.held = -1
+			p.note(g, m)
+			return false, 0
+		}
 	}
-	p.note(g, k)
-	if k != p.seq[p.pos] {
-		g.playSound([]string{"rofail.wav", "1"})
-		p.done, p.result = true, 0
-		return false, 0
-	}
-	p.pos++
-	if p.pos < len(p.seq) {
-		return false, 0
-	}
-	if p.round >= pipeRounds {
-		g.playSound([]string{"melody.wav", "1"})
-		p.done, p.result = true, 1
-		return false, 0
-	}
-	p.nextRound(g)
+	p.held = -1
 	return false, 0
 }
 
-// keyAt returns the mouth under the cursor, or -1.
-func (p *pipeGame) keyAt(mx, my int) int {
-	for i, x := range pipeKeyX {
-		if pointIn(
-			image.Rect(x, pipeKeyY, x+pipeKeyW, pipeKeyY+pipeKeyH),
-			mx,
-			my,
-		) {
-			return i
-		}
-	}
-	return -1
-}
-
-// draw paints the beach, the tubes in their slots and the lit mouth.
-func (p *pipeGame) draw(g *Game, screen *ebiten.Image) {
+// draw paints the beach, the organ, the tubes and the one in hand.
+func (p *pipeGame) draw(_ *Game, screen *ebiten.Image) {
 	blitAt(screen, p.sprites["BACK"], 0, 0)
-	// The tubes the hero has collected sit in the slots; PIPE1<i> are authored
-	// in a shared 78x78 cell, so they are centred into each slot interior.
-	tubes := g.mgParam
-	if tubes > len(pipeSlotX) {
-		tubes = len(pipeSlotX)
-	}
-	for i := 0; i < tubes; i++ {
-		img := p.sprites["PIPE1"+strconv.Itoa(i)]
-		if img == nil {
+	blitAt(screen, p.sprites["PIPE18"], 255, 99) // the organ frame
+	for i := 0; i < 8; i++ {
+		if !p.avail[i] || i == p.held {
 			continue
 		}
-		w, h := img.Bounds().Dx(), img.Bounds().Dy()
-		x := pipeSlotX[i] + (pipeSlotW-w)/2
-		y := pipeSlotY + (pipeSlotH-h)/2
-		blitAt(screen, img, x, y)
+		r := p.tubeRect(i)
+		blitAt(screen, p.sprites["PIPE1"+strconv.Itoa(i)], r.Min.X, r.Min.Y)
 	}
-	if p.pressed >= 0 {
-		r := image.Rect(pipeKeyX[p.pressed], pipeKeyY,
-			pipeKeyX[p.pressed]+pipeKeyW, pipeKeyY+pipeKeyH)
-		strokeRect(screen, r, 3, rgba(255, 230, 80, 255))
+	blitAt(screen, p.sprites["PIPE112"], 6, 443) // the rail over seated tubes
+	if p.held >= 0 {
+		mx, my := ebiten.CursorPosition()
+		blitAt(screen, p.sprites["PIPE1"+strconv.Itoa(p.held)],
+			mx-pipeCell/2, my-pipeCell/2)
 	}
-	msg := "Повтори мелодию"
-	switch {
-	case p.playing:
-		msg = "Слушай..."
-	case p.done && p.result == 1:
-		msg = "Мелодия сыграна!"
-	case p.done:
-		msg = "Не та мелодия"
-	}
-	adapters.DrawText(screen, msg, 200, 410, rgba(255, 245, 220, 255))
-	adapters.DrawText(screen,
-		"Круг "+strconv.Itoa(p.round)+"/"+strconv.Itoa(pipeRounds),
-		200, 424, rgba(255, 245, 220, 255))
 }
