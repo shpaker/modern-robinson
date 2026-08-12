@@ -61,10 +61,14 @@ type Scene struct {
 	GridLength        [2]int
 	GridShift         [2]int
 	ZPerGrid          int
-	ClosedVert        [][2]int
-	Objects           []ObjectRef
-	SoundVars         map[string][2]string // name -> {wav, channel}
-	Music             string
+	// ScrollPar divides the distance left to scroll and ScrollDesc caps it, so
+	// the camera eases toward its target instead of snapping (engine 0x414e90).
+	ScrollPar  [2]int
+	ScrollDesc [2]int
+	ClosedVert [][2]int
+	Objects    []ObjectRef
+	SoundVars  map[string][2]string // name -> {wav, channel}
+	Music      string
 }
 
 // SceneObject is a parsed .OB (a clickable object on a scene).

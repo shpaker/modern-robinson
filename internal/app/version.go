@@ -23,3 +23,8 @@ const (
 	PlayH = 400 // scene play-area height
 	BarH  = ViewH - PlayH
 )
+
+// enginePace is the frame rate the authored per-frame constants assume (the
+// original ran its scroll and flight steps about thirty times a second), used
+// to scale them onto our tick.
+const enginePace = 30.0

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -40,8 +41,9 @@ type Game struct {
 	sc        *types.Scene
 	sceneC    interfaces.IContainer
 	grid      interfaces.IGrid
-	w, h      int // scene (world) size; the viewport is ViewW x PlayH
-	camX      int // horizontal scroll offset into the scene
+	w, h      int     // scene (world) size; the viewport is ViewW x PlayH
+	camX      int     // horizontal scroll offset into the scene (drawn)
+	camXf     float64 // the same offset before rounding, so easing stays smooth
 	zper      int
 	objects   map[string]*types.SceneObject
 	sceneObjs []*sceneObj
@@ -403,8 +405,10 @@ func (g *Game) click(mx, my int) {
 	cx, cy := g.grid.ToCell(wx, wy)
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
 		if p := g.grid.Path(g.cell, [2]int{tx, ty}); len(p) > 1 {
-			g.path = p[1:]
-			g.startWalk(&g.roby, g.cell, g.path)
+			if evs, ok := g.startWalk(&g.roby, g.cell, p[1:]); ok {
+				g.path = p[1:]
+				g.applyWalkEvents(evs)
+			}
 		}
 	}
 }
@@ -447,16 +451,13 @@ func (g *Game) Update() error {
 	}
 	g.updateHover(ebiten.CursorPosition())
 
-	g.moving = len(g.path) > 0
-	if g.moving {
-		if g.stepToward(&g.pos, &g.cell, &g.path, dt) {
-			g.nextCycle(&g.roby) // arrived: play the next cycle of the chain
-		}
-		g.walkSounds(g.roby.advance(dt))
-	}
+	// Walking is the cycle chain playing out: the animation carries the motion
+	// and its frame events move the cell (see walk.go).
+	g.updateWalk(dt)
+	g.moving = g.roby.walking()
 	g.updateFridWalk(dt)
 
-	g.clampCamera()
+	g.followCamera(dt)
 
 	// advance animated scene objects and run their frame events through the
 	// interpreter (ambient loops mostly fire Sound)
@@ -688,15 +689,7 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	if g.charHidden {
 		return // HideChar: hero not on stage
 	}
-	a, fidx := g.idle, g.frameI
-	switch {
-	case g.idleAct != nil:
-		a, fidx = g.idleAct.anim, g.idleAct.player.FrameIndex()
-	case g.moving:
-		if w := g.roby.anim(); w.OK() {
-			a, fidx = w, g.roby.frame
-		}
-	}
+	a, fidx := g.heroAnim()
 	if !a.OK() {
 		return
 	}
@@ -827,10 +820,83 @@ func (g *Game) Layout(_, _ int) (int, int) {
 	return ViewW, ViewH
 }
 
-// clampCamera centres the camera on the character, clamped to the scene width.
+// heroAnim is the animation and frame the hero is drawn with right now: his
+// long-idle chain, his walk cycle, or the standing pose table.
+func (g *Game) heroAnim() (*adapters.Animation, int) {
+	switch {
+	case g.idleAct != nil:
+		return g.idleAct.anim, g.idleAct.player.FrameIndex()
+	case g.moving:
+		if w := g.roby.anim(); w.OK() {
+			return w, g.roby.frame
+		}
+	}
+	return g.idle, g.frameI
+}
+
+// heroVisualX is the hero's drawn centre in world pixels. Walking motion lives
+// in the frame bitmaps, not in his cell, so the camera has to follow this rather
+// than the cell anchor or it would lurch a whole cell at every step.
+func (g *Game) heroVisualX() float64 {
+	x := g.pos[0]
+	a, fidx := g.heroAnim()
+	if !a.OK() {
+		return x
+	}
+	fi := fidx % len(a.Frames)
+	if fi < 0 {
+		fi = 0
+	}
+	if f := a.Frames[fi]; f != nil {
+		return x - float64(a.Shift[0]) + float64(a.BBox[fi][0]) +
+			float64(f.Bounds().Dx())/2
+	}
+	return x
+}
+
+// cameraTarget is where the camera wants to be: the hero centred, clamped to
+// the scene.
+func (g *Game) cameraTarget() int {
+	return clampInt(
+		int(g.heroVisualX())-ViewW/2, 0, maxInt(0, g.w-ViewW),
+	)
+}
+
+// followCamera eases the camera toward its target the way the engine does: each
+// engine frame it closes the gap by |gap|/ScrollPar pixels, at least 1 and at
+// most ScrollDesc, so a step never snaps the view. The offset is carried as a
+// float and only rounded for drawing — rounding it every tick would make the
+// view jitter back and forth around a moving target.
+func (g *Game) followCamera(dt float64) {
+	target := float64(g.cameraTarget())
+	gap := target - g.camXf
+	if gap == 0 {
+		return
+	}
+	par, desc := g.sc.ScrollPar[0], g.sc.ScrollDesc[0]
+	if par <= 0 {
+		par = 15
+	}
+	if desc <= 0 {
+		desc = 4
+	}
+	step := math.Abs(gap) / float64(par)
+	step = math.Min(math.Max(step, 1), float64(desc))
+	moved := step * dt * enginePace // authored per engine frame
+	if moved > math.Abs(gap) {
+		moved = math.Abs(gap)
+	}
+	if gap < 0 {
+		moved = -moved
+	}
+	g.camXf += moved
+	g.camX = int(math.Round(g.camXf))
+}
+
+// clampCamera puts the camera on its target at once (scene entry, teleports).
 func (g *Game) clampCamera() {
-	px := int(g.pos[0])
-	g.camX = clampInt(px-ViewW/2, 0, maxInt(0, g.w-ViewW))
+	g.camX = g.cameraTarget()
+	g.camXf = float64(g.camX)
 }
 
 func clampInt(v, lo, hi int) int {

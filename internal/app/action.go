@@ -107,10 +107,14 @@ func (g *Game) startObjectAction(objName string) bool {
 		return false
 	}
 	g.pendingAct = ap
+	// Walk to the action's Aproach cell first, playing the authored cycle chain
+	// — the hero walks there, he does not slide.
+	g.path = nil
 	if p := g.grid.Path(g.cell, ap.target); len(p) > 1 {
-		g.path = p[1:]
-	} else {
-		g.path = nil
+		if evs, ok := g.startWalk(&g.roby, g.cell, p[1:]); ok {
+			g.path = p[1:]
+			g.applyWalkEvents(evs)
+		}
 	}
 	return true
 }
@@ -118,7 +122,8 @@ func (g *Game) startObjectAction(objName string) bool {
 // updateAction advances an in-progress action: start it once the walk ends,
 // then play frames, apply their events, and clear it when finished.
 func (g *Game) updateAction(dt float64) {
-	if g.pendingAct != nil && len(g.path) == 0 {
+	// The action itself starts once the walk to its Aproach cell has finished.
+	if g.pendingAct != nil && !g.roby.walking() {
 		g.act = g.pendingAct
 		g.pendingAct = nil
 	}

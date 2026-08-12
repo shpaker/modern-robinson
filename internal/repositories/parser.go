@@ -136,6 +136,14 @@ func (SceneParser) ParseScene(text string) *types.Scene {
 			if len(v) > 0 {
 				sc.ZPerGrid = v[0]
 			}
+		case "scrollpar":
+			if len(v) >= 2 {
+				sc.ScrollPar = [2]int{v[0], v[1]}
+			}
+		case "scrolldesc":
+			if len(v) >= 2 {
+				sc.ScrollDesc = [2]int{v[0], v[1]}
+			}
 		case "closedvert":
 			for i := 0; i+1 < len(v); i += 2 {
 				sc.ClosedVert = append(sc.ClosedVert, [2]int{v[i], v[i+1]})

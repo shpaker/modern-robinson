@@ -1,7 +1,6 @@
 package app
 
 import (
-	"math"
 	"strings"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
@@ -19,6 +18,13 @@ type walkCycle struct {
 
 // walker plays a route as the character's authored cycle chain: accelerate,
 // one cycle per step (carrying the turn to the next direction), brake.
+//
+// The engine bakes the sub-cell motion of a step into the movie canvases: a
+// cycle's frames march the figure across the cell, and frame 0 fires
+// "Shift char,X|Y,±1" to move the cell itself. So a walking character is drawn
+// at anchor(cell) - Shift + frameBBox and nothing interpolates its position —
+// the animation *is* the movement. Each cycle plays exactly once, then the
+// chain advances.
 type walker struct {
 	prefix string // "RG" (Roby) or "FG" (Friday)
 	chr    string // character container: "ROBY" / "FRID"
@@ -27,6 +33,7 @@ type walker struct {
 	cur    *walkCycle
 	frame  int
 	acc    float64
+	done   bool // the current cycle has played out
 }
 
 // cycleKey is the resource base name of a cycle, e.g. "RG_56".
@@ -55,25 +62,55 @@ func (g *Game) loadCycle(key, chr string) *walkCycle {
 	return c
 }
 
-// start begins a route; returns false when there is nothing to walk.
-func (g *Game) startWalk(w *walker, from [2]int, route [][2]int) bool {
-	arrows := w.prefix == "FG"
-	w.cycles = use_cases.WalkCycles(from, route, arrows)
-	w.idx, w.frame, w.acc = 0, 0, 0
-	if len(w.cycles) == 0 {
-		w.cur = nil
-		return false
+// frameEvents returns the events of the walker's current frame.
+func (w *walker) frameEvents() []types.Command {
+	if w.cur == nil || w.frame >= len(w.cur.frames) {
+		return nil
 	}
-	w.cur = g.loadCycle(w.cycleKey(0), w.chr)
-	return true
+	return w.cur.frames[w.frame].Events
 }
 
-// nextCycle moves to the next cycle of the chain (called on each cell arrival).
-func (g *Game) nextCycle(w *walker) {
-	w.idx++
-	w.frame, w.acc = 0, 0
+// enter loads cycle idx and returns its frame-0 events — that is where the
+// authored cell shift, the step sound and the Z choreography live.
+func (g *Game) enter(w *walker) []types.Command {
+	w.frame, w.acc, w.done = 0, 0, false
 	w.cur = g.loadCycle(w.cycleKey(w.idx), w.chr)
+	if w.cur == nil {
+		w.done = true
+		return nil
+	}
+	return w.frameEvents()
 }
+
+// startWalk begins a route; returns the frame-0 events of the first cycle and
+// whether there is anything to walk.
+func (g *Game) startWalk(
+	w *walker, from [2]int, route [][2]int,
+) ([]types.Command, bool) {
+	arrows := w.prefix == "FG"
+	w.cycles = use_cases.WalkCycles(from, route, arrows)
+	w.idx = 0
+	if len(w.cycles) == 0 {
+		w.cur, w.done = nil, true
+		return nil, false
+	}
+	evs := g.enter(w)
+	return evs, w.cur != nil
+}
+
+// nextCycle advances the chain; returns the new cycle's frame-0 events. When
+// the chain is spent the walker reports walking() == false.
+func (g *Game) nextCycle(w *walker) []types.Command {
+	w.idx++
+	if w.idx >= len(w.cycles) {
+		w.cur, w.done = nil, true
+		return nil
+	}
+	return g.enter(w)
+}
+
+// walking reports whether a cycle is still playing.
+func (w *walker) walking() bool { return w.cur != nil && !w.done }
 
 // frameDelay is the current frame's duration in seconds (negative delays mark
 // ambient frames in the scripts; their magnitude is the duration).
@@ -82,7 +119,7 @@ func (w *walker) frameDelay() float64 {
 	if w.cur == nil || len(w.cur.frames) == 0 {
 		return fallback
 	}
-	f := w.cur.frames[w.frame%len(w.cur.frames)]
+	f := w.cur.frames[minInt(w.frame, len(w.cur.frames)-1)]
 	d := float64(f.Delay) / 1000
 	if d < 0 {
 		d = -d
@@ -93,20 +130,23 @@ func (w *walker) frameDelay() float64 {
 	return d
 }
 
-// advance ticks the cycle's animation and returns the events of every frame it
-// entered, so the caller can play the authored step sounds.
+// advance ticks the cycle once through (a cycle never loops: the chain moves on)
+// and returns the events of every frame it entered, so the caller can apply the
+// authored cell shifts and step sounds.
 func (w *walker) advance(dt float64) []types.Command {
-	if w.cur == nil || !w.cur.anim.OK() {
+	if !w.walking() || !w.cur.anim.OK() {
 		return nil
 	}
 	var fired []types.Command
 	w.acc += dt
 	for w.acc >= w.frameDelay() {
 		w.acc -= w.frameDelay()
-		w.frame = (w.frame + 1) % len(w.cur.anim.Frames)
-		if w.cur.frames != nil && w.frame < len(w.cur.frames) {
-			fired = append(fired, w.cur.frames[w.frame].Events...)
+		if w.frame+1 >= len(w.cur.anim.Frames) {
+			w.done = true // played out; the caller picks the next cycle
+			break
 		}
+		w.frame++
+		fired = append(fired, w.frameEvents()...)
 	}
 	return fired
 }
@@ -119,52 +159,38 @@ func (w *walker) anim() *adapters.Animation {
 	return w.cur.anim
 }
 
-// walkSounds plays the Sound events a cycle fired (step noises).
-func (g *Game) walkSounds(evs []types.Command) {
-	for _, ev := range evs {
-		if strings.EqualFold(ev.Kw, "sound") {
-			g.playSound(ev.Args)
-		}
-	}
-}
-
-// walkSpeed is how fast a character crosses the grid, in pixels per second.
-const walkSpeed = 220
-
-// stepToward slides pos towards the next cell of path; on arrival it commits the
-// cell, drops it from the route, and reports true so the caller can advance the
-// walk cycle.
-func (g *Game) stepToward(
-	pos *[2]float64, cell *[2]int, path *[][2]int, dt float64,
-) bool {
-	if len(*path) == 0 {
-		return false
-	}
-	next := (*path)[0]
-	tx, ty := g.grid.ToScreen(next[0], next[1])
-	dx, dy := float64(tx)-pos[0], float64(ty)-pos[1]
-	dist := math.Hypot(dx, dy)
-	step := walkSpeed * dt
-	if dist > step && dist > 0 {
-		pos[0] += dx / dist * step
-		pos[1] += dy / dist * step
-		return false
-	}
-	*pos = [2]float64{float64(tx), float64(ty)}
-	*cell = next
-	*path = (*path)[1:]
-	return true
-}
-
-// updateFridWalk walks Friday along his route, four directions only.
-func (g *Game) updateFridWalk(dt float64) {
-	if len(g.fridPath) == 0 {
+// updateWalk drives the hero's cycle chain: advance the animation, apply the
+// events it fires (cell shifts, step sounds, Z), and move on to the next cycle
+// when one plays out.
+func (g *Game) updateWalk(dt float64) {
+	if !g.roby.walking() {
 		return
 	}
-	if g.stepToward(&g.fridPos, &g.fridCell, &g.fridPath, dt) {
-		g.nextCycle(&g.fridWalk)
+	g.applyWalkEvents(g.roby.advance(dt))
+	for g.roby.done {
+		evs := g.nextCycle(&g.roby)
+		if !g.roby.walking() {
+			g.path = nil // the route is finished
+			break
+		}
+		g.applyWalkEvents(evs)
 	}
-	g.walkSounds(g.fridWalk.advance(dt))
+}
+
+// updateFridWalk walks Friday along his own chain, four directions only.
+func (g *Game) updateFridWalk(dt float64) {
+	if !g.fridWalk.walking() {
+		return
+	}
+	g.applyWalkEvents(g.fridWalk.advance(dt))
+	for g.fridWalk.done {
+		evs := g.nextCycle(&g.fridWalk)
+		if !g.fridWalk.walking() {
+			g.fridPath = nil
+			break
+		}
+		g.applyWalkEvents(evs)
+	}
 }
 
 // fridWalkTo sends Friday walking to a cell (scripts move him, he has no
@@ -183,11 +209,14 @@ func (g *Game) fridWalkTo(gx, gy int) {
 		return
 	}
 	g.fridPath = p[1:]
-	if !g.startWalk(&g.fridWalk, g.fridCell, g.fridPath) {
+	evs, ok := g.startWalk(&g.fridWalk, g.fridCell, g.fridPath)
+	if !ok {
 		g.fridPath = nil
 		g.fridCell = [2]int{tx, ty}
 		g.fridSync()
+		return
 	}
+	g.applyWalkEvents(evs)
 }
 
 // fridSync snaps Friday's screen position to his cell.
@@ -195,4 +224,62 @@ func (g *Game) fridSync() {
 	x, y := g.grid.ToScreen(g.fridCell[0], g.fridCell[1])
 	g.fridPos = [2]float64{float64(x), float64(y)}
 	g.fridPath = nil
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// applyWalkEvents applies the events a walk cycle fired. "Shift char,X|Y,±n"
+// is the authored cell step — the only thing that moves a walking character
+// between cells; "Set char,Z,n" is its draw-order slot; Sound is the footstep.
+// Everything else goes through the normal interpreter.
+func (g *Game) applyWalkEvents(evs []types.Command) {
+	for _, ev := range evs {
+		switch strings.ToLower(ev.Kw) {
+		case "shift":
+			g.shiftCharCell(ev.Args)
+		case "sound":
+			g.playSound(ev.Args)
+		case "set":
+			g.setCharCoord(ev.Args)
+		default:
+			g.applyEvents([]types.Command{ev})
+		}
+	}
+}
+
+// shiftCharCell applies "Shift char,X|Y,±n": it moves the character's cell by a
+// relative step and re-anchors its screen position, without touching Z (the
+// cycles carry an explicit Set char,Z for that).
+func (g *Game) shiftCharCell(args []string) {
+	if len(args) < 3 {
+		return
+	}
+	d := atoiArg(args[2])
+	if d == 0 {
+		return
+	}
+	frid := strings.EqualFold(args[0], "Frid")
+	cell := &g.cell
+	if frid {
+		cell = &g.fridCell
+	}
+	switch strings.ToUpper(args[1]) {
+	case "X":
+		cell[0] += d
+	case "Y":
+		cell[1] += d
+	default:
+		return
+	}
+	x, y := g.grid.ToScreen(cell[0], cell[1])
+	if frid {
+		g.fridPos = [2]float64{float64(x), float64(y)}
+		return
+	}
+	g.pos = [2]float64{float64(x), float64(y)}
 }

@@ -158,15 +158,18 @@ func (d *driver) Update() error {
 	click(320, 240) // skip logo
 	d.guest.AdvanceTicks(4)
 	click(320, 240) // skip title -> New Game
-	d.guest.AdvanceTicks(60)
-	_ = d.snapshot(0) // the room cutscene is running
-	click(320, 200)   // Interrupt ON: skip it
-	d.guest.AdvanceTicks(30)
-	_ = d.snapshot(1) // should be fading into / arriving at SCENA0
-	d.guest.AdvanceTicks(120)
-	_ = d.snapshot(2) // the island, hero awake
-	d.guest.AdvanceTicks(180)
-	_ = d.snapshot(3)
+	// Walk check (ROBINSON_SCENE=SCENA0): click far left on the sand and sample
+	// the walk every few ticks — the figure must stride, not slide or jump.
+	// Object action (ROBINSON_SCENE=SCENA0): click the stone on the sand and
+	// watch him walk over and act, rather than slide there.
+	d.guest.AdvanceTicks(40)
+	_ = d.snapshot(0) // before
+	click(400, 285)   // bgstone's hit zone
+	for i := 1; i <= 5; i++ {
+		d.guest.AdvanceTicks(20)
+		_ = d.snapshot(i)
+	}
+	_ = click
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
