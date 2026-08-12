@@ -184,6 +184,18 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 			}
 		}
 	}
+	if v := os.Getenv("ROBINSON_UI"); v != "" {
+		// Debug/test aid: comma-separated UI toggles to switch on (map, bar).
+		for _, name := range strings.Split(v, ",") {
+			g.gs.UI[strings.ToLower(strings.TrimSpace(name))] = true
+		}
+	}
+	if v := os.Getenv("ROBINSON_ITEMS"); v != "" {
+		// Debug/test aid: comma-separated items to add to the inventory.
+		for _, name := range strings.Split(v, ",") {
+			g.gs.AddItem(strings.TrimSpace(name))
+		}
+	}
 	return g
 }
 
