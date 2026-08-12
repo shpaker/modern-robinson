@@ -126,6 +126,10 @@ install-tools:
     {{gocmd}} install github.com/segmentio/golines@latest
     {{gocmd}} install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
+# Отчёт по квесту из данных игры: гейты, предметы, переходы, тупики
+quest dir="extracted/ROBINSON_ISO/ROBINSON":
+    {{gocmd}} run ./tools/questmap {{dir}}
+
 # Полная проверка качества
 check: fmt-check lint test
 
