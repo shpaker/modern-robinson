@@ -201,8 +201,10 @@ func (r *Resources) BarBackground() (*types.NGB, types.Palette) {
 }
 
 // BarSprites returns every bitmap of DATA/BAR/BAR.DAT keyed by upper-case base
-// name (BAR0 = strip background, BAR1-3 = character portraits, BAR4-5 = text
-// boxes, BAR6-19 = normal/selected icon pairs for the first seven items).
+// name: BAR0 strip background, BAR1-3 character portraits, BAR4 text plate,
+// BAR5 the frame that trims the inventory window, BAR6-71 a normal/selected
+// icon pair per declared item, BAR72-74 the map button (lit/pressed/blank),
+// BAR75-76 the save disk, BAR77-82 the scroll arrows (dimmed/lit/none).
 func (r *Resources) BarSprites() (map[string]*types.NGB, types.Palette) {
 	var pal types.Palette
 	out := map[string]*types.NGB{}
