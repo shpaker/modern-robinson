@@ -296,16 +296,18 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	}
 }
 
-// buildHotspots places click zones: rect = ActiveZone + FonScript.Shift - GridShift.
+// buildHotspots places click zones. The engine anchors a zone to the bare cell
+// corner (not the sprite): rect = Corner(gx,gy) + ActiveZone.xy, size AZ.wh, in
+// world space (the camera offset is applied when the zones are tested).
 func (g *Game) buildHotspots() {
 	g.hotspots = nil
-	gsx, gsy := g.sc.GridShift[0], g.sc.GridShift[1]
 	for _, s := range g.sceneObjs {
 		if s.removed {
 			continue // taken objects are no longer clickable
 		}
 		az := s.ob.ActiveZone
-		x, y := az[0]+s.shift[0]-gsx, az[1]+s.shift[1]-gsy
+		cx, cy := g.grid.Corner(s.ref.GX, s.ref.GY)
+		x, y := cx+az[0], cy+az[1]
 		w, h := max(az[2], 8), max(az[3], 8)
 		g.hotspots = append(g.hotspots, hotspot{
 			key: s.ref.Name, ob: s.ob, rect: image.Rect(x, y, x+w, y+h),
@@ -542,7 +544,7 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 			s := s
 			items = append(
 				items,
-				drawable{s.z, func() { s.draw(screen, xoff) }},
+				drawable{s.z, func() { s.draw(screen, g.grid, xoff) }},
 			)
 		}
 	}
@@ -682,18 +684,36 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	if fi < 0 {
 		fi = 0
 	}
-	frame, anch := a.Frames[fi], a.Anchors[fi]
-	px, py := g.pos[0]-float64(g.camX), g.pos[1]
+	drawAnim(screen, a, fi, g.pos[0]-float64(g.camX), g.pos[1])
+}
+
+// drawAnim blits animation frame fi so the movie canvas origin sits at
+// (ox, oy) - Shift, the engine's placement (see use_cases.Grid). ox,oy is the
+// cell anchor in screen space. A soft shadow is laid under the figure's feet.
+func drawAnim(
+	screen *ebiten.Image,
+	a *adapters.Animation,
+	fi int,
+	ox, oy float64,
+) {
+	frame := a.Frames[fi]
+	if frame == nil {
+		return // a transparent frame
+	}
+	bb := a.BBox[fi]
+	fx := ox - float64(a.Shift[0]) + float64(bb[0])
+	fy := oy - float64(a.Shift[1]) + float64(bb[1])
+	fw, fh := frame.Bounds().Dx(), frame.Bounds().Dy()
 	vector.FillCircle(
 		screen,
-		float32(px),
-		float32(py-3),
+		float32(fx)+float32(fw)/2,
+		float32(fy)+float32(fh)-4,
 		16,
 		rgba(0, 0, 0, 70),
 		true,
 	)
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(px-float64(anch[0]), py-float64(anch[1]))
+	op.GeoM.Translate(fx, fy)
 	screen.DrawImage(frame, op)
 }
 

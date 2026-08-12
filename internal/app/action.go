@@ -16,6 +16,7 @@ import (
 type actionPlay struct {
 	fs      *types.FrameScript
 	frames  []adapters.DecalFrame
+	shift   [2]int // the movie's canvas hotspot (.SCR origin)
 	player  *use_cases.Player
 	target  [2]int
 	started bool // true once the walk finished and the movie is playing
@@ -57,6 +58,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	return &actionPlay{
 		fs:     fs,
 		frames: adapters.LoadDecal(g.res, fs.MovieName),
+		shift:  g.res.MovieShift(fs.MovieName),
 		player: use_cases.NewPlayer(fs),
 		target: [2]int{fx, fy},
 	}
@@ -187,6 +189,7 @@ func (g *Game) startEntry(name string) {
 	g.act = &actionPlay{
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName),
+		shift:   g.res.MovieShift(fs.MovieName),
 		player:  use_cases.NewPlayer(fs),
 		started: true,
 	}
@@ -201,11 +204,13 @@ func (g *Game) drawAction(screen *ebiten.Image) bool {
 	if i < 0 || i >= len(g.act.frames) || g.act.frames[i].Img == nil {
 		return true // playing but this frame is empty
 	}
+	// An action movie is the hero's own animation: canvas origin at the hero's
+	// cell anchor minus the movie Shift, with each frame's crop offset added.
+	f := g.act.frames[i]
+	ox := g.pos[0] - float64(g.act.shift[0]) - float64(g.camX)
+	oy := g.pos[1] - float64(g.act.shift[1])
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(
-		float64(g.act.frames[i].X-g.camX),
-		float64(g.act.frames[i].Y),
-	)
-	screen.DrawImage(g.act.frames[i].Img, op)
+	op.GeoM.Translate(ox+float64(f.X), oy+float64(f.Y))
+	screen.DrawImage(f.Img, op)
 	return true
 }

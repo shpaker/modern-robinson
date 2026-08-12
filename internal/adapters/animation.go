@@ -9,21 +9,23 @@ import (
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 )
 
-// Animation is a character animation: each movie frame cropped to its own
-// opaque bbox with a feet anchor, so the figure walks in place while grid
-// logic moves it across the scene.
+// Animation is a character animation. The engine draws every frame on the
+// movie's full canvas at origin = cellAnchor - Shift, so each frame is kept as
+// its cropped opaque bitmap plus that crop's offset (BBox) inside the canvas.
+// The figure's sub-cell motion is baked into those offsets by the artists.
 type Animation struct {
-	Frames  []*ebiten.Image
-	Anchors [][2]int // (ax, ay) feet anchor per frame
+	Frames []*ebiten.Image
+	BBox   [][2]int // (minx, miny) of each frame's crop within the canvas
+	Shift  [2]int   // the movie's canvas hotspot (.SCR origin)
 }
 
 // OK reports whether the animation has any frames.
 func (a *Animation) OK() bool { return a != nil && len(a.Frames) > 0 }
 
-// LoadAnimation decodes a movie into cropped, anchored Ebiten frames.
+// LoadAnimation decodes a movie into cropped canvas-space frames.
 func LoadAnimation(res interfaces.IResources, movie string) *Animation {
 	frames, pal := res.MovieFrames(movie)
-	a := &Animation{}
+	a := &Animation{Shift: res.MovieShift(movie)}
 	for _, n := range frames {
 		rgba := n.RGBA(pal)
 		minx, miny, maxx, maxy := n.Width, n.Height, -1, -1
@@ -46,6 +48,10 @@ func LoadAnimation(res interfaces.IResources, movie string) *Animation {
 			}
 		}
 		if maxx < 0 {
+			// A fully transparent frame still consumes a slot so frame
+			// indices stay aligned with the script.
+			a.Frames = append(a.Frames, nil)
+			a.BBox = append(a.BBox, [2]int{0, 0})
 			continue
 		}
 		w, h := maxx-minx+1, maxy-miny+1
@@ -57,32 +63,7 @@ func LoadAnimation(res interfaces.IResources, movie string) *Animation {
 		img := ebiten.NewImage(w, h)
 		img.WritePixels(sub)
 		a.Frames = append(a.Frames, img)
-		a.Anchors = append(a.Anchors, [2]int{footCenter(sub, w, h), h})
+		a.BBox = append(a.BBox, [2]int{minx, miny})
 	}
 	return a
-}
-
-// footCenter is the horizontal centre of the lowest 12 opaque rows.
-func footCenter(sub []byte, w, h int) int {
-	fy0 := h - 12
-	if fy0 < 0 {
-		fy0 = 0
-	}
-	minx, maxx := w, -1
-	for y := fy0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			if sub[(y*w+x)*4+3] > 0 {
-				if x < minx {
-					minx = x
-				}
-				if x > maxx {
-					maxx = x
-				}
-			}
-		}
-	}
-	if maxx < 0 {
-		return w / 2
-	}
-	return (minx + maxx) / 2
 }

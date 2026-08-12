@@ -16,7 +16,7 @@ import (
 type sceneObj struct {
 	ref     types.ObjectRef
 	ob      *types.SceneObject
-	shift   [2]int // FonScript origin (used for hotspot placement)
+	shift   [2]int // FonScript Shift: the sprite hotspot in canvas space
 	z       int    // draw order = gy*ZPerGrid + ZCoord
 	frames  []adapters.DecalFrame
 	player  *use_cases.Player
@@ -107,9 +107,10 @@ func (s *sceneObj) update(dt float64) []types.Command {
 	return s.player.Update(dt)
 }
 
-// draw blits the current animation frame (or the static first frame) at its
-// screen offset, shifted by the camera offset xoff (negative camX).
-func (s *sceneObj) draw(screen *ebiten.Image, xoff int) {
+// draw blits the current animation frame at the engine's placement: the sprite
+// canvas origin is anchor(cell) - FonScript.Shift, and each frame's cropped
+// bitmap sits at its own (X,Y) within that canvas. xoff is the camera offset.
+func (s *sceneObj) draw(screen *ebiten.Image, grid interfaces.IGrid, xoff int) {
 	if !s.visible || len(s.frames) == 0 {
 		return
 	}
@@ -120,10 +121,11 @@ func (s *sceneObj) draw(screen *ebiten.Image, xoff int) {
 	if i < 0 || i >= len(s.frames) || s.frames[i].Img == nil {
 		return
 	}
+	ax, ay := grid.ToScreen(s.ref.GX, s.ref.GY)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(
-		float64(s.frames[i].X+xoff),
-		float64(s.frames[i].Y-decalYOffset),
+		float64(ax-s.shift[0]+s.frames[i].X+xoff),
+		float64(ay-s.shift[1]+s.frames[i].Y),
 	)
 	screen.DrawImage(s.frames[i].Img, op)
 }

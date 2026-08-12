@@ -34,12 +34,13 @@ func scena0Grid() *Grid {
 
 func TestToScreen(t *testing.T) {
 	g := scena0Grid()
+	// anchor = LeftTopGrid + GridShift + cell*GridSize = (61,51) + cell*(144,36).
 	cases := []struct {
 		gx, gy, x, y int
 	}{
-		{0, 0, 15, 150},
-		{5, 1, 781, 231},
-		{2, 3, 441, -75},
+		{0, 0, 61, 51},
+		{5, 1, 781, 87},
+		{2, 3, 349, 159},
 	}
 	for _, c := range cases {
 		if x, y := g.ToScreen(c.gx, c.gy); x != c.x || y != c.y {
@@ -58,11 +59,12 @@ func TestToScreen(t *testing.T) {
 
 func TestToCellRoundTrip(t *testing.T) {
 	g := scena0Grid()
+	// ToCell inverts the bare cell corner, not the GridShifted anchor.
 	for gx := 0; gx < 7; gx++ {
 		for gy := 0; gy < 5; gy++ {
-			x, y := g.ToScreen(gx, gy)
+			x, y := g.Corner(gx, gy)
 			if cx, cy := g.ToCell(x, y); cx != gx || cy != gy {
-				t.Errorf("ToCell(ToScreen(%d,%d)) = (%d,%d)", gx, gy, cx, cy)
+				t.Errorf("ToCell(Corner(%d,%d)) = (%d,%d)", gx, gy, cx, cy)
 			}
 		}
 	}
@@ -76,8 +78,11 @@ func TestValidAndBounds(t *testing.T) {
 	if g.Valid(4, 2) {
 		t.Error("(4,2) is closed_vert, must be invalid")
 	}
-	if g.Valid(0, 3) { // maps above the scene (y<0)
-		t.Error("(0,3) maps off-scene, must be invalid")
+	if g.Valid(8, 0) { // gx == GridLength.x, off the lattice
+		t.Error("(8,0) is off-grid, must be invalid")
+	}
+	if g.Valid(0, 5) { // gy == GridLength.y, off the lattice
+		t.Error("(0,5) is off-grid, must be invalid")
 	}
 }
 

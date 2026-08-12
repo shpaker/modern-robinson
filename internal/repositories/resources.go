@@ -3,6 +3,7 @@
 package repositories
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,29 @@ func (r *Resources) MovieFrames(name string) ([]*types.NGB, types.Palette) {
 		}
 	}
 	return frames, pal
+}
+
+// MovieShift returns a movie's authored hotspot — the origin field of its .SCR
+// header (offset 0x18/0x1C). The engine places every sprite so that this point
+// lands on the cell anchor; a FonScript may override it (only wave.mv does).
+// Returns (0,0) when the movie or its header is absent.
+func (r *Resources) MovieShift(name string) [2]int {
+	mv := r.Movie(name)
+	if mv == nil {
+		return [2]int{}
+	}
+	e, ok := mv.FindExt(".SCR")
+	if !ok {
+		return [2]int{}
+	}
+	d, err := mv.Extract(e)
+	if err != nil || len(d) < 0x20 {
+		return [2]int{}
+	}
+	return [2]int{
+		int(int32(binary.LittleEndian.Uint32(d[0x18:]))),
+		int(int32(binary.LittleEndian.Uint32(d[0x1c:]))),
+	}
 }
 
 // Sound returns the raw WAV bytes for a sound by name. It searches the main

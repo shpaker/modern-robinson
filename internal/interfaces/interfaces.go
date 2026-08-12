@@ -19,6 +19,9 @@ type IResources interface {
 	Root() string
 	Movie(name string) IContainer
 	MovieFrames(name string) ([]*types.NGB, types.Palette)
+	// MovieShift is a movie's authored canvas hotspot (.SCR origin): the point
+	// the engine lands on the cell anchor. (0,0) when absent.
+	MovieShift(name string) [2]int
 	Sound(name string) []byte
 	SceneContainer(name string) IContainer
 	SceneBackground(name string) (*types.NGB, types.Palette, []byte)
@@ -54,6 +57,7 @@ type ISceneParser interface {
 // IGrid maps between screen pixels and walk-grid cells and finds paths.
 type IGrid interface {
 	ToScreen(gx, gy int) (int, int)
+	Corner(gx, gy int) (int, int)
 	ToCell(px, py int) (int, int)
 	Valid(gx, gy int) bool
 	Blocked(gx, gy int) bool

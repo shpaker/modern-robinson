@@ -13,17 +13,13 @@ const SampleRate = 22050
 
 // The original runs in a fixed 640x480 window: a 640x400 scene viewport that
 // scrolls horizontally across the (up to 1024-wide) scene, above an 80px
-// inventory bar. Object/character sprites are authored on the full 640x480
-// canvas, so their lower parts fall behind the bar.
+// inventory bar. Every sprite is placed at anchor(cell) - FonScript.Shift and
+// blitted as a full canvas (see use_cases.Grid and docs/08), so tall props such
+// as the palm are clipped by the top of the play area exactly as in the
+// original — there is no per-sprite vertical correction.
 const (
 	ViewW = 640 // viewport width
 	ViewH = 480 // window height (play area + bar)
 	PlayH = 400 // scene play-area height
 	BarH  = ViewH - PlayH
-
-	// Object decals are drawn in their own canvas space; see docs/08. Sprites
-	// authored on the 640x480 window canvas need a vertical correction that the
-	// scene-scale ones (1024x768, e.g. the surf) do not — the exact rule is
-	// still being pinned down, so nothing is shifted for now.
-	decalYOffset = 0
 )

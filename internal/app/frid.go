@@ -63,12 +63,7 @@ func (g *Game) drawFrid(screen *ebiten.Image) {
 		}
 	}
 	fi %= len(a.Frames)
-	frame, anch := a.Frames[fi], a.Anchors[fi]
-	x := g.fridPos[0] - float64(g.camX) - float64(anch[0])
-	y := g.fridPos[1] - float64(anch[1])
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(x, y)
-	screen.DrawImage(frame, op)
+	drawAnim(screen, a, fi, g.fridPos[0]-float64(g.camX), g.fridPos[1])
 }
 
 // fridEffect applies a Frid-targeted command (Set/Aproach/Show/Hide); returns

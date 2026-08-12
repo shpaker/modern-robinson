@@ -26,15 +26,22 @@ func (g *Game) startMinigame(args []string) {
 		g.mgParam = g.gs.Var(args[2])
 	}
 	switch id {
+	case 0:
+		g.mg = newMapGame(g)
+	case 1:
+		g.mg = newHouseGame(g)
+	case 2:
+		g.mg = newChessGame(g)
+	case 3:
+		g.mg = newBaloonGame(g)
 	case 4:
 		g.mg = newPipeGame(g)
 	case 5:
 		g.mg = newCryptGame(g)
 	}
 	if g.mg == nil {
-		// Not reimplemented yet: let the quest through rather than dead-end it.
+		// Assets missing: let the quest through rather than dead-end it.
 		g.gs.SetVar(g.mgVar, 1)
-		g.msg, g.msgT = "Мини-игра пока пропускается", 2.5
 	}
 }
 
@@ -92,4 +99,18 @@ func blitAt(screen *ebiten.Image, img *ebiten.Image, x, y int) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(float64(x), float64(y))
 	screen.DrawImage(img, op)
+}
+
+// opaqueAt reports whether the image has an opaque pixel at (x, y) — the
+// engine picks jigsaw pieces by their pixels, not their rectangles.
+func opaqueAt(img *ebiten.Image, x, y int) bool {
+	if img == nil {
+		return false
+	}
+	b := img.Bounds()
+	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
+		return false
+	}
+	_, _, _, a := img.At(x, y).RGBA()
+	return a > 0
 }

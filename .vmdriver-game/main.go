@@ -153,17 +153,11 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Organ: carry tube 0 into mouth 2, then hit the listen hotspot.
-	d.guest.AdvanceTicks(10)
-	_ = d.snapshot(0) // tubes in the top row, organ frame on the beach
-	click(40, 44)     // pick tube 0
-	d.guest.AdvanceTicks(4)
-	click(185, 430) // drop it into mouth 2
-	d.guest.AdvanceTicks(6)
-	_ = d.snapshot(1) // seated on the rail
-	click(230, 250)   // the drummer: play the phrase
-	d.guest.AdvanceTicks(30)
-	_ = d.snapshot(2) // mid-phrase
+	// Geometry check: let the start scene settle and snapshot it — the palm at
+	// its cell, the hero standing on the sand, the fire and crab in place.
+	d.guest.AdvanceTicks(40)
+	_ = d.snapshot(0)
+	_ = click
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
