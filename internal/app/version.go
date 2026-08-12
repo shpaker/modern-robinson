@@ -20,4 +20,10 @@ const (
 	ViewH = 480 // window height (play area + bar)
 	PlayH = 400 // scene play-area height
 	BarH  = ViewH - PlayH
+
+	// Object decals are drawn in their own canvas space; see docs/08. Sprites
+	// authored on the 640x480 window canvas need a vertical correction that the
+	// scene-scale ones (1024x768, e.g. the surf) do not — the exact rule is
+	// still being pinned down, so nothing is shifted for now.
+	decalYOffset = 0
 )

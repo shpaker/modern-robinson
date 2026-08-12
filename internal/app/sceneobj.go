@@ -121,6 +121,9 @@ func (s *sceneObj) draw(screen *ebiten.Image, xoff int) {
 		return
 	}
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(s.frames[i].X+xoff), float64(s.frames[i].Y))
+	op.GeoM.Translate(
+		float64(s.frames[i].X+xoff),
+		float64(s.frames[i].Y-decalYOffset),
+	)
 	screen.DrawImage(s.frames[i].Img, op)
 }
