@@ -1,0 +1,72 @@
+name: release-artifacts
+
+# release-please cuts the release; this attaches the binaries to it. macOS is
+# built on a mac because Ebitengine needs cgo there; Windows cross-compiles from
+# Linux with cgo off.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            goos: darwin
+            goarch: arm64
+            cgo: 1
+            binary: robinson_darwin_arm64
+          - os: ubuntu-latest
+            name: linux
+            goos: linux
+            goarch: amd64
+            cgo: 1
+            binary: robinson_linux_amd64
+          - os: ubuntu-latest
+            name: windows
+            goos: windows
+            goarch: amd64
+            cgo: 0
+            binary: robinson_windows_amd64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
+      - name: Ebitengine system deps
+        if: matrix.os == 'ubuntu-latest' && matrix.cgo == 1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+          VERSION: ${{ github.event.release.tag_name || 'dev' }}
+        run: |
+          stage="dist/${{ matrix.name }}"
+          mkdir -p "$stage"
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/shpaker/modern-robinson/internal/app.Version=${VERSION}" \
+            -o "$stage/${{ matrix.binary }}" ./cmd
+          cp README.md packaging/config.yml "$stage/"
+          ( cd dist && zip -qr "modern-robinson_${VERSION}_${{ matrix.name }}.zip" "${{ matrix.name }}" )
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: dist/*.zip
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'release'
+        with:
+          name: modern-robinson-${{ matrix.name }}
+          path: dist/*.zip
