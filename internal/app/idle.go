@@ -171,10 +171,14 @@ func (g *Game) skipCutscene() bool {
 	if g.act == nil || !g.gs.UI["interrupt"] {
 		return false
 	}
-	// Step the player with generous slices until it reports done; the events
-	// it fires are applied as usual.
+	// Step the player with generous slices until it reports done; the events it
+	// fires are applied as usual. Stop as soon as one of them ends the script,
+	// so skipping cannot run past a scene change or launch a minigame twice.
 	for i := 0; i < 10000 && !g.act.player.Done(); i++ {
 		g.applyEvents(g.act.player.Update(1))
+		if g.pending != nil || g.mg != nil {
+			break
+		}
 	}
 	g.act = nil
 	return true

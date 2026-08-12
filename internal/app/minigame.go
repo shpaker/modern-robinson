@@ -40,8 +40,13 @@ func (g *Game) startMinigame(args []string) {
 		g.mg = newCryptGame(g)
 	}
 	if g.mg == nil {
-		// Assets missing: let the quest through rather than dead-end it.
+		// Assets missing: let the quest through rather than dead-end it, and
+		// run the suspended tail straight away since nothing will resume it.
 		g.gs.SetVar(g.mgVar, 1)
+		if rest := g.mgResume; len(rest) > 0 {
+			g.mgResume = nil
+			g.applyEvents(rest)
+		}
 	}
 }
 
@@ -55,6 +60,11 @@ func (g *Game) updateMinigame(dt float64) bool {
 		g.mg = nil
 		if g.mgVar != "" {
 			g.gs.SetVar(g.mgVar, result)
+		}
+		// Resume the frame the StartGame suspended, now that the result is in.
+		if rest := g.mgResume; len(rest) > 0 {
+			g.mgResume = nil
+			g.applyEvents(rest)
 		}
 	}
 	return true

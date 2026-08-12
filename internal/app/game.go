@@ -115,9 +115,10 @@ type Game struct {
 	volMusic   float64
 	speed      float64 // 0..1 game speed slider (0.5 = original pace)
 
-	mg      minigame // the minigame currently taking over the screen
-	mgVar   string   // quest variable its result goes into
-	mgParam int      // paramVar value the script passed in
+	mg       minigame        // the minigame currently taking over the screen
+	mgVar    string          // quest variable its result goes into
+	mgParam  int             // paramVar value the script passed in
+	mgResume []types.Command // frame tail waiting on the minigame's result
 
 	// scene transition fade driven by the scene's .FAD table
 	fadeCurve []float64
@@ -227,7 +228,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	}
 	c := g.res.SceneContainer(name)
 	g.sceneC = c
-	g.act, g.pendingAct = nil, nil
+	g.act, g.pendingAct, g.mgResume = nil, nil, nil
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
 	if g.sc.Size == [2]int{0, 0} {
@@ -506,6 +507,21 @@ func (g *Game) toggleOptions() {
 	}
 }
 
+// resetRun drops everything that belongs to the run being left behind rather
+// than to the quest state: a transition already in flight, a minigame owning
+// the screen and the frame waiting on it, the idle chatter, and the live
+// character fields no entry script will re-place. Both starting a new game and
+// loading a slot go through it, or a load lands in the old run's transition.
+func (g *Game) resetRun() {
+	g.fadeCurve, g.fadeTo, g.fadeOut, g.fadeStep = nil, nil, false, 0
+	g.pending = nil
+	g.mg, g.mgVar, g.mgParam, g.mgResume = nil, "", 0, nil
+	g.idleAct, g.idleT = nil, 0
+	g.fridHidden, g.fridCell, g.fridZ = true, [2]int{}, 7
+	g.invScroll = 0
+	g.loadCharacter() // SetRest edits do not outlive the run that made them
+}
+
 // restart begins a new game: fresh quest state, back to the first scene.
 func (g *Game) restart() {
 	g.gs = types.NewGameState()
@@ -513,8 +529,7 @@ func (g *Game) restart() {
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
 	g.gs.Active = "hand"
-	g.fridHidden = true
-	g.fadeCurve, g.fadeTo = nil, nil
+	g.resetRun()
 	g.loadScene("INT0", nil, "", "")
 	g.mode = modePlay
 }

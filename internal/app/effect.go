@@ -14,8 +14,15 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	if len(cmds) == 0 {
 		return
 	}
-	for _, c := range g.interp.Exec(cmds, g.gs) {
+	out, rest := g.interp.Exec(cmds, g.gs)
+	for _, c := range out {
 		g.applyEffect(c)
+	}
+	// A StartGame in the batch suspends the script: its remaining commands are
+	// re-judged once the minigame has written its result, so the success branch
+	// can actually be taken.
+	if len(rest) > 0 {
+		g.mgResume = rest
 	}
 }
 

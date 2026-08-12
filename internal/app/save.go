@@ -56,6 +56,7 @@ func (g *Game) loadSlot(i int) bool {
 		return false
 	}
 	g.gs = types.Restore(sd)
+	g.resetRun()
 	g.loadScene(sd.Scene, &sd.Cell, "", "")
 	g.msg, g.msgT = "Игра загружена", 2
 	return true

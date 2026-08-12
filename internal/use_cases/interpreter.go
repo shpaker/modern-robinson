@@ -26,11 +26,11 @@ type Interpreter struct{}
 func (Interpreter) Exec(
 	cmds []types.Command,
 	st *types.GameState,
-) []types.Command {
+) ([]types.Command, []types.Command) {
 	var out []types.Command
 	depth := 0  // current If nesting depth
 	skipAt := 0 // depth at which skipping began (0 = not skipping)
-	for _, c := range cmds {
+	for i, c := range cmds {
 		switch strings.ToLower(c.Kw) {
 		case "if":
 			depth++
@@ -48,12 +48,24 @@ func (Interpreter) Exec(
 			if skipAt != 0 {
 				continue // inside a false block
 			}
-			if !applyState(c, st) {
-				out = append(out, c) // world/presentation command
+			if applyState(c, st) {
+				continue
+			}
+			out = append(out, c) // world/presentation command
+			// GoScene ends the script: whatever follows it in the frame,
+			// including a later unconditional GoScene, must not run.
+			// StartGame hands the screen to the minigame, and the branches
+			// that test its result have to be judged after it finishes, so
+			// the untouched tail goes back to the caller to resume.
+			switch strings.ToLower(c.Kw) {
+			case "goscene":
+				return out, nil
+			case "startgame":
+				return out, cmds[i+1:]
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 // condTrue evaluates an If condition. Form: If var,value. Numeric value compares

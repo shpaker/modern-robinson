@@ -33,10 +33,19 @@ func eq(t *testing.T, got, want []string) {
 	}
 }
 
+// execOut runs a batch and keeps only the commands the caller must enact; the
+// suspended tail is exercised separately in TestExecStopsAtGoSceneAndStartGame.
+func execOut(
+	in use_cases.Interpreter, cmds []types.Command, st *types.GameState,
+) []types.Command {
+	out, _ := in.Exec(cmds, st)
+	return out
+}
+
 func TestExecStateMutations(t *testing.T) {
 	st := types.NewGameState()
 	var in use_cases.Interpreter
-	out := in.Exec([]types.Command{
+	out := execOut(in, []types.Command{
 		cmd("SetVar", "Findaxe", "1"),
 		cmd("AddVar", "coins", "3"),
 		cmd("AddVar", "coins", "2"),
@@ -67,7 +76,7 @@ func TestExecIfTrueFalse(t *testing.T) {
 	var in use_cases.Interpreter
 
 	// True branch: body runs.
-	out := in.Exec([]types.Command{
+	out := execOut(in, []types.Command{
 		cmd("If", "open", "1"),
 		cmd("Sound", "a.wav", "1"),
 		cmd("EndIf"),
@@ -75,7 +84,7 @@ func TestExecIfTrueFalse(t *testing.T) {
 	eq(t, kws(out), []string{"Sound"})
 
 	// False branch: body skipped.
-	out = in.Exec([]types.Command{
+	out = execOut(in, []types.Command{
 		cmd("If", "open", "0"),
 		cmd("Sound", "a.wav", "1"),
 		cmd("EndIf"),
@@ -104,25 +113,26 @@ func TestExecNestedIfIsAnd(t *testing.T) {
 	}
 
 	// Both true: everything runs.
-	eq(t, kws(in.Exec(prog(), st)),
+	eq(t, kws(execOut(in, prog(), st)),
 		[]string{"Sound", "Sound", "Text", "Sound"})
 
 	// Inner false: outer body runs, inner skipped; outer resumes after inner.
 	st.SetVar("b", 0)
-	eq(t, kws(in.Exec(prog(), st)),
+	eq(t, kws(execOut(in, prog(), st)),
 		[]string{"Sound", "Text", "Sound"})
 
 	// Outer false: whole nested block skipped, only the trailing command runs.
 	st.SetVar("a", 0)
 	st.SetVar("b", 1)
-	eq(t, kws(in.Exec(prog(), st)), []string{"Sound"})
+	out := execOut(in, prog(), st)
+	eq(t, kws(out), []string{"Sound"})
 }
 
 func TestExecCharVarCondition(t *testing.T) {
 	st := types.NewGameState()
 	st.SetCharVar("greet", "hello2")
 	var in use_cases.Interpreter
-	out := in.Exec([]types.Command{
+	out := execOut(in, []types.Command{
 		cmd("If", "greet", "hello2"),
 		cmd("Text", "match", "1"),
 		cmd("EndIf"),
@@ -141,7 +151,7 @@ func TestExecDeleteItem(t *testing.T) {
 	st.AddItem("axe")
 	st.AddItem("rope")
 	var in use_cases.Interpreter
-	in.Exec([]types.Command{cmd("DeleteItem", "axe")}, st)
+	execOut(in, []types.Command{cmd("DeleteItem", "axe")}, st)
 	if st.HasItem("axe") {
 		t.Fatal("axe should be gone")
 	}
@@ -155,15 +165,71 @@ func TestExecUnbalancedTolerated(t *testing.T) {
 	st.SetVar("x", 0)
 	var in use_cases.Interpreter
 	// Missing EndIf: false block simply skips to the end, no panic.
-	out := in.Exec([]types.Command{
+	out := execOut(in, []types.Command{
 		cmd("If", "x", "1"),
 		cmd("Sound", "skipped.wav", "1"),
 	}, st)
 	eq(t, kws(out), nil)
 	// Stray EndIf: ignored.
-	out = in.Exec([]types.Command{
+	out = execOut(in, []types.Command{
 		cmd("EndIf"),
 		cmd("Sound", "kept.wav", "1"),
 	}, st)
 	eq(t, kws(out), []string{"Sound"})
+}
+
+// The shipped scripts put a StartGame and the If branches that test its result
+// on one frame, and the map-travel scripts put several GoScene on one frame with
+// the unconditional default last. Both have to stop the batch: the branch cannot
+// be judged before the minigame writes its result, and a later GoScene must not
+// overwrite the one that already fired.
+func TestExecStopsAtGoSceneAndStartGame(t *testing.T) {
+	st := types.NewGameState()
+	var in use_cases.Interpreter
+
+	// GoScene ends the script: the trailing default never reaches the caller.
+	out, rest := in.Exec([]types.Command{
+		cmd("SetVar", "InScene4", "1"),
+		cmd("If", "InScene4", "1"),
+		cmd("GoScene", "SCENA4", "Roby", "Roret4", "1", "0"),
+		cmd("EndIf"),
+		cmd("GoScene", "SCENA4", "Roby", "Roin4", "0", "0"),
+	}, st)
+	if len(out) != 1 || out[0].Args[2] != "Roret4" {
+		t.Fatalf("first GoScene must win, got %v", out)
+	}
+	if rest != nil {
+		t.Fatalf("GoScene ends the script, rest = %v", rest)
+	}
+
+	// StartGame suspends: the branches come back untouched so they can be
+	// re-judged once the result is in.
+	st = types.NewGameState()
+	out, rest = in.Exec([]types.Command{
+		cmd("StartGame", "1", "House", "Find7"),
+		cmd("If", "House", "1"),
+		cmd("CreateObject", "SCENA5", "home"),
+		cmd("EndIf"),
+		cmd("If", "House", "0"),
+		cmd("GoScene", "SCENA5", "Roby", "nohome", "4", "2"),
+		cmd("EndIf"),
+	}, st)
+	if len(out) != 1 || out[0].Kw != "StartGame" {
+		t.Fatalf("StartGame must be the only command enacted, got %v", out)
+	}
+	if len(rest) != 6 {
+		t.Fatalf("the tail must survive for the resume, got %v", rest)
+	}
+	// Resuming with the puzzle solved takes the success branch.
+	st.SetVar("House", 1)
+	out, _ = in.Exec(rest, st)
+	if len(out) != 1 || out[0].Kw != "CreateObject" {
+		t.Fatalf("solved resume must build the hut, got %v", out)
+	}
+	// Resuming after giving up takes the failure branch instead.
+	st.SetVar("House", 0)
+	out, _ = in.Exec(rest, st)
+	if len(out) != 1 || out[0].Kw != "GoScene" {
+		t.Fatalf("failed resume must take the nohome branch, got %v", out)
+	}
 }
