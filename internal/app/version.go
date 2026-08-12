@@ -24,11 +24,6 @@ const (
 	BarH  = ViewH - PlayH
 )
 
-// exitRow is the grid row the scene's edge exits stand in: their zones span
-// most of the screen height, so the row only decides where the hero walks to
-// before leaving.
-const exitRow = 1
-
 // enginePace is the frame rate the authored per-frame constants assume (the
 // original ran its scroll and flight steps about thirty times a second), used
 // to scale them onto our tick.

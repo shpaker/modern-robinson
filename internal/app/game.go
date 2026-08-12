@@ -270,7 +270,6 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	for _, sp := range g.gs.Spawns(name) {
 		g.spawnObject(sp.Obj, sp.GX, sp.GY)
 	}
-	g.addExitObjects()
 	g.buildHotspots()
 	g.exitL, g.exitR = g.parser.SceneExits(c)
 
@@ -948,29 +947,6 @@ func pointIn(r image.Rectangle, x, y int) bool {
 }
 
 func rgba(r, g, b, a uint8) color.Color { return color.RGBA{r, g, b, a} }
-
-// addExitObjects puts the scene's two exit markers on stage. GOLEFT.OB and
-// GORGHT.OB are never listed in ObjectList — the engine always has them — and
-// they carry no sprite (FonScript NULL), only a tall ActiveZone along the scene
-// edge and the arrow cursor. They sit in the outermost walkable columns, which
-// is where their zones and the scripts' "Aproach Roby,goleft" expect them.
-func (g *Game) addExitObjects() {
-	nx, _ := g.grid.Dims()
-	for _, e := range []struct {
-		name string
-		gx   int
-	}{{"goleft", 0}, {"gorght", maxInt(0, nx-2)}} {
-		ob := g.objects[e.name]
-		if ob == nil {
-			continue
-		}
-		g.sceneObjs = append(g.sceneObjs, &sceneObj{
-			ref: types.ObjectRef{Name: e.name, GX: e.gx, GY: exitRow},
-			ob:  ob,
-			z:   exitRow*g.zper + ob.Z,
-		})
-	}
-}
 
 // exitKey names the exit object for a side.
 func exitKey(left bool) string {
