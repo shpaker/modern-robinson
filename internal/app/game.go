@@ -257,7 +257,11 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 			}
 		}
 	}
-	g.charHidden = false
+	// The intro scenes (INT0..INT4) are cutscene bridges driven by their own
+	// objects (START.FS shows the note, then GoScene); the controllable hero is
+	// not on stage there, so he starts hidden and a ShowChar can still reveal
+	// him. Every other scene shows him by default.
+	g.charHidden = isIntroScene(name)
 	g.fsByName = fonScripts(c)
 	g.sceneObjs = loadSceneObjects(g.res, g.parser, g.sc, g.objects,
 		g.fsByName, func(obj string) bool { return g.gs.IsGone(name, obj) })
@@ -294,6 +298,14 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	if entry != "" {
 		g.startEntry(entry)
 	}
+}
+
+// isIntroScene reports whether a scene is one of the opening cutscene bridges
+// (INT0..INT4) that carry no controllable character.
+func isIntroScene(name string) bool {
+	u := strings.ToUpper(name)
+	return len(u) == 4 && strings.HasPrefix(u, "INT") && u[3] >= '0' &&
+		u[3] <= '4'
 }
 
 // buildHotspots places click zones. The engine anchors a zone to the bare cell
