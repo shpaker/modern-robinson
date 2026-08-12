@@ -63,28 +63,28 @@ func (g *Game) itemIndex(name string) int {
 	return -1
 }
 
-// itemIcon returns the icon for an item: the authored BAR pair for the first
-// seven declared items (normal/selected), else the item's world sprite fitted
-// into the cell (selection drawn as a red frame by drawBar).
-func (g *Game) itemIcon(name string, selected bool) *ebiten.Image {
-	idx := g.itemIndex(name)
-	if idx >= 0 && idx < 7 {
+// itemIcon returns the icon for an item and whether it is the authored one:
+// BAR6 onwards holds a normal/selected pair per declared item. Items the panel
+// ships no pair for fall back to their world sprite fitted into the cell, and
+// drawBar marks those as selected itself.
+func (g *Game) itemIcon(name string, selected bool) (*ebiten.Image, bool) {
+	if idx := g.itemIndex(name); idx >= 0 {
 		n := 6 + 2*idx
 		if selected {
 			n++
 		}
 		if ic := g.barSprites["BAR"+strconv.Itoa(n)]; ic != nil {
-			return ic
+			return ic, true
 		}
 	}
 	key := strings.ToLower(name)
 	if ic, ok := g.itemIcons[key]; ok {
-		return ic
+		return ic, false
 	}
 	w, h := g.itemCell()
 	ic := adapters.LoadIcon(g.res, name+".mv", w, h)
 	g.itemIcons[key] = ic
-	return ic
+	return ic, false
 }
 
 // portrait picks the character button: solo Roby before Friday joins, else the
@@ -100,7 +100,8 @@ func (g *Game) portrait() *ebiten.Image {
 }
 
 // drawBar renders the inventory panel: background, portrait, the text box
-// (dialogue line or hovered object name), and the visible inventory icons.
+// (dialogue line or hovered object name), the visible inventory icons and the
+// panel buttons.
 // SetBar OFF (cutscenes) hides it; dialogue then overlays the scene bottom.
 func (g *Game) drawBar(screen *ebiten.Image) {
 	if !g.gs.UI["bar"] {
@@ -149,7 +150,12 @@ func (g *Game) drawBar(screen *ebiten.Image) {
 		screen.DrawImage(p, op)
 	}
 	g.drawTextBox(screen)
+	g.drawItems(screen)
+	g.drawButtons(screen)
+}
 
+// drawItems fills the inventory window with the scrolled-to icons.
+func (g *Game) drawItems(screen *ebiten.Image) {
 	ix, iy := g.bar.Inventory[0], g.bar.Inventory[1]
 	iw, ih := g.itemCell()
 	for i := 0; i < g.bar.ItemsShown; i++ {
@@ -160,24 +166,84 @@ func (g *Game) drawBar(screen *ebiten.Image) {
 		item := g.gs.Inventory[idx]
 		sel := strings.EqualFold(g.gs.Active, item)
 		x := float64(ix + i*iw)
-		if icon := g.itemIcon(item, sel); icon != nil {
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(x, float64(iy))
-			screen.DrawImage(icon, op)
-			if sel && g.itemIndex(item) >= 7 {
-				vector.StrokeRect(
-					screen,
-					float32(x),
-					float32(iy),
-					float32(iw),
-					float32(ih),
-					2,
-					rgba(200, 40, 30, 255),
-					false,
-				)
-			}
+		icon, authored := g.itemIcon(item, sel)
+		if icon == nil {
+			continue
+		}
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(x, float64(iy))
+		screen.DrawImage(icon, op)
+		if sel && !authored {
+			vector.StrokeRect(
+				screen,
+				float32(x),
+				float32(iy),
+				float32(iw),
+				float32(ih),
+				2,
+				rgba(200, 40, 30, 255),
+				false,
+			)
 		}
 	}
+}
+
+// barOverlay is a panel bitmap that goes on top of the strip background at the
+// left-top its layout box gives it.
+type barOverlay struct {
+	name string
+	x, y int
+}
+
+// barOverlays lists what the strip background leaves out, in draw order: the
+// frame that trims the inventory window, a lit arrow on whichever side has
+// something to scroll to (the background prints both of them dimmed), the map
+// button and the save disk. The two buttons sit in cut-outs of the background,
+// so skipping them leaves a hole in the strip instead of a button.
+func (g *Game) barOverlays() []barOverlay {
+	out := []barOverlay{{"BAR5", g.bar.InvMask[0], g.bar.InvMask[1]}}
+	if g.invScroll > 0 {
+		out = append(out, barOverlay{
+			"BAR78", g.bar.LeftArrow[0], g.bar.LeftArrow[1],
+		})
+	}
+	if g.invScroll+g.bar.ItemsShown < len(g.gs.Inventory) {
+		// The right arrow hugs the far edge of its box, as its print does.
+		out = append(out, barOverlay{
+			"BAR81",
+			g.bar.RightArrow[2] - g.spriteW("BAR81"),
+			g.bar.RightArrow[1],
+		})
+	}
+	mapButton := "BAR74" // blank until the island map opens (SetMap ON)
+	if g.gs.UI["map"] {
+		mapButton = "BAR72"
+	}
+	return append(out,
+		barOverlay{mapButton, g.bar.ScisorsBox[0], g.bar.ScisorsBox[1]},
+		barOverlay{"BAR75", g.bar.SaveBox[0], g.bar.SaveBox[1]},
+	)
+}
+
+// drawButtons paints the overlays the layout asks for.
+func (g *Game) drawButtons(screen *ebiten.Image) {
+	for _, o := range g.barOverlays() {
+		img := g.barSprites[o.name]
+		if img == nil {
+			continue
+		}
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(o.x), float64(o.y))
+		screen.DrawImage(img, op)
+	}
+}
+
+// spriteW is the width of a panel bitmap, 0 when the panel ships none.
+func (g *Game) spriteW(name string) int {
+	if img := g.barSprites[name]; img != nil {
+		return img.Bounds().Dx()
+	}
+	return 0
 }
 
 // drawTextBox writes the current dialogue line (Text event) or, when idle, the
