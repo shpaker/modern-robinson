@@ -61,13 +61,28 @@ func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
 		if fs.MovieName != "" {
 			inst.frames = adapters.LoadDecal(res, fs.MovieName)
 			inst.visible = len(inst.frames) > 0
-			// Looping FonScripts animate forever; one-shot ones play once on
-			// entry (cutscene drivers like START.FS/INT1.FS) and then hold
-			// their last frame unless a DelObject removed them.
-			inst.player = use_cases.NewPlayer(fs)
+			// An object's FonScript is ambient scenery, so it loops, unless its
+			// last frame closes the script out (a driver like START.FS, which
+			// holds its final frame after firing GoScene).
+			inst.player = use_cases.NewPlayer(fs, !endsScript(fs))
 		}
 	}
 	return inst
+}
+
+// endsScript reports whether a script's last frame closes it out -- the ambient
+// loops just run out of frames, while a driver finishes with a world change.
+func endsScript(fs *types.FrameScript) bool {
+	if len(fs.Frames) == 0 {
+		return false
+	}
+	for _, ev := range fs.Frames[len(fs.Frames)-1].Events {
+		switch strings.ToLower(ev.Kw) {
+		case "goscene", "delobject", "deleteobject", "showchar", "startgame":
+			return true
+		}
+	}
+	return false
 }
 
 // loadSceneObjects builds the live objects for a scene's ObjectList, skipping

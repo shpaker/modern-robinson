@@ -17,40 +17,92 @@ import (
 )
 
 // Container is a parsed NL resource file. It implements interfaces.IContainer.
+//
+// Small containers are held in memory; a large one keeps only its directory and
+// reads entries from disk on demand. The sound bank is the reason: WAVE.DAN is
+// 115 MB of uncompressed PCM, so holding it resident costs that much for the
+// whole session while any one sound needs a few dozen kilobytes.
 type Container struct {
-	data    []byte
+	data    []byte   // whole file, or nil when entries stream from f
+	f       *os.File // open file for streaming containers
+	size    int64
 	count   int
 	key     uint32
 	entries []types.Entry
 	byName  map[string]int
 }
 
+// residentLimit is the largest container kept fully in memory.
+const residentLimit = 16 << 20
+
 var _ interfaces.IContainer = (*Container)(nil)
 
-// Open reads and parses an NL container from disk.
+// Open parses an NL container from disk, streaming it when it is large.
 func Open(path string) (*Container, error) {
-	data, err := os.ReadFile(path)
+	st, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
-	return New(data)
+	if st.Size() <= residentLimit {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return New(data)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	head := make([]byte, 0x20)
+	if _, err := f.ReadAt(head, 0); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	c := &Container{f: f, size: st.Size()}
+	if err := c.parseHeader(head); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	dir := make([]byte, c.count*32)
+	if _, err := f.ReadAt(dir, 0x20); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	c.readDirectoryFrom(dir)
+	return c, nil
 }
 
 // New parses an NL container from bytes.
 func New(data []byte) (*Container, error) {
-	if len(data) < 0x20 || data[0] != 'N' || data[1] != 'L' {
-		return nil, fmt.Errorf("not an NL container")
+	c := &Container{data: data, size: int64(len(data))}
+	if err := c.parseHeader(data); err != nil {
+		return nil, err
 	}
-	c := &Container{data: data}
-	c.count = int(binary.LittleEndian.Uint16(data[4:6]))
-	c.key = binary.LittleEndian.Uint32(data[0x14:0x18])
-	c.readDirectory()
+	// The directory is 32 bytes per entry and the count is an unchecked field
+	// of the header, so a truncated file would otherwise slice past the end.
+	end := 0x20 + c.count*32
+	if end > len(data) {
+		return nil, fmt.Errorf(
+			"NL directory needs %d bytes, file has %d", end, len(data),
+		)
+	}
+	c.readDirectoryFrom(data[0x20:end])
 	return c, nil
 }
 
+// parseHeader validates the magic and reads the entry count and cipher key.
+func (c *Container) parseHeader(head []byte) error {
+	if len(head) < 0x20 || head[0] != 'N' || head[1] != 'L' {
+		return fmt.Errorf("not an NL container")
+	}
+	c.count = int(binary.LittleEndian.Uint16(head[4:6]))
+	c.key = binary.LittleEndian.Uint32(head[0x14:0x18])
+	return nil
+}
+
 // decryptDirectory reverses the 8-bit stream cipher (NGI32.DLL @0x2333B).
-func (c *Container) decryptDirectory() []byte {
-	ct := c.data[0x20 : 0x20+c.count*32]
+func (c *Container) decryptDirectory(ct []byte) []byte {
 	al := c.key & 0xFF
 	dl := (c.key >> 8) & 0xFF
 	out := make([]byte, len(ct))
@@ -63,8 +115,8 @@ func (c *Container) decryptDirectory() []byte {
 	return out
 }
 
-func (c *Container) readDirectory() {
-	dec := c.decryptDirectory()
+func (c *Container) readDirectoryFrom(ct []byte) {
+	dec := c.decryptDirectory(ct)
 	c.entries = make([]types.Entry, c.count)
 	c.byName = make(map[string]int, c.count)
 	for i := 0; i < c.count; i++ {
@@ -85,9 +137,23 @@ func (c *Container) readDirectory() {
 // Entries returns the container's directory.
 func (c *Container) Entries() []types.Entry { return c.entries }
 
-// Raw returns the stored (still-compressed) bytes for an entry.
+// Raw returns the stored (still-compressed) bytes for an entry, reading them
+// from disk when the container streams. Offsets and sizes come from the file
+// itself, so they are range-checked: a truncated or damaged container reports an
+// empty entry instead of taking the process down.
 func (c *Container) Raw(e types.Entry) []byte {
-	return c.data[e.Offset : e.Offset+e.CSize]
+	start, end := int64(e.Offset), int64(e.Offset)+int64(e.CSize)
+	if start < 0 || end < start || end > c.size {
+		return nil
+	}
+	if c.data != nil {
+		return c.data[start:end]
+	}
+	buf := make([]byte, e.CSize)
+	if _, err := c.f.ReadAt(buf, start); err != nil {
+		return nil
+	}
+	return buf
 }
 
 // Extract returns the fully decoded bytes for an entry.

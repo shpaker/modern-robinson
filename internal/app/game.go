@@ -44,6 +44,7 @@ type Game struct {
 	w, h      int     // scene (world) size; the viewport is ViewW x PlayH
 	camX      int     // horizontal scroll offset into the scene (drawn)
 	camXf     float64 // the same offset before rounding, so easing stays smooth
+	camShift  int     // ShiftScreen pan, in pixels, on top of following the hero
 	zper      int
 	objects   map[string]*types.SceneObject
 	sceneObjs []*sceneObj
@@ -51,7 +52,6 @@ type Game struct {
 	hotspots  []hotspot
 	exitL     types.Exit
 	exitR     types.Exit
-	stepWav   []byte
 
 	gs         *types.GameState
 	interp     use_cases.Interpreter
@@ -231,6 +231,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	c := g.res.SceneContainer(name)
 	g.sceneC = c
 	g.act, g.pendingAct, g.mgResume = nil, nil, nil
+	g.camShift = 0 // a pan never survives the scene that asked for it
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
 	if g.sc.Size == [2]int{0, 0} {
@@ -290,10 +291,6 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.path = nil
 	g.frameI = 0
 
-	g.stepWav = nil
-	if sv, ok := g.sc.SoundVars["step"]; ok {
-		g.stepWav = g.res.Sound(sv[0])
-	}
 	// Scene music: "continue" keeps the current track playing across scenes.
 	if m := strings.ToLower(strings.TrimSpace(g.sc.Music)); m != "" &&
 		m != "continue" {
@@ -523,6 +520,7 @@ func (g *Game) resetRun() {
 	g.mg, g.mgVar, g.mgParam, g.mgResume = nil, "", 0, nil
 	g.idleAct, g.idleT = nil, 0
 	g.robyZ = charZCoord
+	g.camShift = 0
 	g.fridHidden, g.fridCell, g.fridZ = true, [2]int{}, 7
 	g.invScroll = 0
 	g.loadCharacter() // SetRest edits do not outlive the run that made them
@@ -888,12 +886,27 @@ func (g *Game) heroVisualX() float64 {
 	return x
 }
 
-// cameraTarget is where the camera wants to be: the hero centred, clamped to
-// the scene.
+// cameraTarget is where the camera wants to be: the hero centred, offset by any
+// ShiftScreen pan a script asked for, clamped to the scene.
 func (g *Game) cameraTarget() int {
 	return clampInt(
-		int(g.heroVisualX())-ViewW/2, 0, maxInt(0, g.w-ViewW),
+		int(g.heroVisualX())-ViewW/2+g.camShift, 0, maxInt(0, g.w-ViewW),
 	)
+}
+
+// shiftScreen applies "ShiftScreen dx,dy": the engine moves the scroll target by
+// whole grid cells, which the scripts use to pan away from the hero for a beat
+// and then back (they always come in ±1 pairs). Vertical scroll never happens —
+// no scene is taller than the viewport — so only the x step is honoured.
+func (g *Game) shiftScreen(args []string) {
+	if len(args) < 1 || g.sc == nil {
+		return
+	}
+	step := g.sc.GridSize[0]
+	if step <= 0 {
+		step = 1
+	}
+	g.camShift += atoiArg(args[0]) * step
 }
 
 // followCamera eases the camera toward its target the way the engine does: each

@@ -21,9 +21,6 @@ func TestParseFrameScript(t *testing.T) {
 	if len(fs.Frames) != 3 {
 		t.Fatalf("frames = %d, want 3", len(fs.Frames))
 	}
-	if !fs.Looping {
-		t.Error("fire (no terminal command) must loop")
-	}
 	f0 := fs.Frames[0]
 	if f0.Delay != 142 || len(f0.Events) != 1 || f0.Events[0].Kw != "sound" ||
 		len(f0.Events[0].Args) != 2 || f0.Events[0].Args[0] != "fire" {
@@ -33,9 +30,6 @@ func TestParseFrameScript(t *testing.T) {
 	action := "ScriptName x;\nMovieName a.mv;\nShift 0,0;\nTotalFrames 1;\n" +
 		"Frame 0,1;\nDelay 200;\nDelObject SCENA0, smoke, Roby,0,0;\nEnd;"
 	fs2 := p.ParseFrameScript(action)
-	if fs2.Looping {
-		t.Error("action with DelObject must be one-shot")
-	}
 	if fs2.Frames[0].Events[0].Kw != "delobject" {
 		t.Errorf("event = %q", fs2.Frames[0].Events[0].Kw)
 	}

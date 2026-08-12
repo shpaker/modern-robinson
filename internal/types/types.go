@@ -103,10 +103,6 @@ type FrameScript struct {
 	Shift      [2]int
 	Total      int
 	Frames     []*Frame
-	// Looping is true when the last frame carries no terminal command
-	// (DelObject/GoScene/SetRest/ShowChar/EndGame/StartGame) — an ambient
-	// FonScript that repeats (fire, waves, crab).
-	Looping bool
 }
 
 // Character is a parsed .CHR: the walk mode and the three idle slots the engine

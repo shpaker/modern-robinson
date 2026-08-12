@@ -210,13 +210,6 @@ func (SceneParser) ParseObject(text string) *types.SceneObject {
 	return ob
 }
 
-// terminalKw are commands whose presence in the LAST frame marks a one-shot
-// script; without them a FonScript loops (ambient fire/waves/crab).
-var terminalKw = map[string]bool{
-	"delobject": true, "deleteobject": true, "goscene": true,
-	"setrest": true, "showchar": true, "endgame": true, "startgame": true,
-}
-
 // argSplit splits a comma-separated argument list, stripping quotes and spaces.
 func argSplit(s string) []string {
 	parts := strings.Split(s, ",")
@@ -277,21 +270,7 @@ func (SceneParser) ParseFrameScript(text string) *types.FrameScript {
 			}
 		}
 	}
-	fs.Looping = isLooping(fs)
 	return fs
-}
-
-// isLooping reports whether the last frame has no terminal command.
-func isLooping(fs *types.FrameScript) bool {
-	if len(fs.Frames) == 0 {
-		return false
-	}
-	for _, ev := range fs.Frames[len(fs.Frames)-1].Events {
-		if terminalKw[ev.Kw] {
-			return false
-		}
-	}
-	return true
 }
 
 // ParseChar parses a .CHR character definition.

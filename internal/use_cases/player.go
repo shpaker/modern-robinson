@@ -12,14 +12,20 @@ import (
 // Stateless w.r.t. the engine — pure timing over Domain data.
 type Player struct {
 	fs      *types.FrameScript
+	loop    bool
 	idx     int
 	acc     float64
 	started bool
 	done    bool
 }
 
-// NewPlayer starts a player at frame 0 of fs.
-func NewPlayer(fs *types.FrameScript) *Player { return &Player{fs: fs} }
+// NewPlayer plays a frame script once. loop belongs to the call site, not to the
+// script: the data carries no such flag, and whether a script repeats depends on
+// how it was started -- an object's FonScript is ambient scenery, while an
+// action, an entry or an idle plays through exactly once.
+func NewPlayer(fs *types.FrameScript, loop bool) *Player {
+	return &Player{fs: fs, loop: loop}
+}
 
 // FrameIndex returns the current frame's NGB index (0-based).
 func (p *Player) FrameIndex() int {
@@ -56,7 +62,7 @@ func (p *Player) Update(dt float64) []types.Command {
 		switch {
 		case p.idx+1 < len(p.fs.Frames):
 			p.idx++
-		case p.fs.Looping:
+		case p.loop:
 			p.idx = 0
 		default:
 			p.done = true

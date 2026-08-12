@@ -8,7 +8,6 @@ import (
 
 func TestPlayerLoop(t *testing.T) {
 	fs := &types.FrameScript{
-		Looping: true,
 		Frames: []*types.Frame{
 			{
 				Index: 0,
@@ -21,7 +20,7 @@ func TestPlayerLoop(t *testing.T) {
 			{Index: 2, Delay: 100},
 		},
 	}
-	p := NewPlayer(fs)
+	p := NewPlayer(fs, true)
 	ev := p.Update(0) // enters frame 0
 	if len(ev) != 1 || ev[0].Kw != "sound" || p.FrameIndex() != 0 {
 		t.Fatalf("frame0: ev=%v idx=%d", ev, p.FrameIndex())
@@ -38,13 +37,12 @@ func TestPlayerLoop(t *testing.T) {
 
 func TestPlayerOneShot(t *testing.T) {
 	fs := &types.FrameScript{
-		Looping: false,
 		Frames: []*types.Frame{
 			{Index: 0, Delay: 100},
 			{Index: 1, Delay: 100, Events: []types.Command{{Kw: "delobject"}}},
 		},
 	}
-	p := NewPlayer(fs)
+	p := NewPlayer(fs, false)
 	p.Update(0)
 	p.Update(0.1) // -> frame 1
 	if p.FrameIndex() != 1 || p.Done() {
@@ -59,13 +57,12 @@ func TestPlayerOneShot(t *testing.T) {
 func TestPlayerNegativeDelay(t *testing.T) {
 	// negative Delay (ambient) uses |Delay|
 	fs := &types.FrameScript{
-		Looping: true,
 		Frames: []*types.Frame{
 			{Index: 0, Delay: -457},
 			{Index: 1, Delay: -457},
 		},
 	}
-	p := NewPlayer(fs)
+	p := NewPlayer(fs, true)
 	p.Update(0)
 	p.Update(0.4) // < 0.457 -> still frame 0
 	if p.FrameIndex() != 0 {

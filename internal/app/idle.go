@@ -145,12 +145,11 @@ func (g *Game) playIdleSlot(slot int) {
 	if fs.MovieName == "" {
 		return
 	}
-	fs.Looping = false
 	a := adapters.LoadAnimation(g.res, fs.MovieName)
 	if !a.OK() {
 		return
 	}
-	g.idleAct = &idlePlay{anim: a, player: use_cases.NewPlayer(fs)}
+	g.idleAct = &idlePlay{anim: a, player: use_cases.NewPlayer(fs, false)}
 }
 
 // updateIdlePlay advances a running idle animation and applies its events.

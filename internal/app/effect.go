@@ -59,6 +59,8 @@ func (g *Game) applyEffect(c types.Command) {
 		if robyTarget(c.Args) {
 			g.charHidden = false
 		}
+	case "shiftscreen":
+		g.shiftScreen(c.Args)
 	case "setvert":
 		g.setVert(c.Args)
 	case "setrest":

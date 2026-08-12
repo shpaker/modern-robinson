@@ -89,10 +89,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	if fs.MovieName == "" {
 		return nil
 	}
-	// Click actions are always one-shot; looping is a FonScript (ambient)
-	// property, not a script one (the terminal-command heuristic can mislabel
-	// an action whose world-change fires on an early frame, e.g. ROHANBGS).
-	fs.Looping = false
+	// Click actions always play once.
 	ocx, ocy, ok := g.objCell(objName)
 	if !ok {
 		return nil
@@ -103,7 +100,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 		fs:     fs,
 		frames: adapters.LoadDecal(g.res, fs.MovieName),
 		shift:  g.movieShift(fs),
-		player: use_cases.NewPlayer(fs),
+		player: use_cases.NewPlayer(fs, false),
 		target: [2]int{fx, fy},
 	}
 }
@@ -244,12 +241,11 @@ func (g *Game) startEntry(name string) {
 	if fs.MovieName == "" {
 		return
 	}
-	fs.Looping = false
 	g.act = &actionPlay{
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName),
 		shift:   g.movieShift(fs),
-		player:  use_cases.NewPlayer(fs),
+		player:  use_cases.NewPlayer(fs, false),
 		started: true,
 	}
 }

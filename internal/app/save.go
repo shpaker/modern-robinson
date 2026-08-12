@@ -40,8 +40,10 @@ func (g *Game) saveSlot(i int) {
 	if raw, err := encodePNG(g.thumb); err == nil {
 		_ = os.WriteFile(g.slotThumbPath(i), raw, 0o644)
 	}
-	g.slotCache[i] = nil // force a re-read of the thumbnail
-	g.slotInfo[i] = ""
+	// Drop the entries so the slot is read again; a stored nil now means
+	// "checked, nothing there" and would stick.
+	delete(g.slotCache, i)
+	delete(g.slotInfo, i)
 	g.msg, g.msgT = "Игра сохранена", 2
 }
 
@@ -66,9 +68,11 @@ func (g *Game) loadSlot(i int) bool {
 func (g *Game) save() { g.saveSlot(0) }
 func (g *Game) load() { g.loadSlot(0) }
 
-// slotThumb returns slot i's thumbnail, reading it from disk once.
+// slotThumb returns slot i's thumbnail, reading it from disk once. A cached nil
+// is a remembered miss: the save screen redraws every frame, so re-reading all
+// twelve slots each time cost about 1400 failed syscalls a second.
 func (g *Game) slotThumb(i int) *ebiten.Image {
-	if img, ok := g.slotCache[i]; ok && img != nil {
+	if img, ok := g.slotCache[i]; ok {
 		return img
 	}
 	raw, err := os.ReadFile(g.slotThumbPath(i))
@@ -88,7 +92,7 @@ func (g *Game) slotThumb(i int) *ebiten.Image {
 
 // slotMeta returns slot i's caption (scene and save time), cached.
 func (g *Game) slotMeta(i int) string {
-	if s, ok := g.slotInfo[i]; ok && s != "" {
+	if s, ok := g.slotInfo[i]; ok {
 		return s
 	}
 	b, err := os.ReadFile(g.slotPath(i))
