@@ -26,6 +26,8 @@ func (g *Game) startMinigame(args []string) {
 		g.mgParam = g.gs.Var(args[2])
 	}
 	switch id {
+	case 4:
+		g.mg = newPipeGame(g)
 	case 5:
 		g.mg = newCryptGame(g)
 	}

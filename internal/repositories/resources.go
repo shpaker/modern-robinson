@@ -15,15 +15,17 @@ import (
 // Resources indexes every NL container under the game root and resolves assets
 // by name. It implements interfaces.IResources.
 type Resources struct {
-	root      string
-	movies    map[string]string
-	sceneDirs map[string]string
-	sceneDat  map[string]string
-	screenDat map[string]string
-	cache     map[string]*codec.Container
-	wave      *codec.Container
-	waveIndex map[string]types.Entry
-	bgi       [][]bgiRecord // BEGIN.BGI initial object states, lazily parsed
+	root        string
+	movies      map[string]string
+	sceneDirs   map[string]string
+	sceneDat    map[string]string
+	screenDat   map[string]string
+	cache       map[string]*codec.Container
+	wave        *codec.Container
+	waveIndex   map[string]types.Entry
+	mgWave      *codec.Container
+	mgWaveIndex map[string]types.Entry
+	bgi         [][]bgiRecord // BEGIN.BGI initial object states, lazily parsed
 }
 
 // readFileUpper reads a file under root joining path elements, trying the exact
@@ -126,24 +128,45 @@ func (r *Resources) MovieFrames(name string) ([]*types.NGB, types.Palette) {
 	return frames, pal
 }
 
-// Sound returns the raw WAV bytes for a sound by name.
+// Sound returns the raw WAV bytes for a sound by name. It searches the main
+// bank (DATA/WAVE/WAVE.DAN) first and then the minigame bank (MINIGAME.WDT),
+// which holds the organ notes, puzzle clicks and the victory jingles.
 func (r *Resources) Sound(name string) []byte {
-	if r.wave == nil {
-		r.wave = r.container(filepath.Join(r.root, "DATA", "WAVE", "WAVE.DAN"))
-		if r.wave == nil {
-			return nil
-		}
+	r.indexWaves()
+	up := strings.ToUpper(name)
+	if e, ok := r.waveIndex[up]; ok {
+		b, _ := r.wave.Extract(e)
+		return b
+	}
+	if e, ok := r.mgWaveIndex[up]; ok {
+		b, _ := r.mgWave.Extract(e)
+		return b
+	}
+	return nil
+}
+
+// indexWaves opens and indexes both sound banks once.
+func (r *Resources) indexWaves() {
+	if r.waveIndex == nil {
 		r.waveIndex = map[string]types.Entry{}
-		for _, e := range r.wave.Entries() {
-			r.waveIndex[strings.ToUpper(e.Name)] = e
+		r.wave = r.container(
+			filepath.Join(r.root, "DATA", "WAVE", "WAVE.DAN"),
+		)
+		if r.wave != nil {
+			for _, e := range r.wave.Entries() {
+				r.waveIndex[strings.ToUpper(e.Name)] = e
+			}
 		}
 	}
-	e, ok := r.waveIndex[strings.ToUpper(name)]
-	if !ok {
-		return nil
+	if r.mgWaveIndex == nil {
+		r.mgWaveIndex = map[string]types.Entry{}
+		r.mgWave = r.container(filepath.Join(r.root, "MINIGAME.WDT"))
+		if r.mgWave != nil {
+			for _, e := range r.mgWave.Entries() {
+				r.mgWaveIndex[strings.ToUpper(e.Name)] = e
+			}
+		}
 	}
-	b, _ := r.wave.Extract(e)
-	return b
 }
 
 // BarBackground returns the inventory bar's 640x80 background bitmap (BAR0.NGB)
