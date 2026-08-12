@@ -26,6 +26,10 @@ type IResources interface {
 	BarSprites() (map[string]*types.NGB, types.Palette)
 	// Screen is a named full-screen image from a top-level pack (LOGO, OPTIONS).
 	Screen(pack, name string) (*types.NGB, types.Palette)
+	// ScreenPack is every bitmap of a pack plus its shared palette.
+	ScreenPack(pack string) (map[string]*types.NGB, types.Palette)
+	// SceneFade is the scene's per-step fade brightness curve (1 -> 0).
+	SceneFade(name string) []float64
 	// Texts is the global string table (TEXT.DAT); Text ids are 0-based lines.
 	Texts() []string
 	// InitialVisibility is the start-of-game object visibility for a scene

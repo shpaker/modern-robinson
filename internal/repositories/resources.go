@@ -183,6 +183,56 @@ func (r *Resources) BarSprites() (map[string]*types.NGB, types.Palette) {
 	return out, pal
 }
 
+// SceneFade returns the scene's fade curve (per-step brightness, 1 -> 0) built
+// from its .FAD table, or nil when the scene ships none.
+func (r *Resources) SceneFade(name string) []float64 {
+	_, pal, fad := r.SceneBackground(name)
+	if fad == nil {
+		return nil
+	}
+	return codec.FadeCurve(fad, pal)
+}
+
+// ScreenPack returns every bitmap of a top-level pack keyed by upper-case base
+// name, plus the pack's palette (its <pack>.COL, else the first one found).
+// Widgets inside a pack (OPTS*, BUT*) share that palette.
+func (r *Resources) ScreenPack(pack string) (
+	map[string]*types.NGB, types.Palette,
+) {
+	var pal types.Palette
+	out := map[string]*types.NGB{}
+	p, ok := r.screenDat[strings.ToUpper(pack)]
+	if !ok {
+		return out, pal
+	}
+	c := r.container(p)
+	if c == nil {
+		return out, pal
+	}
+	want := strings.ToUpper(pack) + ".COL"
+	var first types.Palette
+	haveFirst, havePack := false, false
+	for _, e := range c.Entries() {
+		up := strings.ToUpper(e.Name)
+		d, err := c.Extract(e)
+		if err != nil {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(up, ".NGB"):
+			out[strings.TrimSuffix(up, ".NGB")] = codec.DecodeNGB(d)
+		case up == want:
+			pal, havePack = codec.LoadPalette(d), true
+		case strings.HasSuffix(up, ".COL") && !haveFirst:
+			first, haveFirst = codec.LoadPalette(d), true
+		}
+	}
+	if !havePack && haveFirst {
+		pal = first
+	}
+	return out, pal
+}
+
 // Screen returns a named full-screen bitmap from a top-level screen pack:
 // Screen("LOGO", "ROBINSON") is the title image of LOGO.DAT (pairs NAME.NGB +
 // NAME.COL). Returns nil if the pack or the image is absent.

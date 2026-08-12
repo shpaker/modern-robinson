@@ -11,19 +11,47 @@ import (
 // Audio plays game sounds on numbered channels (1-9), mirroring the engine:
 // re-triggering a channel stops its current sound. Decoded PCM is cached by key.
 type Audio struct {
-	ctx   *audio.Context
-	cache map[string][]byte
-	chans map[int]*audio.Player
-	music string // key of the looping track on the music channel
+	ctx      *audio.Context
+	cache    map[string][]byte
+	chans    map[int]*audio.Player
+	music    string // key of the looping track on the music channel
+	volSound float64
+	volMusic float64
 }
 
 // NewAudio creates an audio adapter at the given sample rate.
 func NewAudio(sampleRate int) *Audio {
 	return &Audio{
-		ctx:   audio.NewContext(sampleRate),
-		cache: map[string][]byte{},
-		chans: map[int]*audio.Player{},
+		ctx:      audio.NewContext(sampleRate),
+		cache:    map[string][]byte{},
+		chans:    map[int]*audio.Player{},
+		volSound: 1,
+		volMusic: 0.7,
 	}
+}
+
+// SetVolume sets the effects volume (0..1) for sounds started from now on and
+// for anything currently playing.
+func (a *Audio) SetVolume(v float64) {
+	a.volSound = v
+	for ch, p := range a.chans {
+		if ch != musicChannel && p != nil {
+			p.SetVolume(v)
+		}
+	}
+}
+
+// SetMusicVolume sets the music volume (0..1), applying it immediately.
+func (a *Audio) SetMusicVolume(v float64) {
+	a.volMusic = v
+	if p := a.chans[musicChannel]; p != nil {
+		p.SetVolume(v)
+	}
+}
+
+// Volumes reports the current effects and music volumes.
+func (a *Audio) Volumes() (sound, music float64) {
+	return a.volSound, a.volMusic
 }
 
 func (a *Audio) decode(key string, wavBytes []byte) []byte {
@@ -51,6 +79,7 @@ func (a *Audio) Play(key string, wavBytes []byte, channel int) {
 		old.Pause()
 	}
 	p := a.ctx.NewPlayerF32FromBytes(pcm)
+	p.SetVolume(a.volSound)
 	a.chans[channel] = p
 	p.Play()
 }
@@ -75,6 +104,7 @@ func (a *Audio) PlayMusic(key string, wavBytes []byte) {
 		return
 	}
 	a.music = key
+	p.SetVolume(a.volMusic)
 	a.chans[musicChannel] = p
 	p.Play()
 }

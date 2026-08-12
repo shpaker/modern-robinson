@@ -146,6 +146,7 @@ func (g *GameState) Spawns(scene string) []Spawn {
 // location — the whole save file.
 type SaveData struct {
 	Scene     string              `json:"scene"`
+	Saved     string              `json:"saved"` // human-readable timestamp
 	Cell      [2]int              `json:"cell"`
 	Vars      map[string]int      `json:"vars"`
 	CharVars  map[string]string   `json:"charVars"`

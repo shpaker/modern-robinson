@@ -88,10 +88,32 @@ type Game struct {
 	msgT    float64
 	debug   bool
 
-	mode     int // boot sequence: logo -> title -> play
+	mode     int // logo -> title -> play; Esc -> options/save/load
 	modeT    float64
 	logoImg  *ebiten.Image
 	titleImg *ebiten.Image
+	quit     bool
+
+	// options menu, save/load screens
+	optSprites map[string]*ebiten.Image
+	optHover   int
+	optDrag    int
+	slotHover  int
+	slotSel    int
+	slotCache  map[int]*ebiten.Image
+	slotInfo   map[int]string
+	thumb      *ebiten.Image
+	scratch    *ebiten.Image
+	volSound   float64
+	volMusic   float64
+	speed      float64 // 0..1 game speed slider (0.5 = original pace)
+
+	// scene transition fade driven by the scene's .FAD table
+	fadeCurve []float64
+	fadeStep  int
+	fadeOut   bool
+	fadeT     float64
+	fadeTo    *types.Exit
 }
 
 // NewGame builds a game over the given resources and starts at SCENA0.
@@ -106,8 +128,14 @@ func NewGame(res interfaces.IResources) *Game {
 		gs:        types.NewGameState(),
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
+	g.optHover, g.optDrag = -1, -1
+	g.slotHover, g.slotSel = -1, -1
+	g.slotCache = map[int]*ebiten.Image{}
+	g.slotInfo = map[int]string{}
+	g.volSound, g.volMusic, g.speed = 1, 0.7, 0.5
 	g.seedStartup()
 	g.loadBar()
+	g.loadOptions()
 	// Starting inventory per ROBY.CHR (Items hand, hat).
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
@@ -319,12 +347,8 @@ func (g *Game) click(mx, my int) {
 		return
 	}
 	wx, wy := mx+g.camX, my // viewport -> world
-	if wx < 40 && g.exitL.OK {
-		g.pending = &g.exitL
-		return
-	}
-	if wx > g.w-40 && g.exitR.OK {
-		g.pending = &g.exitR
+	if e := g.edgeExit(mx); e != nil {
+		g.pending = e
 		return
 	}
 	for _, hs := range g.hotspots {
@@ -373,11 +397,26 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
 		g.load()
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		g.toggleOptions()
+	}
+	if g.quit {
+		return ebiten.Termination
+	}
 	dt := 1.0 / float64(ebiten.TPS())
 	if g.updateScreens(dt) {
 		return nil // boot screens own the frame
 	}
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+	if g.updateOptions() {
+		return nil // options / save / load own the frame
+	}
+	// The speed slider scales the whole simulation, like the original's
+	// DelayFactor: 0.5 on the slider is the authored pace.
+	dt *= 0.5 + g.speed
+	if g.updateFade(dt) {
+		return nil // a scene transition is fading
+	}
+	if clickedThisTick() {
 		g.click(ebiten.CursorPosition())
 	}
 	g.updateHover(ebiten.CursorPosition())
@@ -429,9 +468,34 @@ func (g *Game) Update() error {
 	if g.pending != nil {
 		p := g.pending
 		g.pending = nil
-		g.loadScene(p.Scene, &[2]int{p.GX, p.GY}, p.Entry, p.EntryFrid)
+		g.startFade(p)
 	}
 	return nil
+}
+
+// toggleOptions opens the options menu from play (and closes it again).
+func (g *Game) toggleOptions() {
+	switch g.mode {
+	case modePlay:
+		g.mode, g.optHover, g.optDrag = modeOptions, -1, -1
+		g.slotCache = map[int]*ebiten.Image{}
+		g.slotInfo = map[int]string{}
+	case modeOptions, modeSave, modeLoad:
+		g.mode = modePlay
+	}
+}
+
+// restart begins a new game: fresh quest state, back to the first scene.
+func (g *Game) restart() {
+	g.gs = types.NewGameState()
+	g.seedStartup()
+	g.gs.AddItem("hand")
+	g.gs.AddItem("hat")
+	g.gs.Active = "hand"
+	g.fridHidden = true
+	g.fadeCurve, g.fadeTo = nil, nil
+	g.loadScene("INT0", nil, "", "")
+	g.mode = modePlay
 }
 
 // charZCoord gives the character a mid/front sub-slot within its grid row.
@@ -442,10 +506,22 @@ const charZCoord = 7
 // bar over the bottom 80px, then HUD/debug/cursor. Everything in world space is
 // shifted left by camX; the bar and cursor are in viewport space.
 func (g *Game) Draw(screen *ebiten.Image) {
-	if g.mode != modePlay {
+	switch g.mode {
+	case modeLogo, modeTitle:
 		g.drawScreens(screen)
 		return
+	case modeOptions, modeSave, modeLoad:
+		g.drawOptions(screen)
+		return
 	}
+	g.drawPlay(screen, true)
+	g.drawFade(screen)
+	g.drawCursor(screen)
+}
+
+// drawPlay paints the world (and, with hud, the bar and debug overlay) into any
+// target — the screen, or an offscreen image when grabbing a save thumbnail.
+func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(-float64(g.camX), 0)
 	screen.DrawImage(g.bg, op)
@@ -489,24 +565,41 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		it.fn()
 	}
 
+	if !hud {
+		return
+	}
 	g.drawBar(screen)
 	if g.debug {
 		g.drawDebug(screen)
 	}
-	g.drawCursor(screen)
 }
 
 // cursorType returns the cursor for the hovered zone: 1..4 = arrows
 // (left/right/up/down), 0 = hand (object action), -1 = default pointer.
+// edgeExit returns the scene exit reachable by clicking the viewport edge: the
+// screen edge only leads out once the camera has scrolled to the matching end of
+// the scene, which is how the original gates its left/right exits.
+func (g *Game) edgeExit(mx int) *types.Exit {
+	const margin = 40
+	maxCam := maxInt(0, g.w-ViewW)
+	if mx < margin && g.camX == 0 && g.exitL.OK {
+		return &g.exitL
+	}
+	if mx > ViewW-margin && g.camX >= maxCam && g.exitR.OK {
+		return &g.exitR
+	}
+	return nil
+}
+
 func (g *Game) cursorType(mx, my int) int {
 	if my >= PlayH {
 		return -1 // bar area
 	}
 	wx, wy := mx+g.camX, my
-	if wx < 40 && g.exitL.OK {
-		return 1
-	}
-	if wx > g.w-40 && g.exitR.OK {
+	if e := g.edgeExit(mx); e != nil {
+		if e == &g.exitL {
+			return 1
+		}
 		return 2
 	}
 	for _, hs := range g.hotspots {

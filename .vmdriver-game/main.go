@@ -153,17 +153,21 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Boot flow: logo -> (click) title -> (click) INT0 -> INT1 cutscene.
+	// Walk east until the camera reaches the end of the scene, then leave
+	// through the right edge and sample the fade.
+	d.guest.AdvanceTicks(20)
+	_ = d.snapshot(0) // SCENA0 at full brightness
+	for i := 0; i < 6; i++ {
+		click(600, 330)
+		d.guest.AdvanceTicks(120)
+	}
+	click(630, 200) // right edge -> exit (camera is at the far end now)
+	d.guest.AdvanceTicks(5)
+	_ = d.snapshot(1) // fading out
+	d.guest.AdvanceTicks(9)
+	_ = d.snapshot(2) // near black / just swapped
 	d.guest.AdvanceTicks(30)
-	_ = d.snapshot(0) // logo
-	click(320, 240)   // skip logo
-	d.guest.AdvanceTicks(10)
-	_ = d.snapshot(1) // title
-	click(320, 240)   // skip title -> play (INT0 chains to INT1)
-	d.guest.AdvanceTicks(60)
-	_ = d.snapshot(2) // INT1 cutscene running
-	d.guest.AdvanceTicks(600)
-	_ = d.snapshot(3) // cutscene later frames
+	_ = d.snapshot(3) // the next scene, faded in
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

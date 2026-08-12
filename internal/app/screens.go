@@ -4,15 +4,29 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 // Screen modes: the boot sequence shows the studio logo, then the title, then
-// hands over to play. Click (or any key) skips forward.
+// hands over to play; Esc opens the options menu, which can branch to the save
+// and load screens.
 const (
 	modeLogo = iota
 	modeTitle
 	modePlay
+	modeOptions
+	modeSave
+	modeLoad
 )
+
+// fadeStepTime is how long one .FAD step lasts; sixteen steps make ~0.3 s.
+const fadeStepTime = 0.019
+
+// clickedThisTick reports a fresh left-button press.
+func clickedThisTick() bool {
+	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+}
 
 // loadScreens fetches the boot images from LOGO.DAT (LOGO = studio logo,
 // ROBINSON = title). Missing packs skip straight to play.
@@ -43,11 +57,11 @@ func (g *Game) loadScreens() {
 // updateScreens advances the boot sequence; returns true while it owns the
 // frame (play is paused underneath).
 func (g *Game) updateScreens(dt float64) bool {
-	if g.mode == modePlay {
+	if g.mode != modeLogo && g.mode != modeTitle {
 		return false
 	}
 	g.modeT += dt
-	skip := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) ||
+	skip := clickedThisTick() ||
 		len(inpututil.AppendJustPressedKeys(nil)) > 0
 	switch g.mode {
 	case modeLogo:
@@ -78,4 +92,67 @@ func (g *Game) drawScreens(screen *ebiten.Image) {
 		vector.FillRect(screen, 0, 0, float32(ViewW), float32(ViewH),
 			rgba(0, 0, 0, uint8(a*255)), false)
 	}
+}
+
+// startFade begins a fade-out that swaps to the pending exit at black and then
+// fades the new scene in, using the current scene's own .FAD curve.
+func (g *Game) startFade(to *types.Exit) {
+	g.fadeCurve = g.res.SceneFade(g.sceneName)
+	if len(g.fadeCurve) < 2 {
+		// No fade table: swap immediately.
+		g.loadScene(to.Scene, &[2]int{to.GX, to.GY}, to.Entry, to.EntryFrid)
+		return
+	}
+	g.fadeTo = to
+	g.fadeStep = 0
+	g.fadeOut = true
+	g.fadeT = 0
+}
+
+// updateFade advances an in-progress transition; returns true while one runs.
+func (g *Game) updateFade(dt float64) bool {
+	if g.fadeCurve == nil {
+		return false
+	}
+	g.fadeT += dt
+	for g.fadeT >= fadeStepTime {
+		g.fadeT -= fadeStepTime
+		switch {
+		case g.fadeOut && g.fadeStep+1 < len(g.fadeCurve):
+			g.fadeStep++
+		case g.fadeOut:
+			// Fully black: swap the scene and fade back in.
+			to := g.fadeTo
+			g.fadeTo = nil
+			g.fadeOut = false
+			if to != nil {
+				g.loadScene(to.Scene, &[2]int{to.GX, to.GY},
+					to.Entry, to.EntryFrid)
+				if c := g.res.SceneFade(g.sceneName); len(c) >= 2 {
+					g.fadeCurve = c
+				}
+				g.fadeStep = len(g.fadeCurve) - 1
+			}
+		case g.fadeStep > 0:
+			g.fadeStep--
+		default:
+			g.fadeCurve = nil // fade-in finished
+			return false
+		}
+	}
+	return true
+}
+
+// drawFade darkens the frame to the current fade step's brightness.
+func (g *Game) drawFade(screen *ebiten.Image) {
+	if g.fadeCurve == nil || g.fadeStep <= 0 {
+		return
+	}
+	b := g.fadeCurve[g.fadeStep]
+	if b >= 1 {
+		return
+	}
+	a := uint8(clampF(1-b, 0, 1) * 255)
+	vector.FillRect(screen, 0, 0, float32(ViewW), float32(ViewH),
+		rgba(0, 0, 0, a), false)
 }
