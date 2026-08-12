@@ -52,9 +52,8 @@ func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
 	fon := strings.ToLower(ob.FonScript)
 	if raw, ok := fsByName[fon]; fon != "" && fon != "null" && ok {
 		fs := parser.ParseFrameScript(string(raw))
-		// Shift comes from the movie's .SCR origin; a FonScript may override
-		// it (only wave.mv does). When the .FS omits Shift the parser yields
-		// (0,0), so fall back to the .SCR value rather than lose the origin.
+		// The FonScript's own Shift wins; the movie's .SCR origin is the
+		// fallback for the scripts that omit it (see Game.movieShift).
 		inst.shift = res.MovieShift(fs.MovieName)
 		if fs.Shift != ([2]int{}) {
 			inst.shift = fs.Shift

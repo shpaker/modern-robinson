@@ -63,6 +63,18 @@ func (g *Game) actionScript(objName string) (string, []byte, bool) {
 	return "", nil, false
 }
 
+// movieShift is the point of the canvas the engine lands on the cell anchor. It
+// comes from the movie's .SCR origin, but a FonScript may override it and the
+// intro bridges rely on that: INT1.FS authors a Shift equal to its scene's
+// anchor(0,0) so the full-window cutscene lands at the origin, while Int1.mv's
+// own origin would push it 260px off.
+func (g *Game) movieShift(fs *types.FrameScript) [2]int {
+	if fs.Shift != ([2]int{}) {
+		return fs.Shift
+	}
+	return g.res.MovieShift(fs.MovieName)
+}
+
 // resolveAction builds the action a click on an object runs: walk to its Aproach
 // cell, then play the script's movie and events.
 func (g *Game) resolveAction(objName string) *actionPlay {
@@ -90,7 +102,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	return &actionPlay{
 		fs:     fs,
 		frames: adapters.LoadDecal(g.res, fs.MovieName),
-		shift:  g.res.MovieShift(fs.MovieName),
+		shift:  g.movieShift(fs),
 		player: use_cases.NewPlayer(fs),
 		target: [2]int{fx, fy},
 	}
@@ -236,7 +248,7 @@ func (g *Game) startEntry(name string) {
 	g.act = &actionPlay{
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName),
-		shift:   g.res.MovieShift(fs.MovieName),
+		shift:   g.movieShift(fs),
 		player:  use_cases.NewPlayer(fs),
 		started: true,
 	}
