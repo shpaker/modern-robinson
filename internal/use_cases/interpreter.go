@@ -110,7 +110,13 @@ func applyState(c types.Command, st *types.GameState) bool {
 		}
 	case "setactive":
 		if len(a) >= 1 {
-			st.Active = a[0]
+			// SetActive addresses a character or an item, never both.
+			if strings.EqualFold(a[0], "Roby") ||
+				strings.EqualFold(a[0], "Frid") {
+				st.ActiveChar = a[0]
+			} else {
+				st.Active = a[0]
+			}
 		}
 	default:
 		return false

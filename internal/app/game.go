@@ -154,7 +154,7 @@ func NewGame(res interfaces.IResources) *Game {
 	// Starting inventory per ROBY.CHR (Items hand, hat).
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
-	g.gs.Active = "hand"
+	g.gs.Active, g.gs.ActiveChar = "hand", "Roby"
 	// STARTUP.INF marks INT0 as the start scene (the home-room cutscene that
 	// chains into the island); ROBINSON_SCENE overrides for direct entry.
 	start := "INT0"
@@ -530,7 +530,7 @@ func (g *Game) restart() {
 	g.seedStartup()
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
-	g.gs.Active = "hand"
+	g.gs.Active, g.gs.ActiveChar = "hand", "Roby"
 	g.resetRun()
 	g.loadScene("INT0", nil, "", "")
 	g.mode = modePlay

@@ -233,3 +233,28 @@ func TestExecStopsAtGoSceneAndStartGame(t *testing.T) {
 		t.Fatalf("failed resume must take the nohome branch, got %v", out)
 	}
 }
+
+// SetActive addresses either kind: a character name switches who the player
+// controls, anything else is the item in hand. Each character has his own items
+// (hand/handfr, condom/confr), so a single field cannot hold both -- with one,
+// picking up an item silently handed control back to Roby.
+func TestSetActiveSplitsCharacterFromItem(t *testing.T) {
+	st := types.NewGameState()
+	st.ActiveChar, st.Active = "Roby", "hand"
+	var in use_cases.Interpreter
+
+	execOut(in, []types.Command{cmd("SetActive", "Frid")}, st)
+	if st.ActiveChar != "Frid" || st.Active != "hand" {
+		t.Fatalf("character switch touched the hand: %q %q",
+			st.ActiveChar, st.Active)
+	}
+	execOut(in, []types.Command{cmd("SetActive", "confr")}, st)
+	if st.ActiveChar != "Frid" || st.Active != "confr" {
+		t.Fatalf("picking up an item moved control: %q %q",
+			st.ActiveChar, st.Active)
+	}
+	execOut(in, []types.Command{cmd("SetActive", "Roby")}, st)
+	if st.ActiveChar != "Roby" {
+		t.Fatalf("ActiveChar = %q, want Roby", st.ActiveChar)
+	}
+}

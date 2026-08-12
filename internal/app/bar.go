@@ -93,7 +93,7 @@ func (g *Game) portrait() *ebiten.Image {
 	if g.gs.Var("FridIs") != 1 {
 		return g.barSprites["BAR3"]
 	}
-	if strings.EqualFold(g.gs.Active, "Frid") {
+	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
 		return g.barSprites["BAR2"]
 	}
 	return g.barSprites["BAR1"]
@@ -212,10 +212,10 @@ func (g *Game) clickBar(mx, my int) {
 	case inBox(g.bar.CharBox, mx, my):
 		// The portrait toggles the controlled character once Friday joined.
 		if g.gs.Var("FridIs") == 1 {
-			if strings.EqualFold(g.gs.Active, "Frid") {
-				g.gs.Active = "Roby"
+			if strings.EqualFold(g.gs.ActiveChar, "Frid") {
+				g.gs.ActiveChar = "Roby"
 			} else {
-				g.gs.Active = "Frid"
+				g.gs.ActiveChar = "Frid"
 			}
 		}
 		return

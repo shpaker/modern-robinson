@@ -18,7 +18,12 @@ type GameState struct {
 	Vars      map[string]int    // SetVar/AddVar quest flags and counters
 	CharVars  map[string]string // SetCharVar dialogue-variant selectors
 	Inventory []string          // AddItem/DeleteItem, ordered for the bar
-	Active    string            // SetActive: current tool or character
+	Active    string            // SetActive: the item in hand (never a character)
+	// ActiveChar is who the player controls. SetActive addresses either kind:
+	// a character name switches control, anything else is picked up, and each
+	// character has his own items (hand/handfr, condom/confr), so the two must
+	// be tracked apart or Friday can never hold anything.
+	ActiveChar string
 
 	gone    map[string]map[string]bool // scene -> object -> removed (DelObject)
 	spawned map[string][]Spawn         // scene -> objects added (CreateObject)
@@ -145,16 +150,17 @@ func (g *GameState) Spawns(scene string) []Spawn {
 // SaveData is a serialisable snapshot of the quest state plus the party's
 // location — the whole save file.
 type SaveData struct {
-	Scene     string              `json:"scene"`
-	Saved     string              `json:"saved"` // human-readable timestamp
-	Cell      [2]int              `json:"cell"`
-	Vars      map[string]int      `json:"vars"`
-	CharVars  map[string]string   `json:"charVars"`
-	Inventory []string            `json:"inventory"`
-	Active    string              `json:"active"`
-	UI        map[string]bool     `json:"ui"`
-	Gone      map[string][]string `json:"gone"`
-	Spawned   map[string][]Spawn  `json:"spawned"`
+	Scene      string              `json:"scene"`
+	Saved      string              `json:"saved"` // human-readable timestamp
+	Cell       [2]int              `json:"cell"`
+	Vars       map[string]int      `json:"vars"`
+	CharVars   map[string]string   `json:"charVars"`
+	Inventory  []string            `json:"inventory"`
+	Active     string              `json:"active"`
+	ActiveChar string              `json:"active_char,omitempty"`
+	UI         map[string]bool     `json:"ui"`
+	Gone       map[string][]string `json:"gone"`
+	Spawned    map[string][]Spawn  `json:"spawned"`
 }
 
 // Snapshot captures the full state for saving.
@@ -162,7 +168,8 @@ func (g *GameState) Snapshot(scene string, cell [2]int) SaveData {
 	sd := SaveData{
 		Scene: scene, Cell: cell,
 		Vars: g.Vars, CharVars: g.CharVars,
-		Inventory: g.Inventory, Active: g.Active, UI: g.UI,
+		Inventory: g.Inventory, Active: g.Active, ActiveChar: g.ActiveChar,
+		UI:   g.UI,
 		Gone: map[string][]string{}, Spawned: g.spawned,
 	}
 	for sc, m := range g.gone {
@@ -186,6 +193,10 @@ func Restore(sd SaveData) *GameState {
 	}
 	g.Inventory = sd.Inventory
 	g.Active = sd.Active
+	g.ActiveChar = sd.ActiveChar
+	if g.ActiveChar == "" {
+		g.ActiveChar = "Roby" // saves written before the split
+	}
 	if sd.UI != nil {
 		g.UI = sd.UI
 	}

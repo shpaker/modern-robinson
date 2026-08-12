@@ -31,7 +31,7 @@ type actionPlay struct {
 // Falls back to the bare-handed script when the held item has none.
 func (g *Game) actionScript(objName string) (string, []byte, bool) {
 	char := "RO"
-	if strings.EqualFold(g.gs.Active, "Frid") {
+	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
 		char = "FR"
 	}
 	tok := func(s string) string {
@@ -43,7 +43,7 @@ func (g *Game) actionScript(objName string) (string, []byte, bool) {
 	}
 	obj := tok(objName)
 	names := []string{char + tok(g.gs.Active) + obj}
-	if !strings.EqualFold(g.gs.Active, "hand") {
+	if tok(g.gs.Active) != "HAN" {
 		names = append(names, char+"HAN"+obj) // the empty-handed default
 	}
 	for _, base := range names {
