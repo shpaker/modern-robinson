@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
@@ -19,6 +21,54 @@ const (
 
 // idleAfter is how long the hero stands still before playing his long idle.
 const idleAfter = 9.0
+
+// HEAD.MV is not an animation but a 3x3 table of standing poses: its nine
+// frames all carry the same Delay and no events, and every frame draws the same
+// body with only the head turned. Measured by the eyes in each frame, the
+// columns look left / straight / right and the rows look down / straight / up,
+// so the frame is chosen by where the cursor is relative to the hero's head —
+// he follows the mouse instead of rolling his head on a timer.
+const (
+	headCols    = 3
+	headDeadX   = 44 // cursor within this many px stays "straight ahead"
+	headDeadY   = 40
+	headEyeDX   = 30 // eyes relative to the cell anchor (Shift 116,85)
+	headEyeDY   = 15
+	headUpRow   = 2
+	headMidRow  = 1
+	headDownRow = 0
+)
+
+// headFrame picks the standing pose for a cursor offset from the hero's eyes.
+func headFrame(dx, dy int) int {
+	col := 1
+	switch {
+	case dx < -headDeadX:
+		col = 0
+	case dx > headDeadX:
+		col = 2
+	}
+	row := headMidRow
+	switch {
+	case dy < -headDeadY:
+		row = headUpRow
+	case dy > headDeadY:
+		row = headDownRow
+	}
+	return row*headCols + col
+}
+
+// lookAtCursor aims the hero's standing pose at the cursor. It only applies to
+// the standing loop (slot 0); the ok/bored chains are real animations.
+func (g *Game) lookAtCursor() {
+	if !g.idle.OK() || len(g.idle.Frames) < headCols*headCols {
+		return // not the nine-pose table: leave the frame alone
+	}
+	mx, my := ebiten.CursorPosition()
+	ex := int(g.pos[0]) - g.camX + headEyeDX
+	ey := int(g.pos[1]) + headEyeDY
+	g.frameI = headFrame(mx-ex, my-ey)
+}
 
 // loadCharacter reads ROBY.CHR and takes its standing animation and idle slots.
 func (g *Game) loadCharacter() {

@@ -87,7 +87,6 @@ type Game struct {
 	path       [][2]int
 	moving     bool
 	frameI     int
-	animT      float64
 
 	pending *types.Exit
 	msg     string
@@ -469,11 +468,9 @@ func (g *Game) Update() error {
 	g.updateIdle(dt)
 
 	if !g.moving {
-		g.animT += dt
-		if g.idle.OK() && g.animT >= 0.09 {
-			g.animT = 0
-			g.frameI = (g.frameI + 1) % len(g.idle.Frames)
-		}
+		// Standing still: the head follows the cursor (HEAD.MV is a pose table,
+		// not a loop — see idle.go).
+		g.lookAtCursor()
 	}
 	if g.msgT > 0 {
 		if g.msgT -= dt; g.msgT <= 0 {
