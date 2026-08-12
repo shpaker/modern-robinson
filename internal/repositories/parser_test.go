@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/shpaker/modern-robinson/internal/testutil"
@@ -63,8 +64,19 @@ func TestParseSceneAndExits(t *testing.T) {
 	if sc.GridShift != [2]int{46, -99} {
 		t.Errorf("GridShift = %v, want [46 -99]", sc.GridShift)
 	}
-	if len(sc.Objects) != 16 {
-		t.Errorf("objects = %d, want 16", len(sc.Objects))
+	// All seventeen rows of SCENA0's ObjectList, including the ambient driver
+	// named "sound" — a name that collides with a script keyword.
+	if len(sc.Objects) != 17 {
+		t.Errorf("objects = %d, want 17", len(sc.Objects))
+	}
+	var hasSound bool
+	for _, o := range sc.Objects {
+		if strings.EqualFold(o.Name, "sound") {
+			hasSound = true
+		}
+	}
+	if !hasSound {
+		t.Error("the object named \"sound\" was dropped as a keyword")
 	}
 	if sv, ok := sc.SoundVars["step"]; !ok || sv[0] != "step.wav" {
 		t.Errorf("step sound = %v, want step.wav", sv)

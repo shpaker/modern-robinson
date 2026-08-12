@@ -72,7 +72,14 @@ func statements(text string) []stmt {
 			if m != nil {
 				head = strings.ToLower(m[1])
 			}
-			if m != nil && keywords[head] {
+			// A list row names its own item first ("map,1,2,*", "sound,0,0"),
+			// and those names collide with script keywords. A real keyword
+			// always separates its arguments with whitespace, so a comma stuck
+			// straight onto the head word marks the line as data, not a new
+			// statement — without this, an object called "map" or "sound"
+			// silently drops itself and every row after it.
+			dataRow := m != nil && strings.HasPrefix(m[2], ",")
+			if m != nil && keywords[head] && !dataRow {
 				curKw = head
 				out = append(out, stmt{head, strings.TrimSpace(m[2])})
 			} else if curKw != "" {
