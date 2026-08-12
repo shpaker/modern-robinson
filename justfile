@@ -45,16 +45,6 @@ build-windows:
         -o "$out/{{binary_name}}_windows_amd64.exe" ./cmd
     echo "Windows build -> $out"
 
-build-wasm:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    VERSION="dev-$(date -u +%Y-%m-%dT%H:%M)"; out=dist/web; mkdir -p "$out"
-    GOOS=js GOARCH=wasm {{gocmd}} build -trimpath \
-        -ldflags "-s -w -X {{module}}/internal/app.Version=${VERSION}" \
-        -o "$out/{{binary_name}}.wasm" ./cmd
-    cp "$({{gocmd}} env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
-    echo "WASM build -> $out"
-
 build-all: build-macos build-linux build-windows
 
 # Запустить (нужна папка игры рядом или путём аргументом)
@@ -124,7 +114,7 @@ deps:
 
 clean:
     {{gocmd}} clean
-    rm -rf {{binary_name}} _build dist coverage.out coverage.html
+    rm -rf {{binary_name}} _build coverage.out coverage.html
 
 # --- self-test через headless vmhost (без окна) ------------------------------
 # Снимок одного кадра игры (окно как в оригинале: 640x480)

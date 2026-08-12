@@ -153,17 +153,20 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Idle chain: stand still until the long "bored" idle plays, then click to
-	// interrupt it (Interrupt is ON during cutscenes).
-	d.guest.AdvanceTicks(20)
-	_ = d.snapshot(0) // standing loop (HEAD.mv from ROBY.CHR)
-	d.guest.AdvanceTicks(560)
-	_ = d.snapshot(1) // the long idle started (roby1 chain)
-	d.guest.AdvanceTicks(60)
-	_ = d.snapshot(2) // mid idle animation
-	click(300, 300)   // click: skip / walk on
-	d.guest.AdvanceTicks(40)
-	_ = d.snapshot(3) // back under player control
+	// Translator puzzle: pick the first pictogram, then assign a letter.
+	d.guest.AdvanceTicks(10)
+	_ = d.snapshot(0) // the encoded message
+	click(66, 48)     // first pictogram of the message ("С")
+	d.guest.AdvanceTicks(4)
+	_ = d.snapshot(1) // selected (red frame)
+	click(106, 332)   // the letter "С" in the palette (row 2, col 3)
+	d.guest.AdvanceTicks(6)
+	_ = d.snapshot(2) // every "С" in the text turns into the letter
+	click(66, 48)
+	d.guest.AdvanceTicks(3)
+	click(20, 430) // erase button
+	d.guest.AdvanceTicks(6)
+	_ = d.snapshot(3) // erased: back to the pictogram
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

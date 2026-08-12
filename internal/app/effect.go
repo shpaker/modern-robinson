@@ -88,17 +88,6 @@ func (g *Game) setCharCoord(args []string) {
 	g.clampCamera()
 }
 
-// startMinigame handles StartGame gameId,resultVar,paramVar. The five original
-// minigames live in MINIGAME.DLL, which is not reimplemented yet, so the
-// result variable is set to success to keep the quest passable.
-func (g *Game) startMinigame(args []string) {
-	if len(args) < 2 {
-		return
-	}
-	g.gs.SetVar(args[1], 1)
-	g.msg, g.msgT = "Мини-игра пока пропускается", 2.5
-}
-
 // setToggle records an ON/OFF UI switch (map access, mouse lock, bar lock...).
 func (g *Game) setToggle(kw string, args []string) {
 	if len(args) < 1 {

@@ -41,6 +41,10 @@ func decodeCP1251(b []byte) string {
 	return sb.String()
 }
 
+// DecodeCP1251 converts Windows-1251 bytes to UTF-8 (exported for callers that
+// read raw CP1251 entries, such as the translator minigame's CRYPT.TXT).
+func DecodeCP1251(b []byte) string { return decodeCP1251(b) }
+
 // Texts returns the global string table (STARTUP.DAN:TEXT.DAT): one quoted
 // CP1251 line per string; Text ids are 0-based line numbers. Quotes are kept —
 // the original UI shows dialogue lines with them.

@@ -114,6 +114,10 @@ type Game struct {
 	volMusic   float64
 	speed      float64 // 0..1 game speed slider (0.5 = original pace)
 
+	mg      minigame // the minigame currently taking over the screen
+	mgVar   string   // quest variable its result goes into
+	mgParam int      // paramVar value the script passed in
+
 	// scene transition fade driven by the scene's .FAD table
 	fadeCurve []float64
 	fadeStep  int
@@ -157,6 +161,11 @@ func NewGame(res interfaces.IResources) *Game {
 	g.loadScreens()
 	if os.Getenv("ROBINSON_SCENE") != "" {
 		g.mode = modePlay // direct scene entry skips the boot screens
+	}
+	if mg := os.Getenv("ROBINSON_MINIGAME"); mg != "" {
+		// Debug/test aid: jump straight into a minigame by id.
+		g.mode = modePlay
+		g.startMinigame([]string{mg, "DebugResult", "Find6"})
 	}
 	if v := os.Getenv("ROBINSON_VARS"); v != "" {
 		// Debug/test aid: comma-separated name=value quest flags.
@@ -411,6 +420,9 @@ func (g *Game) Update() error {
 	if g.updateOptions() {
 		return nil // options / save / load own the frame
 	}
+	if g.updateMinigame(dt) {
+		return nil // a minigame owns the frame
+	}
 	// The speed slider scales the whole simulation, like the original's
 	// DelayFactor: 0.5 on the slider is the authored pace.
 	dt *= 0.5 + g.speed
@@ -501,6 +513,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	case modeOptions, modeSave, modeLoad:
 		g.drawOptions(screen)
+		return
+	}
+	if g.mg != nil {
+		g.drawMinigame(screen)
 		return
 	}
 	g.drawPlay(screen, true)

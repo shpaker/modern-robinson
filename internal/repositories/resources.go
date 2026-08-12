@@ -233,6 +233,24 @@ func (r *Resources) ScreenPack(pack string) (
 	return out, pal
 }
 
+// ScreenFile returns a raw entry of a top-level pack (e.g. CRYPT.DAT's
+// CRYPT.TXT), or nil when the pack or the entry is missing.
+func (r *Resources) ScreenFile(pack, name string) []byte {
+	p, ok := r.screenDat[strings.ToUpper(pack)]
+	if !ok {
+		return nil
+	}
+	c := r.container(p)
+	if c == nil {
+		return nil
+	}
+	d, err := c.ExtractName(strings.ToUpper(name))
+	if err != nil {
+		return nil
+	}
+	return d
+}
+
 // Screen returns a named full-screen bitmap from a top-level screen pack:
 // Screen("LOGO", "ROBINSON") is the title image of LOGO.DAT (pairs NAME.NGB +
 // NAME.COL). Returns nil if the pack or the image is absent.
