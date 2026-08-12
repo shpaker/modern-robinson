@@ -429,7 +429,10 @@ func (m *mapGame) draw(_ *Game, screen *ebiten.Image) {
 	for i := range order {
 		order[i] = i
 	}
-	sort.Slice(order, func(a, b int) bool { return m.z[order[a]] > m.z[order[b]] })
+	sort.Slice(
+		order,
+		func(a, b int) bool { return m.z[order[a]] > m.z[order[b]] },
+	)
 	for _, i := range order {
 		x, y := m.topLeft(i)
 		blitAt(screen, m.sprite(i), x, y)

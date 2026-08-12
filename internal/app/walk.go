@@ -242,7 +242,8 @@ func minInt(a, b int) int {
 // through fridEffect.
 func (g *Game) applyWalkEvents(evs []types.Command) {
 	for _, ev := range evs {
-		if strings.EqualFold(ev.Kw, "shift") && !g.fridEffect("shift", ev.Args) {
+		if strings.EqualFold(ev.Kw, "shift") &&
+			!g.fridEffect("shift", ev.Args) {
 			g.shiftCharCell(ev.Args)
 			continue
 		}

@@ -231,7 +231,10 @@ func (h *houseGame) draw(_ *Game, screen *ebiten.Image) {
 	for i := range order {
 		order[i] = i
 	}
-	sort.Slice(order, func(a, b int) bool { return h.z[order[a]] > h.z[order[b]] })
+	sort.Slice(
+		order,
+		func(a, b int) bool { return h.z[order[a]] > h.z[order[b]] },
+	)
 	for _, i := range order {
 		x, y := h.topLeft(i)
 		blitAt(screen, h.sprite(i), x, y)

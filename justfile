@@ -47,6 +47,28 @@ build-windows:
 
 build-all: build-macos build-linux build-windows
 
+# Собрать архивы для раздачи: бинарник + README + образец настроек
+release version="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=_build/release; rm -rf "$out"; mkdir -p "$out"
+    for target in macos:darwin:arm64:1:robinson_darwin_arm64 \
+                  linux:linux:amd64:0:robinson_linux_amd64 \
+                  windows:windows:amd64:0:robinson_windows_amd64.exe; do
+        IFS=: read -r name goos goarch cgo binary <<<"$target"
+        stage="$out/$name"; mkdir -p "$stage"
+        GOOS="$goos" GOARCH="$goarch" CGO_ENABLED="$cgo" {{gocmd}} build -trimpath \
+            -ldflags "-s -w -X {{module}}/internal/app.Version={{version}}" \
+            -o "$stage/$binary" ./cmd
+        cp README.md "$stage/"
+        cp packaging/config.yml "$stage/"
+        ( cd "$out" && zip -qr "modern-robinson_{{version}}_$name.zip" "$name" )
+        rm -rf "$stage"
+    done
+    ls -la "$out"
+    echo "The archives go next to the game's DATA/ folder; see README.md."
+
+
 # Запустить (нужна папка игры рядом или путём аргументом)
 run: build
     ./{{binary_name}}
