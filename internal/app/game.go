@@ -269,6 +269,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	for _, sp := range g.gs.Spawns(name) {
 		g.spawnObject(sp.Obj, sp.GX, sp.GY)
 	}
+	g.addExitObjects()
 	g.buildHotspots()
 	g.exitL, g.exitR = g.parser.SceneExits(c)
 
@@ -371,36 +372,43 @@ func (g *Game) click(mx, my int) {
 		return
 	}
 	wx, wy := mx+g.camX, my // viewport -> world
-	if e := g.edgeExit(mx); e != nil {
-		g.pending = e
-		return
-	}
 	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, wx, wy) {
-			switch strings.ToLower(hs.key) {
-			case "goleft":
-				if g.exitL.OK {
-					g.pending = &g.exitL
-					return
-				}
-			case "gorght":
-				if g.exitR.OK {
-					g.pending = &g.exitR
-					return
-				}
-			}
+		if !pointIn(hs.rect, wx, wy) {
+			continue
 		}
-	}
-	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, wx, wy) {
-			if !g.startObjectAction(hs.ob.Name) {
-				// No action script: examine — say the object's name.
-				if s := g.textLine(hs.ob.Text); s != "" {
-					g.msg, g.msgT = s, 2.5
-				}
-			}
+		// Leaving is an action like any other: the hero walks to the edge, plays
+		// his departure movie, says his line and the script's own GoScene takes
+		// him across. Only fall back to a bare jump when there is no script.
+		if g.startObjectAction(hs.key) {
 			return
 		}
+		switch strings.ToLower(hs.key) {
+		case "goleft":
+			if g.exitL.OK {
+				g.pending = &g.exitL
+				return
+			}
+		case "gorght":
+			if g.exitR.OK {
+				g.pending = &g.exitR
+				return
+			}
+		}
+		// No action script: examine — say the object's name.
+		if s := g.textLine(hs.ob.Text); s != "" {
+			g.msg, g.msgT = s, 2.5
+		}
+		return
+	}
+	// The exit zones sit off the edge of the scene, so once the view has
+	// scrolled inward they are no longer clickable; clicking the very edge of
+	// the viewport at the end of the scene means the same thing.
+	if e := g.edgeExit(mx); e != nil {
+		if g.startObjectAction(exitKey(e == &g.exitL)) {
+			return
+		}
+		g.pending = e
+		return
 	}
 	cx, cy := g.grid.ToCell(wx, wy)
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
@@ -792,13 +800,17 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 	)
 
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
-		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  dir=%d  moving=%v  fps=%.0f",
+		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  moving=%v  "+
+			"act=%s pend=%v cyc=%v goto=%v fps=%.0f",
 		Version,
 		g.sceneName,
 		g.cell,
 		g.camX,
-		g.curDir,
 		g.moving,
+		g.actDebug(),
+		g.pendingAct != nil,
+		g.roby.cycles,
+		g.pending != nil,
 		ebiten.ActualFPS(),
 	), 8, PlayH-32)
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
@@ -921,3 +933,42 @@ func pointIn(r image.Rectangle, x, y int) bool {
 }
 
 func rgba(r, g, b, a uint8) color.Color { return color.RGBA{r, g, b, a} }
+
+// addExitObjects puts the scene's two exit markers on stage. GOLEFT.OB and
+// GORGHT.OB are never listed in ObjectList — the engine always has them — and
+// they carry no sprite (FonScript NULL), only a tall ActiveZone along the scene
+// edge and the arrow cursor. They sit in the outermost walkable columns, which
+// is where their zones and the scripts' "Aproach Roby,goleft" expect them.
+func (g *Game) addExitObjects() {
+	nx, _ := g.grid.Dims()
+	for _, e := range []struct {
+		name string
+		gx   int
+	}{{"goleft", 0}, {"gorght", maxInt(0, nx-2)}} {
+		ob := g.objects[e.name]
+		if ob == nil {
+			continue
+		}
+		g.sceneObjs = append(g.sceneObjs, &sceneObj{
+			ref: types.ObjectRef{Name: e.name, GX: e.gx, GY: exitRow},
+			ob:  ob,
+			z:   exitRow*g.zper + ob.Z,
+		})
+	}
+}
+
+// exitKey names the exit object for a side.
+func exitKey(left bool) string {
+	if left {
+		return "goleft"
+	}
+	return "gorght"
+}
+
+// actDebug describes the running action for the debug overlay.
+func (g *Game) actDebug() string {
+	if g.act == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%d/%d", g.act.player.FrameIndex(), len(g.act.fs.Frames))
+}

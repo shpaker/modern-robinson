@@ -22,23 +22,55 @@ type actionPlay struct {
 	started bool // true once the walk finished and the movie is playing
 }
 
-// resolveAction builds the default (hand) action for an object: script
-// <RO|FR>HAN<token> in the scene container, where token = first 3 letters of
-// the object's name and the prefix follows the active character.
+// actionScript names the script a click runs: <RO|FR> + the held item's first
+// three letters + the object's first three (ROHANGOL is Roby, bare hand, the
+// left exit; ROAXEWOO is Roby chopping wood with the axe). A script may then
+// redirect its own successor through a character variable named after itself —
+// ROHANGOL ends with SetCharVar rohangol,"r1hangol", which is how the hero's
+// remark changes each time he leaves — so that redirection wins when set.
+// Falls back to the bare-handed script when the held item has none.
+func (g *Game) actionScript(objName string) (string, []byte, bool) {
+	char := "RO"
+	if strings.EqualFold(g.gs.Active, "Frid") {
+		char = "FR"
+	}
+	tok := func(s string) string {
+		s = strings.ToUpper(s)
+		if len(s) > 3 {
+			s = s[:3]
+		}
+		return s
+	}
+	obj := tok(objName)
+	names := []string{char + tok(g.gs.Active) + obj}
+	if !strings.EqualFold(g.gs.Active, "hand") {
+		names = append(names, char+"HAN"+obj) // the empty-handed default
+	}
+	for _, base := range names {
+		name := base
+		if v := g.gs.CharVar(strings.ToLower(base)); v != "" {
+			name = v // the script handed off to a variant of itself
+		}
+		if raw, err := g.sceneC.ExtractName(strings.ToUpper(name) + ".FS"); err == nil {
+			return name, raw, true
+		}
+		if name != base {
+			if raw, err := g.sceneC.ExtractName(base + ".FS"); err == nil {
+				return base, raw, true
+			}
+		}
+	}
+	return "", nil, false
+}
+
+// resolveAction builds the action a click on an object runs: walk to its Aproach
+// cell, then play the script's movie and events.
 func (g *Game) resolveAction(objName string) *actionPlay {
 	if g.sceneC == nil {
 		return nil
 	}
-	tok := strings.ToUpper(objName)
-	if len(tok) > 3 {
-		tok = tok[:3]
-	}
-	prefix := "ROHAN"
-	if strings.EqualFold(g.gs.Active, "Frid") {
-		prefix = "FRHAN"
-	}
-	raw, err := g.sceneC.ExtractName(prefix + tok + ".FS")
-	if err != nil {
+	_, raw, ok := g.actionScript(objName)
+	if !ok {
 		return nil
 	}
 	fs := g.parser.ParseFrameScript(string(raw))

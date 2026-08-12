@@ -131,14 +131,18 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// dirs8 lists the eight step directions with the straight ones first. Both a
+// diagonal and a straight route can be the same number of cells, and the search
+// keeps whichever it reaches first — trying straight steps first stops it from
+// answering with a zig-zag when a level walk exists.
 var dirs8 = [8][2]int{
-	{-1, -1},
-	{0, -1},
-	{1, -1},
 	{-1, 0},
 	{1, 0},
-	{-1, 1},
+	{0, -1},
 	{0, 1},
+	{-1, -1},
+	{1, -1},
+	{-1, 1},
 	{1, 1},
 }
 

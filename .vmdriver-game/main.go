@@ -160,16 +160,20 @@ func (d *driver) Update() error {
 	click(320, 240) // skip title -> New Game
 	// Walk check (ROBINSON_SCENE=SCENA0): click far left on the sand and sample
 	// the walk every few ticks — the figure must stride, not slide or jump.
-	// Object action (ROBINSON_SCENE=SCENA0): click the stone on the sand and
-	// watch him walk over and act, rather than slide there.
+	// Exit check (ROBINSON_SCENE=SCENA0): click the left edge arrow. He should
+	// walk to the edge, play his departure, say his line, then cross to SCENA1.
 	d.guest.AdvanceTicks(40)
-	_ = d.snapshot(0) // before
-	click(400, 285)   // bgstone's hit zone
+	d.guest.PressKey(ebiten.KeyF1)
+	d.guest.AdvanceTicks(1)
+	d.guest.ReleaseKey(ebiten.KeyF1)
+	click(6, 250) // walk west; the view scrolls to the scene edge
+	d.guest.AdvanceTicks(220)
+	_ = d.snapshot(0)
+	click(6, 250) // now the exit zone is on screen: leave to the west
 	for i := 1; i <= 5; i++ {
-		d.guest.AdvanceTicks(20)
+		d.guest.AdvanceTicks(150)
 		_ = d.snapshot(i)
 	}
-	_ = click
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
