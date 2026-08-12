@@ -15,8 +15,7 @@
 - **Движок:** **NGI — Nikita Game Interface** (реестр `Software\Nikita\NgiTool`,
   строка `Nikita Game Interface Error` в `NGI32.DLL`)
 
-Источник образа: раздача old-games.ru (`old-games.nfo`), архив
-`Noviy_Robinson_ISO.rar` → `ROBINSON.iso`.
+Источник данных: образ диска `ROBINSON.iso`, распакованный в папку.
 
 ## Статус реверса
 
@@ -31,7 +30,13 @@
 | Формат спрайта `.NGB` (оба подтипа) | ✅ вскрыт | [03-resource-types.md](03-resource-types.md) |
 | Скриптовый язык (`.FS`/`.SCN`/`.OB`) | ✅ читается | [04-script-language.md](04-script-language.md) |
 | Формат бинарного скрипта `.SCR` | 🟡 разобран структурно | [04-script-language.md](04-script-language.md) |
-| Формат сейва `.SAV`/`.BGI` | 🟡 разобран структурно | [03-resource-types.md](03-resource-types.md) |
+| Формат сейва `.SAV`/`.BGI` | ✅ вскрыт (стартовое состояние) | [03-resource-types.md](03-resource-types.md) |
+| Таблица затемнения `.FAD` | ✅ вскрыта | [03-resource-types.md](03-resource-types.md) |
+| Глобальные данные (`STARTUP.INF`, `TEXT.DAT`) | ✅ вскрыты | [04-script-language.md](04-script-language.md) |
+| Панель инвентаря (`BAR.BAR` + `BAR.DAT`) | ✅ вскрыта | [03-resource-types.md](03-resource-types.md) |
+| Персонажи (`.CHR`, `DO.LST`, циклы ходьбы) | ✅ вскрыты | [09-characters.md](09-characters.md) |
+| Мини-игры (ассеты и раскладки) | ✅ вскрыты | [10-minigames.md](10-minigames.md) |
+| Мини-игры (правила в `MINIGAME.DLL`) | 🟡 частично | [10-minigames.md](10-minigames.md) |
 
 **Декодируемость: 100 %** всех записей (все четыре кодека реализованы:
 `0x00` raw, `0x40` LZSS, `0x80` LZHUF, `0x100` DEFLATE).
@@ -39,10 +44,11 @@
 ## Ремейк
 
 Движок на Go + Ebitengine — в корне репозитория ([`../README.md`](../README.md),
-[`../ARCHITECTURE.md`](../ARCHITECTURE.md)): рендер родных сцен, ходьба по
-изосетке, кликабельные объекты, переходы между локациями. Это подтверждает
-главный вывод: геймплей задан данными, и ремейк сводится к интерпретатору
-ресурсов.
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md)). Работает в родном окне 640×480
+(viewport 640×400 со скроллом + панель 80 px): рендер сцен и анимаций, ходьба
+по авторским циклам, интерпретатор квеста, инвентарь, тексты, сохранения,
+опции, музыка, катсцены, оба персонажа. Это подтверждает главный вывод:
+геймплей задан данными, и ремейк сводится к интерпретатору ресурсов.
 
 ## Инструментарий
 
@@ -62,11 +68,15 @@ python tools/ngiunpack.py scan    <root>          # инвентарь всех 
 ## Карта документации
 
 - [01-container-format.md](01-container-format.md) — контейнер `NL`, заголовок, шифр директории.
-- [02-compression.md](02-compression.md) — три кодека `ngiUnpack` + нерешённый `0x100`.
-- [03-resource-types.md](03-resource-types.md) — типы записей: `NGB`, `COL`, `WAV`, `FAD`, `CHR`, сейвы.
-- [04-script-language.md](04-script-language.md) — язык сцен и кадровых скриптов.
+- [02-compression.md](02-compression.md) — все четыре кодека `ngiUnpack`.
+- [03-resource-types.md](03-resource-types.md) — типы записей: `NGB`, `COL`, `WAV`, `FAD`, `CHR`, `BGI`, панель.
+- [04-script-language.md](04-script-language.md) — язык сцен и кадровых скриптов, глобальные данные.
 - [05-engine.md](05-engine.md) — устройство движка, DLL, ключевые адреса в `NGI32.DLL`.
 - [06-remake-roadmap.md](06-remake-roadmap.md) — что осталось и план ремейка.
+- [07-fs-scripting.md](07-fs-scripting.md) — полная спецификация языка `.FS` (38 команд).
+- [08-scene-objects.md](08-scene-objects.md) — объекты сцены: позиционирование, Z-порядок, курсоры.
+- [09-characters.md](09-characters.md) — персонажи: `.CHR`, `DO.LST`, циклы ходьбы, простои, Пятница.
+- [10-minigames.md](10-minigames.md) — шесть мини-игр: контейнеры, раскладки, что реализовано.
 - [assets/inventory.md](assets/inventory.md) — полный инвентарь 736 контейнеров.
 
 > Все адреса функций и смещения даны для конкретных файлов с диска и

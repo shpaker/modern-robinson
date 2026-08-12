@@ -161,3 +161,30 @@ End;
 (640×480), `origin`(393,293). Далее с `0x20` — пары `u32` `(субкадр, индекс)`,
 по одной на кадр (аналог текстового `Frame idx,sub`). Для ремейка не критично:
 порядок и число кадров восстанавливаются из имён `.NGB` и заголовков.
+
+---
+
+## Глобальные данные: `STARTUP.INF` и `TEXT.DAT`
+
+`DATA/STARTUP.DAN` содержит два ключевых файла.
+
+**`STARTUP.INF`** — «boot-файл» движка:
+
+```
+SceneDirectory  \SCEN;   MovieDirectory \MOVIE;   WaveDirectory \WAVE;
+CharacterDirectory \CHAR;  BarDirectory \BAR;      Text text.dat;
+Scenes          INT0,*;  INT1; … SHIP3;      (39 сцен, * = стартовая)
+Characters      Frid, 7, 0, 0, *;  Roby, 7, 0, 4, *;
+IntVariables    CrabNeed,0; … TreeIs,1; … MapParts,4; Find6,30; …
+CharVariables   rohangol,"rohangol"; … rohanpop,"hirobin"; …
+GridDebug 0;  DelayFactor 1;  End;
+```
+
+Важно: **не все флаги стартуют нулём** (`TreeIs=1`, `MapParts=4`, `Find6=30`),
+поэтому без загрузки этого файла ранние проверки `If` уходят не в ту ветку.
+`CharVariables` — указатели на «текущий вариант» реплики, их крутит `SetCharVar`.
+
+**`TEXT.DAT`** — глобальная таблица строк (CP1251, 1202 строки). Идентификатор в
+`Text <id>,1;` и в поле `Text` объекта `.OB` — это **номер строки, считая с нуля**.
+Строки реплик записаны в кавычках, названия объектов — без. Проверка: у объекта
+`palma` `Text 2`, строка 2 — `"Пальма"`; у `bgstone` `Text 9` — `"Большой камень"`.
