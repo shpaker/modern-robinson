@@ -202,7 +202,8 @@ func (g *Game) fridWalkTo(gx, gy int) {
 		g.fridSync()
 		return
 	}
-	p := g.grid.Path(g.fridCell, [2]int{tx, ty})
+	// Friday only has the four arrow cycles, so his route must avoid diagonals.
+	p := g.grid.PathStraight(g.fridCell, [2]int{tx, ty})
 	if len(p) < 2 {
 		g.fridCell = [2]int{tx, ty}
 		g.fridSync()

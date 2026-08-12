@@ -189,11 +189,10 @@ func (g *Game) setVert(args []string) {
 	if len(args) < 3 {
 		return
 	}
-	g.grid.SetVert(
-		atoiArg(args[0]),
-		atoiArg(args[1]),
-		strings.EqualFold(args[2], "open"),
-	)
+	gx, gy := atoiArg(args[0]), atoiArg(args[1])
+	open := strings.EqualFold(args[2], "open")
+	g.grid.SetVert(gx, gy, open)
+	g.gs.MarkVert(g.sceneName, gx, gy, open) // survives leaving the scene
 }
 
 // setMusic switches the looping background track: SetMusic id|none. Track ids

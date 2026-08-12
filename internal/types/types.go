@@ -79,6 +79,9 @@ type SceneObject struct {
 	ActiveZone [4]int // x,y,w,h
 	Cursor     int
 	Text       int
+	// ClosedVert are the cells the object blocks, relative to its own cell:
+	// the crab, the bridge logs and the finished hut all stand in the way.
+	ClosedVert [][2]int
 }
 
 // Command is one event line inside a frame (e.g. Sound, Text, Set, GoScene).

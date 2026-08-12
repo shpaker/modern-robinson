@@ -272,6 +272,10 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	for _, sp := range g.gs.Spawns(name) {
 		g.spawnObject(sp.Obj, sp.GX, sp.GY)
 	}
+	g.applyObjectBlocking()
+	for _, v := range g.gs.Verts(name) {
+		g.grid.SetVert(v.GX, v.GY, v.Open) // replay this run's SetVert edits
+	}
 	g.buildHotspots()
 	g.exitL, g.exitR = g.parser.SceneExits(c)
 
@@ -966,4 +970,18 @@ func (g *Game) actDebug() string {
 		return "-"
 	}
 	return fmt.Sprintf("%d/%d", g.act.player.FrameIndex(), len(g.act.fs.Frames))
+}
+
+// applyObjectBlocking closes the cells the objects on stage stand in. An .OB
+// carries its ClosedVert relative to its own cell, which is how the crab, the
+// bridge logs and the finished hut keep the hero from walking through them.
+func (g *Game) applyObjectBlocking() {
+	for _, s := range g.sceneObjs {
+		if s.removed || s.ob == nil {
+			continue
+		}
+		for _, c := range s.ob.ClosedVert {
+			g.grid.SetVert(s.ref.GX+c[0], s.ref.GY+c[1], false)
+		}
+	}
 }

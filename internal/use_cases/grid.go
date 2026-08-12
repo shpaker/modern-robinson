@@ -21,19 +21,24 @@ import (
 type Grid struct {
 	lx, ly, sx, sy, hx, hy, nx, ny int
 	blocked                        map[[2]int]bool
+	boundsW, boundsH               int
 }
 
 var _ interfaces.IGrid = (*Grid)(nil)
 
-// NewGrid builds a walk grid from a scene. The bounds arguments are accepted for
-// compatibility but no longer clip the lattice: every declared cell is valid.
-func NewGrid(sc *types.Scene, _, _ int) *Grid {
+// NewGrid builds a walk grid from a scene, clipped to the scene surface: a
+// declared cell whose anchor falls outside it is unreachable. The lattice itself
+// runs past the surface in almost every scene (CAB_A1's last columns anchor at
+// x 727..1015 in a 640-wide room), and the camera is clamped to the scene, so a
+// character sent there would simply be gone from the screen.
+func NewGrid(sc *types.Scene, boundsW, boundsH int) *Grid {
 	g := &Grid{
 		lx: sc.LeftTopGrid[0], ly: sc.LeftTopGrid[1],
 		sx: sc.GridSize[0], sy: sc.GridSize[1],
 		hx: sc.GridShift[0], hy: sc.GridShift[1],
 		nx: sc.GridLength[0], ny: sc.GridLength[1],
 		blocked: map[[2]int]bool{},
+		boundsW: boundsW, boundsH: boundsH,
 	}
 	if g.sx == 0 {
 		g.sx = 1
@@ -90,12 +95,20 @@ func (g *Grid) ToCell(px, py int) (int, int) {
 	return floorDiv(px-g.lx, g.sx), floorDiv(py-g.ly, g.sy)
 }
 
-// Valid reports whether a cell is on-grid and unblocked.
+// Valid reports whether a cell is on-grid, unblocked, and anchored inside the
+// scene surface.
 func (g *Grid) Valid(gx, gy int) bool {
 	if gx < 0 || gx >= g.nx || gy < 0 || gy >= g.ny {
 		return false
 	}
-	return !g.blocked[[2]int{gx, gy}]
+	if g.blocked[[2]int{gx, gy}] {
+		return false
+	}
+	if g.boundsW <= 0 || g.boundsH <= 0 {
+		return true
+	}
+	x, y := g.ToScreen(gx, gy)
+	return x >= 0 && x < g.boundsW && y >= 0 && y < g.boundsH
 }
 
 // NearestFree returns the closest walkable cell to (gx,gy).
@@ -146,8 +159,24 @@ var dirs8 = [8][2]int{
 	{1, 1},
 }
 
-// Path returns cells from start to goal (inclusive) via BFS, or nil if none.
+// dirs4 are the straight steps, the only ones an ArrowGoing character has
+// cycles for; his route has to be built from these or the cycle that plays
+// carries only one axis of the step and he lands in the wrong cell.
+var dirs4 = [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+
+// Path returns cells from start to goal (inclusive) via BFS over all eight
+// directions, or nil if none.
 func (g *Grid) Path(start, goal [2]int) [][2]int {
+	return g.path(start, goal, dirs8[:])
+}
+
+// PathStraight is Path restricted to the four straight directions, for the
+// characters whose walk cycles only cover those.
+func (g *Grid) PathStraight(start, goal [2]int) [][2]int {
+	return g.path(start, goal, dirs4[:])
+}
+
+func (g *Grid) path(start, goal [2]int, dirs [][2]int) [][2]int {
 	if start == goal {
 		return [][2]int{goal}
 	}
@@ -162,7 +191,7 @@ func (g *Grid) Path(start, goal [2]int) [][2]int {
 		if cur == goal {
 			break
 		}
-		for _, d := range dirs8 {
+		for _, d := range dirs {
 			nb := [2]int{cur[0] + d[0], cur[1] + d[1]}
 			if _, seen := prev[nb]; !seen && g.Valid(nb[0], nb[1]) {
 				prev[nb] = cur

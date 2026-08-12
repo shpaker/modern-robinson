@@ -67,5 +67,7 @@ type IGrid interface {
 	SetVert(gx, gy int, open bool)
 	NearestFree(gx, gy int) (int, int, bool)
 	Path(start, goal [2]int) [][2]int
+	// PathStraight avoids diagonals, for ArrowGoing characters.
+	PathStraight(start, goal [2]int) [][2]int
 	Dims() (int, int)
 }

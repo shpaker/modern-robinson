@@ -27,6 +27,7 @@ type GameState struct {
 
 	gone    map[string]map[string]bool // scene -> object -> removed (DelObject)
 	spawned map[string][]Spawn         // scene -> objects added (CreateObject)
+	verts   map[string][]Vert          // scene -> SetVert overrides
 
 	UI map[string]bool // SetMouse/SetMap/LockBar/SetBar/ShowCursor/Interrupt toggles
 }
@@ -40,6 +41,7 @@ func NewGameState() *GameState {
 		CharVars: map[string]string{},
 		gone:     map[string]map[string]bool{},
 		spawned:  map[string][]Spawn{},
+		verts:    map[string][]Vert{},
 		UI:       map[string]bool{"mouse": true, "bar": true, "cursor": true},
 	}
 }
@@ -147,6 +149,32 @@ func (g *GameState) Spawns(scene string) []Spawn {
 	return g.spawned[strings.ToLower(scene)]
 }
 
+// MarkVert records a SetVert so the reshaped walk grid survives revisits: the
+// scene is rebuilt from its .SCN on every entry, and without this the cells a
+// script closed (the hut it just built) would open again.
+func (g *GameState) MarkVert(scene string, gx, gy int, open bool) {
+	key := strings.ToLower(scene)
+	for i, v := range g.verts[key] {
+		if v.GX == gx && v.GY == gy {
+			g.verts[key][i].Open = open
+			return
+		}
+	}
+	g.verts[key] = append(g.verts[key], Vert{GX: gx, GY: gy, Open: open})
+}
+
+// Verts returns the SetVert overrides recorded for a scene.
+func (g *GameState) Verts(scene string) []Vert {
+	return g.verts[strings.ToLower(scene)]
+}
+
+// Vert is one runtime passability override recorded by SetVert.
+type Vert struct {
+	GX   int  `json:"gx"`
+	GY   int  `json:"gy"`
+	Open bool `json:"open"`
+}
+
 // SaveData is a serialisable snapshot of the quest state plus the party's
 // location — the whole save file.
 type SaveData struct {
@@ -161,6 +189,7 @@ type SaveData struct {
 	UI         map[string]bool     `json:"ui"`
 	Gone       map[string][]string `json:"gone"`
 	Spawned    map[string][]Spawn  `json:"spawned"`
+	Verts      map[string][]Vert   `json:"verts,omitempty"`
 }
 
 // Snapshot captures the full state for saving.
@@ -170,7 +199,7 @@ func (g *GameState) Snapshot(scene string, cell [2]int) SaveData {
 		Vars: g.Vars, CharVars: g.CharVars,
 		Inventory: g.Inventory, Active: g.Active, ActiveChar: g.ActiveChar,
 		UI:   g.UI,
-		Gone: map[string][]string{}, Spawned: g.spawned,
+		Gone: map[string][]string{}, Spawned: g.spawned, Verts: g.verts,
 	}
 	for sc, m := range g.gone {
 		for obj, v := range m {
@@ -204,6 +233,11 @@ func Restore(sd SaveData) *GameState {
 		for _, o := range objs {
 			g.MarkGone(sc, o)
 		}
+	}
+	if sd.Verts != nil {
+		g.verts = sd.Verts
+	} else {
+		g.verts = map[string][]Vert{}
 	}
 	if sd.Spawned != nil {
 		g.spawned = sd.Spawned
