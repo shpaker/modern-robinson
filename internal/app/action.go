@@ -85,7 +85,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	if !ok {
 		return nil
 	}
-	tx, ty := aproachTarget(fs, ocx, ocy)
+	tx, ty := aproachTarget(fs, ocx, ocy, g.objCell)
 	fx, fy, _ := g.grid.NearestFree(tx, ty)
 	return &actionPlay{
 		fs:     fs,
@@ -97,8 +97,14 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 }
 
 // aproachTarget reads the first Aproach event to find the action's target cell.
-// Forms: (Roby, obj, dx, dy) -> object cell + offset; (Roby, gx, gy) -> absolute.
-func aproachTarget(fs *types.FrameScript, ocx, ocy int) (int, int) {
+// Forms: (Roby, obj, dx, dy) -> that object's cell + offset; (Roby, gx, gy) ->
+// absolute. The object named in the event is not always the one clicked --
+// SCENA4's ROHATGOL sends the hero to gorght because the hat glide starts at
+// the far edge -- so cellOf resolves the name and the clicked object's own cell
+// is only the fallback.
+func aproachTarget(
+	fs *types.FrameScript, ocx, ocy int, cellOf func(string) (int, int, bool),
+) (int, int) {
 	for _, fr := range fs.Frames {
 		for _, ev := range fr.Events {
 			if ev.Kw != "aproach" {
@@ -109,7 +115,11 @@ func aproachTarget(fs *types.FrameScript, ocx, ocy int) (int, int) {
 			case 4:
 				dx, _ := strconv.Atoi(a[2])
 				dy, _ := strconv.Atoi(a[3])
-				return ocx + dx, ocy + dy
+				tx, ty := ocx, ocy
+				if cx, cy, ok := cellOf(a[1]); ok {
+					tx, ty = cx, cy
+				}
+				return tx + dx, ty + dy
 			case 3:
 				gx, _ := strconv.Atoi(a[1])
 				gy, _ := strconv.Atoi(a[2])

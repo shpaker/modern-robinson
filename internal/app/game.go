@@ -84,6 +84,7 @@ type Game struct {
 	cycleCache map[string]*walkCycle
 	roby       walker
 	curDir     int
+	robyZ      int // Set Roby,Z sub-slot; STARTUP.INF starts him at 7
 	cell       [2]int
 	pos        [2]float64
 	path       [][2]int
@@ -136,6 +137,7 @@ func NewGame(res interfaces.IResources) *Game {
 		audio:      adapters.NewAudio(SampleRate),
 		cycleCache: map[string]*walkCycle{},
 		curDir:     6,
+		robyZ:      charZCoord,
 		debug:      DebugFlag == "true",
 		gs:         types.NewGameState(),
 	}
@@ -516,6 +518,7 @@ func (g *Game) resetRun() {
 	g.pending = nil
 	g.mg, g.mgVar, g.mgParam, g.mgResume = nil, "", 0, nil
 	g.idleAct, g.idleT = nil, 0
+	g.robyZ = charZCoord
 	g.fridHidden, g.fridCell, g.fridZ = true, [2]int{}, 7
 	g.invScroll = 0
 	g.loadCharacter() // SetRest edits do not outlive the run that made them
@@ -533,7 +536,8 @@ func (g *Game) restart() {
 	g.mode = modePlay
 }
 
-// charZCoord gives the character a mid/front sub-slot within its grid row.
+// charZCoord is the hero's starting sub-slot within his grid row, the value
+// STARTUP.INF gives him; the walk cycles move him off it with Set Roby,Z.
 const charZCoord = 7
 
 // Draw renders one frame: the scrolled scene background, then objects and the
@@ -586,7 +590,7 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	items = append(
 		items,
 		drawable{
-			g.cell[1]*g.zper + charZCoord,
+			g.cell[1]*g.zper + g.robyZ,
 			kindChar,
 			func() { g.drawCharacter(screen) },
 		},

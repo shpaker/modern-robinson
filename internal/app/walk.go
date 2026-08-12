@@ -233,22 +233,22 @@ func minInt(a, b int) int {
 	return b
 }
 
-// applyWalkEvents applies the events a walk cycle fired. "Shift char,X|Y,±n"
-// is the authored cell step — the only thing that moves a walking character
-// between cells; "Set char,Z,n" is its draw-order slot; Sound is the footstep.
-// Everything else goes through the normal interpreter.
+// applyWalkEvents applies the events a walk cycle fired. Only the relative cell
+// step is special: "Shift char,X|Y,±n" is what actually moves a walking
+// character, and the interpreter has no case for it. Everything else -- the
+// footstep sound and the "Set char,Z,n" that chooses the draw-order slot -- goes
+// through the ordinary dispatch, which is what gives Friday's events their turn
+// through fridEffect.
 func (g *Game) applyWalkEvents(evs []types.Command) {
 	for _, ev := range evs {
-		switch strings.ToLower(ev.Kw) {
-		case "shift":
+		if strings.EqualFold(ev.Kw, "shift") && !g.fridEffect("shift", ev.Args) {
 			g.shiftCharCell(ev.Args)
-		case "sound":
-			g.playSound(ev.Args)
-		case "set":
-			g.setCharCoord(ev.Args)
-		default:
-			g.applyEvents([]types.Command{ev})
+			continue
 		}
+		if strings.EqualFold(ev.Kw, "shift") {
+			continue // fridEffect took it
+		}
+		g.applyEffect(ev)
 	}
 }
 

@@ -87,8 +87,13 @@ func (g *Game) setCharCoord(args []string) {
 		g.cell[0] = n
 	case "Y":
 		g.cell[1] = n
+	case "Z":
+		// The walk cycles choreograph this per step so the hero can pass
+		// behind same-row props; it is his sub-slot, not his row.
+		g.robyZ = n
+		return
 	default:
-		return // Z: draw-order tweak, charZCoord covers the common case
+		return
 	}
 	px, py := g.grid.ToScreen(g.cell[0], g.cell[1])
 	g.pos = [2]float64{float64(px), float64(py)}
