@@ -160,20 +160,18 @@ func (d *driver) Update() error {
 	click(320, 240) // skip title -> New Game
 	// Walk check (ROBINSON_SCENE=SCENA0): click far left on the sand and sample
 	// the walk every few ticks — the figure must stride, not slide or jump.
-	// Exit check (ROBINSON_SCENE=SCENA0): click the left edge arrow. He should
-	// walk to the edge, play his departure, say his line, then cross to SCENA1.
+	// Full-run check: from the boot screens through the intro chain to the
+	// island, with the script trace on so the log shows the quest advancing.
+	click(320, 240) // skip the logo
+	d.guest.AdvanceTicks(4)
+	click(320, 240) // skip the title: New Game
 	d.guest.AdvanceTicks(40)
-	d.guest.PressKey(ebiten.KeyF1)
-	d.guest.AdvanceTicks(1)
-	d.guest.ReleaseKey(ebiten.KeyF1)
-	click(6, 250) // walk west; the view scrolls to the scene edge
-	d.guest.AdvanceTicks(220)
-	_ = d.snapshot(0)
-	click(6, 250) // now the exit zone is on screen: leave to the west
-	for i := 1; i <= 5; i++ {
-		d.guest.AdvanceTicks(150)
-		_ = d.snapshot(i)
-	}
+	_ = d.snapshot(0) // INT1: the room
+	click(320, 200)   // Interrupt ON: skip the cutscene
+	d.guest.AdvanceTicks(60)
+	_ = d.snapshot(1) // SCENA0: washed ashore
+	d.guest.AdvanceTicks(200)
+	_ = d.snapshot(2) // awake
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
