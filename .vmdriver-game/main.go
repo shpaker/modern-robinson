@@ -153,11 +153,20 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Scene render check (set ROBINSON_SCENE to pick the scene): settle and
-	// snapshot, so object placement can be eyeballed after geometry changes.
-	_ = click
-	d.guest.AdvanceTicks(40)
-	_ = d.snapshot(0)
+	// Intro check: skip the logo and title, then sample the opening cutscene
+	// chain (INT0 note -> INT1 room with the TV -> SCENA0 wake).
+	click(320, 240) // skip logo
+	d.guest.AdvanceTicks(4)
+	click(320, 240) // skip title -> New Game
+	d.guest.AdvanceTicks(60)
+	_ = d.snapshot(0) // the room cutscene is running
+	click(320, 200)   // Interrupt ON: skip it
+	d.guest.AdvanceTicks(30)
+	_ = d.snapshot(1) // should be fading into / arriving at SCENA0
+	d.guest.AdvanceTicks(120)
+	_ = d.snapshot(2) // the island, hero awake
+	d.guest.AdvanceTicks(180)
+	_ = d.snapshot(3)
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

@@ -678,11 +678,15 @@ func drawTriangle(
 }
 
 func (g *Game) drawCharacter(screen *ebiten.Image) {
-	if g.charHidden {
-		return // HideChar: hero not on stage (cutscene / off-screen)
-	}
+	// An action or entry movie is a cutscene and plays even when the hero is
+	// off stage: the intro bridges carry no controllable hero but do run entry
+	// animations (INT1.FS is the whole room-and-TV opening), and a script that
+	// hides Roby while Friday acts still needs Friday's movie drawn.
 	if g.drawAction(screen) {
 		return // an action movie is playing in place of idle/walk
+	}
+	if g.charHidden {
+		return // HideChar: hero not on stage
 	}
 	a, fidx := g.idle, g.frameI
 	switch {
