@@ -102,6 +102,16 @@ type FrameScript struct {
 	Looping bool
 }
 
+// Character is a parsed .CHR: the walk mode and the three idle slots the engine
+// cycles through — [0] standing, [1] the acknowledge animation, [2] the long
+// idle SetRest swaps out.
+type Character struct {
+	Name     string
+	MoveType string // NumPadGoing (8 directions) or ArrowGoing (4)
+	Idle     [3]string
+	Items    []string
+}
+
 // Exit is a scene transition target reached from an edge / arrow object or a
 // GoScene command; Entry names the hero's arrival .FS, EntryFrid the second
 // character's (7-arg GoScene moves both).

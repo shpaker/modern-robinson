@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -57,6 +56,9 @@ type Game struct {
 	charHidden bool
 
 	fridCell   [2]int
+	fridPos    [2]float64
+	fridPath   [][2]int
+	fridWalk   walker
 	fridZ      int
 	fridHidden bool
 	fridIdle   *adapters.Animation
@@ -73,15 +75,19 @@ type Game struct {
 	act        *actionPlay
 	pendingAct *actionPlay
 
-	idle      *adapters.Animation
-	walkCache map[int]*adapters.Animation
-	curDir    int
-	cell      [2]int
-	pos       [2]float64
-	path      [][2]int
-	moving    bool
-	frameI    int
-	animT     float64
+	idle       *adapters.Animation
+	idleAct    *idlePlay
+	restSlots  [3]string
+	idleT      float64
+	cycleCache map[string]*walkCycle
+	roby       walker
+	curDir     int
+	cell       [2]int
+	pos        [2]float64
+	path       [][2]int
+	moving     bool
+	frameI     int
+	animT      float64
 
 	pending *types.Exit
 	msg     string
@@ -119,13 +125,13 @@ type Game struct {
 // NewGame builds a game over the given resources and starts at SCENA0.
 func NewGame(res interfaces.IResources) *Game {
 	g := &Game{
-		res:       res,
-		parser:    repositories.SceneParser{},
-		audio:     adapters.NewAudio(SampleRate),
-		walkCache: map[int]*adapters.Animation{},
-		curDir:    6,
-		debug:     DebugFlag == "true",
-		gs:        types.NewGameState(),
+		res:        res,
+		parser:     repositories.SceneParser{},
+		audio:      adapters.NewAudio(SampleRate),
+		cycleCache: map[string]*walkCycle{},
+		curDir:     6,
+		debug:      DebugFlag == "true",
+		gs:         types.NewGameState(),
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.optHover, g.optDrag = -1, -1
@@ -136,6 +142,7 @@ func NewGame(res interfaces.IResources) *Game {
 	g.seedStartup()
 	g.loadBar()
 	g.loadOptions()
+	g.loadCharacter()
 	// Starting inventory per ROBY.CHR (Items hand, hat).
 	g.gs.AddItem("hand")
 	g.gs.AddItem("hat")
@@ -251,8 +258,9 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.buildHotspots()
 	g.exitL, g.exitR = g.parser.SceneExits(c)
 
-	g.idle = adapters.LoadAnimation(g.res, "Roby1.mv")
-	g.walkCache = map[int]*adapters.Animation{}
+	g.roby = walker{prefix: "RG", chr: "ROBY"}
+	g.fridWalk = walker{prefix: "FG", chr: "FRID"}
+	g.fridPath = nil
 	start := g.spawnCell(spawn)
 	g.cell = start
 	px, py := g.grid.ToScreen(start[0], start[1])
@@ -326,19 +334,11 @@ func (g *Game) spawnCell(spawn *[2]int) [2]int {
 	return [2]int{x, y}
 }
 
-func (g *Game) walkAnim(dir int) *adapters.Animation {
-	if a, ok := g.walkCache[dir]; ok {
-		return a
-	}
-	a := adapters.LoadAnimation(g.res, fmt.Sprintf("Rg_%d%d.mv", dir, dir))
-	if !a.OK() {
-		a = g.idle
-	}
-	g.walkCache[dir] = a
-	return a
-}
-
 func (g *Game) click(mx, my int) {
+	g.idleAct = nil // any click cuts the idle chatter short
+	if g.act != nil && g.skipCutscene() {
+		return // Interrupt ON: the click fast-forwards the cutscene
+	}
 	if g.act != nil || g.pendingAct != nil {
 		return // ignore input while an action is walking/playing
 	}
@@ -382,6 +382,7 @@ func (g *Game) click(mx, my int) {
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
 		if p := g.grid.Path(g.cell, [2]int{tx, ty}); len(p) > 1 {
 			g.path = p[1:]
+			g.startWalk(&g.roby, g.cell, g.path)
 		}
 	}
 }
@@ -423,23 +424,12 @@ func (g *Game) Update() error {
 
 	g.moving = len(g.path) > 0
 	if g.moving {
-		tx, ty := g.grid.ToScreen(g.path[0][0], g.path[0][1])
-		dx, dy := float64(tx)-g.pos[0], float64(ty)-g.pos[1]
-		if math.Abs(dx)+math.Abs(dy) > 1 {
-			g.curDir = use_cases.ScreenToNumpad(dx, dy)
+		if g.stepToward(&g.pos, &g.cell, &g.path, dt) {
+			g.nextCycle(&g.roby) // arrived: play the next cycle of the chain
 		}
-		dist := math.Hypot(dx, dy)
-		speed := 220 * dt
-		if dist <= speed || dist == 0 {
-			g.pos = [2]float64{float64(tx), float64(ty)}
-			g.cell = g.path[0]
-			g.path = g.path[1:]
-			g.audio.Play("step", g.stepWav, 1)
-		} else {
-			g.pos[0] += dx / dist * speed
-			g.pos[1] += dy / dist * speed
-		}
+		g.walkSounds(g.roby.advance(dt))
 	}
+	g.updateFridWalk(dt)
 
 	g.clampCamera()
 
@@ -450,15 +440,14 @@ func (g *Game) Update() error {
 	}
 	g.updateAction(dt)
 	g.updateFrid(dt)
+	g.updateIdle(dt)
 
-	a, rate := g.idle, 0.09
-	if g.moving {
-		a, rate = g.walkAnim(g.curDir), 0.07
-	}
-	g.animT += dt
-	if a.OK() && g.animT >= rate {
-		g.animT = 0
-		g.frameI = (g.frameI + 1) % len(a.Frames)
+	if !g.moving {
+		g.animT += dt
+		if g.idle.OK() && g.animT >= 0.09 {
+			g.animT = 0
+			g.frameI = (g.frameI + 1) % len(g.idle.Frames)
+		}
 	}
 	if g.msgT > 0 {
 		if g.msgT -= dt; g.msgT <= 0 {
@@ -661,14 +650,22 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 	if g.drawAction(screen) {
 		return // an action movie is playing in place of idle/walk
 	}
-	a := g.idle
-	if g.moving {
-		a = g.walkAnim(g.curDir)
+	a, fidx := g.idle, g.frameI
+	switch {
+	case g.idleAct != nil:
+		a, fidx = g.idleAct.anim, g.idleAct.player.FrameIndex()
+	case g.moving:
+		if w := g.roby.anim(); w.OK() {
+			a, fidx = w, g.roby.frame
+		}
 	}
 	if !a.OK() {
 		return
 	}
-	fi := g.frameI % len(a.Frames)
+	fi := fidx % len(a.Frames)
+	if fi < 0 {
+		fi = 0
+	}
 	frame, anch := a.Frames[fi], a.Anchors[fi]
 	px, py := g.pos[0]-float64(g.camX), g.pos[1]
 	vector.FillCircle(

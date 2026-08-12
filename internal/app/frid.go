@@ -30,6 +30,7 @@ func (g *Game) fridInit() {
 	}
 	g.fridFrame = 0
 	g.fridT = 0
+	g.fridSync() // his screen position follows the cell he was placed on
 }
 
 // fridVisible reports whether Friday should be drawn in the current scene.
@@ -40,7 +41,7 @@ func (g *Game) fridVisible() bool {
 
 // updateFrid advances Friday's idle loop.
 func (g *Game) updateFrid(dt float64) {
-	if !g.fridVisible() {
+	if !g.fridVisible() || len(g.fridPath) > 0 {
 		return
 	}
 	g.fridT += dt
@@ -55,11 +56,16 @@ func (g *Game) drawFrid(screen *ebiten.Image) {
 	if !g.fridVisible() {
 		return
 	}
-	fi := g.fridFrame % len(g.fridIdle.Frames)
-	frame, anch := g.fridIdle.Frames[fi], g.fridIdle.Anchors[fi]
-	px, py := g.grid.ToScreen(g.fridCell[0], g.fridCell[1])
-	x := float64(px-g.camX) - float64(anch[0])
-	y := float64(py) - float64(anch[1])
+	a, fi := g.fridIdle, g.fridFrame
+	if len(g.fridPath) > 0 {
+		if w := g.fridWalk.anim(); w.OK() {
+			a, fi = w, g.fridWalk.frame
+		}
+	}
+	fi %= len(a.Frames)
+	frame, anch := a.Frames[fi], a.Anchors[fi]
+	x := g.fridPos[0] - float64(g.camX) - float64(anch[0])
+	y := g.fridPos[1] - float64(anch[1])
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(x, y)
 	screen.DrawImage(frame, op)
@@ -78,8 +84,10 @@ func (g *Game) fridEffect(kw string, args []string) bool {
 			switch strings.ToUpper(args[1]) {
 			case "X":
 				g.fridCell[0] = n
+				g.fridSync()
 			case "Y":
 				g.fridCell[1] = n
+				g.fridSync()
 			case "Z":
 				g.fridZ = n
 			}
@@ -90,21 +98,21 @@ func (g *Game) fridEffect(kw string, args []string) bool {
 			switch strings.ToUpper(args[1]) {
 			case "X":
 				g.fridCell[0] += n
+				g.fridSync()
 			case "Y":
 				g.fridCell[1] += n
+				g.fridSync()
 			}
 		}
 	case "aproach", "approach":
-		// Friday teleports to the approach target (no free-walk of his own).
+		// Friday walks to the target with his own four-direction cycles;
+		// scripts, not the player, decide where he goes.
 		switch len(args) {
 		case 3:
-			g.fridCell = [2]int{atoiArg(args[1]), atoiArg(args[2])}
+			g.fridWalkTo(atoiArg(args[1]), atoiArg(args[2]))
 		case 4:
 			if cx, cy, ok := g.objCell(args[1]); ok {
-				g.fridCell = [2]int{
-					cx + atoiArg(args[2]),
-					cy + atoiArg(args[3]),
-				}
+				g.fridWalkTo(cx+atoiArg(args[2]), cy+atoiArg(args[3]))
 			}
 		}
 	case "hidechar":

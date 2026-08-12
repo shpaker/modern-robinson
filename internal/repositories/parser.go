@@ -28,6 +28,8 @@ var keywords = map[string]bool{
 	"setvar": true, "setcharvar": true, "if": true, "endif": true, "goscene": true,
 	"additem": true, "deleteitem": true, "createobject": true, "delobject": true,
 	"deleteobject": true, "addvar": true, "setmap": true, "setmusic": true,
+	"charactername": true, "movetype": true, "lookbox": true,
+	"scenes": true, "characters": true,
 	"lockbar": true, "showcursor": true, "interrupt": true, "clearscreen": true,
 	"startgame": true, "endgame": true, "shownav": true,
 	"aproach": true, "approach": true, "setvert": true, "shiftscreen": true,
@@ -275,6 +277,30 @@ func isLooping(fs *types.FrameScript) bool {
 		}
 	}
 	return true
+}
+
+// ParseChar parses a .CHR character definition.
+func (SceneParser) ParseChar(text string) *types.Character {
+	c := &types.Character{}
+	idle := 0
+	for _, st := range statements(text) {
+		switch st.kw {
+		case "charactername":
+			c.Name = strings.TrimSpace(st.args)
+		case "movetype":
+			c.MoveType = strings.TrimSpace(st.args)
+		case "fonscript":
+			if v := strings.TrimSpace(st.args); v != "" && idle < len(c.Idle) {
+				c.Idle[idle] = v
+				idle++
+			}
+		case "items":
+			if a := argSplit(st.args); len(a) > 0 {
+				c.Items = append(c.Items, a[0])
+			}
+		}
+	}
+	return c
 }
 
 // ParseBar parses BAR.BAR, the inventory-panel layout.

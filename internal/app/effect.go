@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -196,22 +195,6 @@ func (g *Game) setVert(args []string) {
 	)
 }
 
-// setRest swaps the character's idle animation after an action. Form:
-// SetRest char,state,anim.
-func (g *Game) setRest(args []string) {
-	if len(args) < 3 || !robyTarget(args) {
-		return
-	}
-	name := args[2]
-	if !strings.Contains(name, ".") {
-		name += ".mv"
-	}
-	if a := adapters.LoadAnimation(g.res, name); a.OK() {
-		g.idle = a
-		g.frameI = 0
-	}
-}
-
 // setMusic switches the looping background track: SetMusic id|none. Track ids
 // are WAV names in the wave bank (music1 -> MUSIC1.WAV, mpalace, mfrid, ...).
 func (g *Game) setMusic(args []string) {
@@ -234,8 +217,8 @@ func (g *Game) startMusic(id string) {
 	g.audio.PlayMusic(strings.ToLower(file), g.res.Sound(file))
 }
 
-// robyTarget reports whether a HideChar/ShowChar/SetRest command targets the
-// main character (Roby). Friday (Frid) is a stage-3e second actor.
+// robyTarget reports whether a HideChar/ShowChar command targets the main
+// character (Roby); Friday's variants are handled by fridEffect.
 func robyTarget(args []string) bool {
 	return len(args) == 0 || strings.EqualFold(args[0], "Roby")
 }

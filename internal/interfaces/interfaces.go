@@ -45,6 +45,7 @@ type ISceneParser interface {
 	ParseFrameScript(text string) *types.FrameScript
 	ParseStartup(text string) (vars map[string]int, charVars map[string]string)
 	ParseBar(text string) *types.Bar
+	ParseChar(text string) *types.Character
 	SceneExits(c IContainer) (left, right types.Exit)
 }
 

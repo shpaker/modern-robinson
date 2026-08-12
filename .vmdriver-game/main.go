@@ -153,21 +153,17 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Walk east until the camera reaches the end of the scene, then leave
-	// through the right edge and sample the fade.
+	// Idle chain: stand still until the long "bored" idle plays, then click to
+	// interrupt it (Interrupt is ON during cutscenes).
 	d.guest.AdvanceTicks(20)
-	_ = d.snapshot(0) // SCENA0 at full brightness
-	for i := 0; i < 6; i++ {
-		click(600, 330)
-		d.guest.AdvanceTicks(120)
-	}
-	click(630, 200) // right edge -> exit (camera is at the far end now)
-	d.guest.AdvanceTicks(5)
-	_ = d.snapshot(1) // fading out
-	d.guest.AdvanceTicks(9)
-	_ = d.snapshot(2) // near black / just swapped
-	d.guest.AdvanceTicks(30)
-	_ = d.snapshot(3) // the next scene, faded in
+	_ = d.snapshot(0) // standing loop (HEAD.mv from ROBY.CHR)
+	d.guest.AdvanceTicks(560)
+	_ = d.snapshot(1) // the long idle started (roby1 chain)
+	d.guest.AdvanceTicks(60)
+	_ = d.snapshot(2) // mid idle animation
+	click(300, 300)   // click: skip / walk on
+	d.guest.AdvanceTicks(40)
+	_ = d.snapshot(3) // back under player control
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,
