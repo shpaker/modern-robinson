@@ -156,15 +156,18 @@ func (SceneParser) ParseScene(text string) *types.Scene {
 				sc.ClosedVert = append(sc.ClosedVert, [2]int{v[i], v[i+1]})
 			}
 		case "objectlist":
-			name := strings.TrimSpace(strings.SplitN(st.args, ",", 2)[0])
-			if name != "" && len(v) >= 2 {
+			// Read the row by fields, never by scanning it for numbers: half
+			// the objects are named with a digit (br0, bt3, map1, iva0), and a
+			// digit in the name would be taken for the cell's x.
+			a := argSplit(st.args)
+			if len(a) >= 3 {
 				sc.Objects = append(
 					sc.Objects,
 					types.ObjectRef{
-						Name: name,
-						GX:   v[0],
-						GY:   v[1],
-						Flag: strings.Contains(st.args, "*"),
+						Name: a[0],
+						GX:   atoiSafe(a[1]),
+						GY:   atoiSafe(a[2]),
+						Flag: len(a) >= 4 && strings.Contains(a[3], "*"),
 					},
 				)
 			}
@@ -194,8 +197,12 @@ func (SceneParser) ParseObject(text string) *types.SceneObject {
 				ob.Z = v[0]
 			}
 		case "activezone":
+			// An object may declare several hit rectangles, one per row: the
+			// bridge log answers both to its trunk and to the plank on it.
 			if len(v) >= 4 {
-				ob.ActiveZone = [4]int{v[0], v[1], v[2], v[3]}
+				ob.ActiveZones = append(
+					ob.ActiveZones, [4]int{v[0], v[1], v[2], v[3]},
+				)
 			}
 		case "cursor":
 			if len(v) > 0 {

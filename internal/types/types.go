@@ -73,12 +73,14 @@ type Scene struct {
 
 // SceneObject is a parsed .OB (a clickable object on a scene).
 type SceneObject struct {
-	Name       string
-	FonScript  string
-	Z          int
-	ActiveZone [4]int // x,y,w,h
-	Cursor     int
-	Text       int
+	Name      string
+	FonScript string
+	Z         int
+	// ActiveZones are the object's hit rectangles (x,y,w,h) relative to its
+	// cell corner. An .OB may list more than one.
+	ActiveZones [][4]int
+	Cursor      int
+	Text        int
 	// ClosedVert are the cells the object blocks, relative to its own cell:
 	// the crab, the bridge logs and the finished hut all stand in the way.
 	ClosedVert [][2]int

@@ -160,15 +160,16 @@ func (d *driver) Update() error {
 	click(320, 240) // skip title -> New Game
 	// Walk check (ROBINSON_SCENE=SCENA0): click far left on the sand and sample
 	// the walk every few ticks — the figure must stride, not slide or jump.
-	// Intro cutscene sweep: the room, then the frames further into INT1 where
-	// the storm at sea takes over. Every frame must fill the window on its own.
-	click(320, 240) // skip the logo
-	d.guest.AdvanceTicks(4)
-	click(320, 240) // skip the title: New Game
-	for i := 0; i < 6; i++ {
-		d.guest.AdvanceTicks(120)
-		_ = d.snapshot(i)
-	}
+	// Rows around the log in SCENA4: walk to the ground level above the log
+	// (row 1) and then onto the log's own row (row 2), to see how each orders.
+	d.guest.AdvanceTicks(40)
+	click(60, 300) // row 1, left: above the log
+	d.guest.AdvanceTicks(220)
+	_ = d.snapshot(0)
+	click(60, 340) // row 2, left: the log's own row
+	d.guest.AdvanceTicks(220)
+	_ = d.snapshot(1)
+	_ = click
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

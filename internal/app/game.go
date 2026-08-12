@@ -323,20 +323,22 @@ func isIntroScene(name string) bool {
 
 // buildHotspots places click zones. The engine anchors a zone to the bare cell
 // corner (not the sprite): rect = Corner(gx,gy) + ActiveZone.xy, size AZ.wh, in
-// world space (the camera offset is applied when the zones are tested).
+// world space (the camera offset is applied when the zones are tested). An
+// object may own several rectangles, and each becomes its own hotspot.
 func (g *Game) buildHotspots() {
 	g.hotspots = nil
 	for _, s := range g.sceneObjs {
 		if s.removed {
 			continue // taken objects are no longer clickable
 		}
-		az := s.ob.ActiveZone
 		cx, cy := g.grid.Corner(s.ref.GX, s.ref.GY)
-		x, y := cx+az[0], cy+az[1]
-		w, h := max(az[2], 8), max(az[3], 8)
-		g.hotspots = append(g.hotspots, hotspot{
-			key: s.ref.Name, ob: s.ob, rect: image.Rect(x, y, x+w, y+h),
-		})
+		for _, az := range s.ob.ActiveZones {
+			x, y := cx+az[0], cy+az[1]
+			w, h := max(az[2], 8), max(az[3], 8)
+			g.hotspots = append(g.hotspots, hotspot{
+				key: s.ref.Name, ob: s.ob, rect: image.Rect(x, y, x+w, y+h),
+			})
+		}
 	}
 }
 

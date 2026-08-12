@@ -125,14 +125,18 @@ func writeSceneLayout(
 		cx, cy := grid.Corner(ref.GX, ref.GY)
 		ax, ay := grid.ToScreen(ref.GX, ref.GY)
 		shift := objectShift(res, parser, c, ob)
-		az := ob.ActiveZone
+		zones := make([]string, 0, len(ob.ActiveZones))
+		for _, az := range ob.ActiveZones {
+			zones = append(zones, fmt.Sprintf("%d,%d,%d,%d",
+				cx+az[0], cy+az[1], az[2], az[3]))
+		}
 		rows = append(rows, fmt.Sprintf(
 			"  obj %-10s cell=%d,%d star=%v z=%d cur=%d text=%d "+
-				"shift=%d,%d origin=%d,%d zone=%d,%d,%d,%d block=%v",
+				"shift=%d,%d origin=%d,%d zones=[%s] block=%v",
 			strings.ToLower(ref.Name), ref.GX, ref.GY, ref.Flag,
 			ref.GY*zper+ob.Z, ob.Cursor, ob.Text,
 			shift[0], shift[1], ax-shift[0], ay-shift[1],
-			cx+az[0], cy+az[1], az[2], az[3], ob.ClosedVert,
+			strings.Join(zones, " "), ob.ClosedVert,
 		))
 	}
 	sort.Strings(rows)
