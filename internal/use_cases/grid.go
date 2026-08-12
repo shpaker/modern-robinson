@@ -95,15 +95,21 @@ func (g *Grid) ToCell(px, py int) (int, int) {
 	return floorDiv(px-g.lx, g.sx), floorDiv(py-g.ly, g.sy)
 }
 
-// Valid reports whether a cell is on-grid, unblocked, and anchored inside the
-// scene surface.
+// Valid reports whether a cell is on-grid and unblocked — the engine's own rule.
+// It deliberately says nothing about the scene's edges: a cutscene is positioned
+// relative to a character's cell, and INT1 anchors its opening at a cell whose
+// x is negative, so refusing those cells moves the whole scene.
 func (g *Grid) Valid(gx, gy int) bool {
 	if gx < 0 || gx >= g.nx || gy < 0 || gy >= g.ny {
 		return false
 	}
-	if g.blocked[[2]int{gx, gy}] {
-		return false
-	}
+	return !g.blocked[[2]int{gx, gy}]
+}
+
+// onScreen reports whether a cell's anchor falls inside the scene surface. The
+// lattice runs past it in almost every scene, and the camera is clamped to the
+// scene, so a character left on such a cell is off the screen with no way back.
+func (g *Grid) onScreen(gx, gy int) bool {
 	if g.boundsW <= 0 || g.boundsH <= 0 {
 		return true
 	}
@@ -111,27 +117,40 @@ func (g *Grid) Valid(gx, gy int) bool {
 	return x >= 0 && x < g.boundsW && y >= 0 && y < g.boundsH
 }
 
-// NearestFree returns the closest walkable cell to (gx,gy).
+// NearestFree returns the closest walkable cell to (gx,gy). It is the fallback
+// that invents a destination -- for a click on nothing, or an Aproach whose cell
+// is blocked -- so it prefers a cell the camera can actually show, and settles
+// for any walkable one only when the scene offers nothing better.
 func (g *Grid) NearestFree(gx, gy int) (int, int, bool) {
 	gx = clamp(gx, 0, g.nx-1)
 	gy = clamp(gy, 0, g.ny-1)
-	if g.Valid(gx, gy) {
+	if g.Valid(gx, gy) && g.onScreen(gx, gy) {
 		return gx, gy, true
 	}
-	best := [2]int{}
-	found := false
-	bd := 1 << 30
+	best, fallback := [2]int{}, [2]int{}
+	found, haveFallback := false, false
+	bd, fd := 1<<30, 1<<30
 	for y := 0; y < g.ny; y++ {
 		for x := 0; x < g.nx; x++ {
-			if g.Valid(x, y) {
-				d := (x-gx)*(x-gx) + (y-gy)*(y-gy)
+			if !g.Valid(x, y) {
+				continue
+			}
+			d := (x-gx)*(x-gx) + (y-gy)*(y-gy)
+			if g.onScreen(x, y) {
 				if d < bd {
 					bd, best, found = d, [2]int{x, y}, true
 				}
+				continue
+			}
+			if d < fd {
+				fd, fallback, haveFallback = d, [2]int{x, y}, true
 			}
 		}
 	}
-	return best[0], best[1], found
+	if found {
+		return best[0], best[1], true
+	}
+	return fallback[0], fallback[1], haveFallback
 }
 
 func clamp(v, lo, hi int) int {

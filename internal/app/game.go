@@ -362,8 +362,9 @@ func (g *Game) playSound(args []string) {
 
 func (g *Game) spawnCell(spawn *[2]int) [2]int {
 	if spawn != nil {
-		x, y, _ := g.grid.NearestFree(spawn[0], spawn[1])
-		return [2]int{x, y}
+		// A GoScene names the arrival cell, and cutscenes are drawn relative to
+		// it: relocating it to a walkable neighbour moves the whole scene.
+		return *spawn
 	}
 	cx, cy := g.grid.ToCell(int(float64(g.w)*0.35), int(float64(g.h)*0.62))
 	x, y, _ := g.grid.NearestFree(cx, cy)
