@@ -60,6 +60,7 @@ func (g *Game) updateMinigame(dt float64) bool {
 		g.mg = nil
 		if g.mgVar != "" {
 			g.gs.SetVar(g.mgVar, result)
+			g.traceState("minigame finished: %s=%d", g.mgVar, result)
 		}
 		// Resume the frame the StartGame suspended, now that the result is in.
 		if rest := g.mgResume; len(rest) > 0 {

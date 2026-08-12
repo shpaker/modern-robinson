@@ -22,31 +22,42 @@ type actionPlay struct {
 	started bool // true once the walk finished and the movie is playing
 }
 
-// actionScript names the script a click runs: <RO|FR> + the held item's first
-// three letters + the object's first three (ROHANGOL is Roby, bare hand, the
-// left exit; ROAXEWOO is Roby chopping wood with the axe). A script may then
-// redirect its own successor through a character variable named after itself —
-// ROHANGOL ends with SetCharVar rohangol,"r1hangol", which is how the hero's
-// remark changes each time he leaves — so that redirection wins when set.
-// Falls back to the bare-handed script when the held item has none.
-func (g *Game) actionScript(objName string) (string, []byte, bool) {
+// scriptTok is the token a script name spends on one item or object: the first
+// three letters, upper-cased. The truncation is the engine's, and it is lossy on
+// purpose — "condom" and "confr" both become CON, so Friday's own items reach
+// the same scripts.
+func scriptTok(s string) string {
+	s = strings.ToUpper(s)
+	if len(s) > 3 {
+		s = s[:3]
+	}
+	return s
+}
+
+// actionNames lists the script names a click may run, best first: <RO|FR> + the
+// held item's token + the object's (ROHANGOL is Roby, bare hand, the left exit;
+// ROAXEWOO is Roby chopping wood with the axe), then the bare-handed default so
+// a tool the object does not answer to still gets the plain reaction.
+func actionNames(activeChar, active, objName string) []string {
 	char := "RO"
-	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
+	if strings.EqualFold(activeChar, "Frid") {
 		char = "FR"
 	}
-	tok := func(s string) string {
-		s = strings.ToUpper(s)
-		if len(s) > 3 {
-			s = s[:3]
-		}
-		return s
-	}
-	obj := tok(objName)
-	names := []string{char + tok(g.gs.Active) + obj}
-	if tok(g.gs.Active) != "HAN" {
+	obj := scriptTok(objName)
+	item := scriptTok(active)
+	names := []string{char + item + obj}
+	if item != "HAN" {
 		names = append(names, char+"HAN"+obj) // the empty-handed default
 	}
-	for _, base := range names {
+	return names
+}
+
+// actionScript picks the script a click runs from actionNames' candidates. A
+// script may redirect its own successor through a character variable named after
+// itself — ROHANGOL ends with SetCharVar rohangol,"r1hangol", which is how the
+// hero's remark changes each time he leaves — so that redirection wins when set.
+func (g *Game) actionScript(objName string) (string, []byte, bool) {
+	for _, base := range actionNames(g.gs.ActiveChar, g.gs.Active, objName) {
 		name := base
 		if v := g.gs.CharVar(strings.ToLower(base)); v != "" {
 			name = v // the script handed off to a variant of itself

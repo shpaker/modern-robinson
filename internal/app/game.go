@@ -129,8 +129,13 @@ type Game struct {
 	fadeTo    *types.Exit
 }
 
-// NewGame builds a game over the given resources and starts at SCENA0.
+// NewGame builds a game over the given resources with the default settings.
 func NewGame(res interfaces.IResources) *Game {
+	return NewGameWith(res, DefaultConfig())
+}
+
+// NewGameWith builds a game over the given resources and the player's settings.
+func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	g := &Game{
 		res:        res,
 		parser:     repositories.SceneParser{},
@@ -138,7 +143,7 @@ func NewGame(res interfaces.IResources) *Game {
 		cycleCache: map[string]*walkCycle{},
 		curDir:     6,
 		robyZ:      charZCoord,
-		debug:      DebugFlag == "true",
+		debug:      cfg.Debug,
 		gs:         types.NewGameState(),
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
@@ -146,7 +151,7 @@ func NewGame(res interfaces.IResources) *Game {
 	g.slotHover, g.slotSel = -1, -1
 	g.slotCache = map[int]*ebiten.Image{}
 	g.slotInfo = map[int]string{}
-	g.volSound, g.volMusic, g.speed = 1, 0.7, 0.5
+	g.volSound, g.volMusic, g.speed = cfg.Sound, cfg.Music, cfg.Speed
 	g.seedStartup()
 	g.loadBar()
 	g.loadOptions()
@@ -247,6 +252,9 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 		g.zper = 8
 	}
 	g.grid = use_cases.NewGrid(g.sc, g.w, g.h)
+	if tracing() {
+		g.traceState("enter scene (entry=%q frid=%q)", entry, entryFrid)
+	}
 	g.objects = map[string]*types.SceneObject{}
 	for _, e := range c.Entries() {
 		if strings.HasSuffix(strings.ToUpper(e.Name), ".OB") {

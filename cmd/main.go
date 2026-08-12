@@ -24,12 +24,12 @@ func main() {
 			"game resources not found: run inside the game folder (with DATA/) or pass its path",
 		)
 	}
+	cfg := app.LoadConfig(root)
 	res := repositories.NewResources(root)
-	g := app.NewGame(res)
-	ebiten.SetWindowSize(
-		app.ViewW*2,
-		app.ViewH*2,
-	) // 640x480 native, 2x for comfort
+	g := app.NewGameWith(res, cfg)
+	// The original is a fixed 640x480; the scale only magnifies it.
+	ebiten.SetWindowSize(app.ViewW*cfg.Scale, app.ViewH*cfg.Scale)
+	ebiten.SetFullscreen(cfg.Fullscreen)
 	ebiten.SetWindowTitle("Новый Робинзон — " + app.Version)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

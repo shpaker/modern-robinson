@@ -31,6 +31,7 @@ func (g *Game) applyEvents(cmds []types.Command) {
 // consumes them.
 func (g *Game) applyEffect(c types.Command) {
 	kw := strings.ToLower(c.Kw)
+	g.trace(c)
 	if g.fridEffect(kw, c.Args) {
 		return // a Frid-targeted Set/Aproach/Show/Hide
 	}
