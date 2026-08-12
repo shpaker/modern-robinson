@@ -341,6 +341,10 @@ func (SceneParser) ParseBar(text string) *types.Bar {
 			b.ScisorsBox = rect4(st.args)
 		case "savebox":
 			b.SaveBox = rect4(st.args)
+		case "invmasklt":
+			if v := ints(st.args); len(v) >= 2 {
+				b.InvMask = [2]int{v[0], v[1]}
+			}
 		case "bardata":
 			b.Data = strings.TrimSpace(st.args)
 		case "items":

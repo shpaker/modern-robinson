@@ -16,6 +16,7 @@ type Bar struct {
 	RightArrow [4]int
 	ScisorsBox [4]int
 	SaveBox    [4]int
+	InvMask    [2]int   // InvMaskLT: left,top of the frame that clips the slots
 	Data       string   // BarData: bar background container (bar.dat)
 	Items      []string // declared item names, in order
 }

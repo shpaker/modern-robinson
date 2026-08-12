@@ -105,14 +105,18 @@ func TestParseStartup(t *testing.T) {
 
 func TestParseBar(t *testing.T) {
 	txt := "DrawBar 1;\nBarLTWH 0,400,640,80;\nInventoryLTWH 303,410,146,60;\n" +
-		"ItemWH 48,60;\nItemsDisplayed 3;\nLeftArrowBox 267,412,297,469;\n" +
-		"RightArrowBox 457,412,484,467;\nItems hand,\"x\";\n\taxe,\"y\";\nEnd;\n"
+		"InvMaskLT 297,400;\nItemWH 48,60;\nItemsDisplayed 3;\n" +
+		"LeftArrowBox 267,412,297,469;\nRightArrowBox 457,412,484,467;\n" +
+		"Items hand,\"x\";\n\taxe,\"y\";\nEnd;\n"
 	b := SceneParser{}.ParseBar(txt)
 	if b.Rect != [4]int{0, 400, 640, 80} {
 		t.Fatalf("Rect=%v", b.Rect)
 	}
 	if b.Inventory != [4]int{303, 410, 146, 60} {
 		t.Fatalf("Inventory=%v", b.Inventory)
+	}
+	if b.InvMask != [2]int{297, 400} {
+		t.Fatalf("InvMask=%v", b.InvMask)
 	}
 	if b.ItemW != 48 || b.ItemH != 60 || b.ItemsShown != 3 {
 		t.Fatalf("item cell=%dx%d shown=%d", b.ItemW, b.ItemH, b.ItemsShown)
