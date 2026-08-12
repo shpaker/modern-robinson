@@ -68,9 +68,9 @@ func (g *Game) updateIdle(dt float64) {
 	g.playIdleSlot(restBored)
 }
 
-// idlePlay is a one-shot idle animation playing where the hero stands. Unlike
-// an object action (a decal authored for a fixed spot) it is drawn with the same
-// feet anchor as the standing and walking loops, so it plays wherever he is.
+// idlePlay is a one-shot idle animation playing where the hero stands. It is
+// drawn on the hero's cell anchor minus its own movie Shift, the same placement
+// as the standing and walking loops, so it plays wherever he is.
 type idlePlay struct {
 	anim   *adapters.Animation
 	player *use_cases.Player

@@ -546,9 +546,12 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	screen.DrawImage(g.bg, op)
 
 	xoff := -g.camX
+	// kind orders equal-z draws: the engine draws characters first, then
+	// objects, so an object at the same z paints over the hero (docs/08).
+	const kindChar, kindObj = 0, 1
 	type drawable struct {
-		z  int
-		fn func()
+		z, kind int
+		fn      func()
 	}
 	items := make([]drawable, 0, len(g.sceneObjs)+2)
 	for _, s := range g.sceneObjs {
@@ -556,7 +559,7 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 			s := s
 			items = append(
 				items,
-				drawable{s.z, func() { s.draw(screen, g.grid, xoff) }},
+				drawable{s.z, kindObj, func() { s.draw(screen, g.grid, xoff) }},
 			)
 		}
 	}
@@ -564,6 +567,7 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 		items,
 		drawable{
 			g.cell[1]*g.zper + charZCoord,
+			kindChar,
 			func() { g.drawCharacter(screen) },
 		},
 	)
@@ -572,14 +576,17 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 			items,
 			drawable{
 				g.fridCell[1]*g.zper + g.fridZ,
+				kindChar,
 				func() { g.drawFrid(screen) },
 			},
 		)
 	}
-	sort.SliceStable(
-		items,
-		func(i, j int) bool { return items[i].z < items[j].z },
-	)
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].z != items[j].z {
+			return items[i].z < items[j].z
+		}
+		return items[i].kind < items[j].kind
+	})
 	for _, it := range items {
 		it.fn()
 	}
