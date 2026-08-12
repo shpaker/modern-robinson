@@ -82,13 +82,29 @@ func (g *Game) drawMinigame(screen *ebiten.Image) {
 // packImages decodes a whole top-level pack into Ebiten images, forcing
 // full-screen backdrops opaque.
 func (g *Game) packImages(pack string) map[string]*ebiten.Image {
+	return g.packImagesPal(pack, nil)
+}
+
+// packImagesPal is packImages for a pack that ships several palettes: palOf
+// names the palette index a sprite belongs to, and anything it does not answer
+// for falls back to the pack's default.
+func (g *Game) packImagesPal(
+	pack string, palOf func(name string) int,
+) map[string]*ebiten.Image {
 	sprites, pal := g.res.ScreenPack(pack)
+	pals := g.res.ScreenPalettes(pack)
 	out := make(map[string]*ebiten.Image, len(sprites))
 	for name, n := range sprites {
 		if n == nil {
 			continue
 		}
-		rgba := n.RGBA(pal)
+		use := pal
+		if palOf != nil {
+			if i := palOf(name); i >= 0 && i < len(pals) {
+				use = pals[i]
+			}
+		}
+		rgba := n.RGBA(use)
 		if n.Width == ViewW && n.Height == ViewH {
 			for i := 0; i < n.Width*n.Height; i++ {
 				rgba[i*4+3] = 255

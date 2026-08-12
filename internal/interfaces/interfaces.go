@@ -31,6 +31,9 @@ type IResources interface {
 	Screen(pack, name string) (*types.NGB, types.Palette)
 	// ScreenPack is every bitmap of a pack plus its shared palette.
 	ScreenPack(pack string) (map[string]*types.NGB, types.Palette)
+	// ScreenPalettes is every palette of a pack, in directory order, for the
+	// packs that ship more than one.
+	ScreenPalettes(pack string) []types.Palette
 	// ScreenFile is a raw entry of a top-level pack (CRYPT.TXT, ...).
 	ScreenFile(pack, name string) []byte
 	// SceneFade is the scene's per-step fade brightness curve (1 -> 0).

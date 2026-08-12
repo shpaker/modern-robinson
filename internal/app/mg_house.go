@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"math/rand"
+	"sort"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -221,17 +222,19 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 	return false, 0
 }
 
-// draw paints the silhouette and the pieces back-to-front.
+// draw paints the silhouette and the pieces back-to-front. bringToFront leaves
+// z unbounded, so the order is sorted rather than scanned over a fixed range —
+// scanning made every piece whose z had grown past the range disappear.
 func (h *houseGame) draw(_ *Game, screen *ebiten.Image) {
 	blitAt(screen, h.sprites["BACK"], 0, 0)
-	for z := 16; z >= 0; z-- {
-		for i := 0; i < 17; i++ {
-			if h.z[i] != z {
-				continue
-			}
-			x, y := h.topLeft(i)
-			blitAt(screen, h.sprite(i), x, y)
-		}
+	order := make([]int, len(h.z))
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool { return h.z[order[a]] > h.z[order[b]] })
+	for _, i := range order {
+		x, y := h.topLeft(i)
+		blitAt(screen, h.sprite(i), x, y)
 	}
 }
 

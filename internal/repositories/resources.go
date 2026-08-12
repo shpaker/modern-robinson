@@ -280,6 +280,31 @@ func (r *Resources) ScreenPack(pack string) (
 	return out, pal
 }
 
+// ScreenPalettes returns every palette of a top-level pack in directory order.
+// A pack may ship more than one: BALOON.DAT carries PALETTE.COL for the sky and
+// the islands and BAR.COL for the instrument panel, and rendering a sprite with
+// the wrong one turns it into confetti.
+func (r *Resources) ScreenPalettes(pack string) []types.Palette {
+	p, ok := r.screenDat[strings.ToUpper(pack)]
+	if !ok {
+		return nil
+	}
+	c := r.container(p)
+	if c == nil {
+		return nil
+	}
+	var out []types.Palette
+	for _, e := range c.Entries() {
+		if !strings.HasSuffix(strings.ToUpper(e.Name), ".COL") {
+			continue
+		}
+		if d, err := c.Extract(e); err == nil {
+			out = append(out, codec.LoadPalette(d))
+		}
+	}
+	return out
+}
+
 // ScreenFile returns a raw entry of a top-level pack (e.g. CRYPT.DAT's
 // CRYPT.TXT), or nil when the pack or the entry is missing.
 func (r *Resources) ScreenFile(pack, name string) []byte {

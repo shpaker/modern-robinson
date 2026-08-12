@@ -38,6 +38,9 @@ const (
 	balAltMax   = 550
 	balLandAlt  = 175
 	balLandDist = 50
+	// The descent runs below the ground line before the flight is called won,
+	// so the basket visibly settles instead of stopping at zero.
+	balLandFloor = -60
 )
 
 // The panel buttons.
@@ -47,13 +50,26 @@ var (
 	balExit = image.Rect(565, 408, 633, 465)
 )
 
+// baloonPalette maps a BALOON.DAT sprite to its palette: the instrument panel
+// and the figures on it are drawn with BAR.COL (index 1), while the sky and the
+// islands use PALETTE.COL (index 0). Verified by rendering both ways -- the
+// panel is confetti under the sky palette and the sky is confetti under BAR's.
+func baloonPalette(name string) int {
+	switch name {
+	case "BAR", "ROBY", "FRID", "EXIT", "ALT", "COURSE",
+		"ALTBGR", "COURSBGR", "BALL":
+		return 1
+	}
+	return 0
+}
+
 // newBaloonGame starts at the home island, high up.
 func newBaloonGame(g *Game) minigame {
 	b := &baloonGame{
 		x: balHomeX, y: balHomeY,
 		alt: 412, target: 412,
 	}
-	b.sprites = g.packImages("BALOON")
+	b.sprites = g.packImagesPal("BALOON", baloonPalette)
 	if b.sprites["SKY"] == nil {
 		return nil
 	}
@@ -88,20 +104,23 @@ func (b *baloonGame) update(g *Game, dt float64) (bool, int) {
 	}
 
 	// The engine runs this at 30 fps; scale to our tick.
-	steps := dt * 30
+	steps := dt * enginePace
+	// Once the basket is coming down the descent owns the altitude: easing it
+	// toward the target as well would put back exactly what the descent takes
+	// off, and the landing would never finish.
+	if b.landing {
+		b.alt -= 2 * steps
+		if b.alt < balLandFloor {
+			b.won = true
+			g.playSound([]string{"final3.wav", "1"})
+		}
+		return false, 0
+	}
 	switch {
 	case b.alt < b.target:
 		b.alt = math.Min(b.target, b.alt+2*steps)
 	case b.alt > b.target:
 		b.alt = math.Max(b.target, b.alt-2*steps)
-	}
-	if b.landing {
-		b.alt -= 2 * steps
-		if b.alt < -60 {
-			b.won = true
-			g.playSound([]string{"final3.wav", "1"})
-		}
-		return false, 0
 	}
 	// Heading from altitude, drift with a jittered step.
 	theta := b.wind + 3*math.Pi*b.alt/550

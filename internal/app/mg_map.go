@@ -2,6 +2,7 @@ package app
 
 import (
 	"math/rand"
+	"sort"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -424,17 +425,11 @@ func (m *mapGame) drop(g *Game) {
 // draw paints the mat and the fragments back-to-front.
 func (m *mapGame) draw(_ *Game, screen *ebiten.Image) {
 	blitAt(screen, m.sprites["DESK"], 0, 0)
-	order := make([]int, 12)
+	order := make([]int, len(m.z))
 	for i := range order {
 		order[i] = i
 	}
-	for a := 0; a < 12; a++ {
-		for b := a + 1; b < 12; b++ {
-			if m.z[order[a]] < m.z[order[b]] {
-				order[a], order[b] = order[b], order[a]
-			}
-		}
-	}
+	sort.Slice(order, func(a, b int) bool { return m.z[order[a]] > m.z[order[b]] })
 	for _, i := range order {
 		x, y := m.topLeft(i)
 		blitAt(screen, m.sprite(i), x, y)
