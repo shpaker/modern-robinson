@@ -2,11 +2,17 @@ package app
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/shpaker/modern-robinson/internal/interfaces"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/types"
+	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
 
 // fsPack is a scene container holding only named blobs, which is all
@@ -193,86 +199,476 @@ func cellsOf(m map[string][2]int) func(string) (int, int, bool) {
 	}
 }
 
-// aproach fs with a single event on frame 0.
-func aproachFS(args ...string) *types.FrameScript {
-	return &types.FrameScript{Frames: []*types.Frame{{
-		Index:  0,
-		Events: []types.Command{{Kw: "aproach", Args: args}},
-	}}}
-}
-
-func TestAproachTargetForms(t *testing.T) {
+func TestAproachGoalForms(t *testing.T) {
 	cells := cellsOf(map[string][2]int{"gorght": {7, 2}})
-	const clickedX, clickedY = 3, 1
+	clicked := &[2]int{3, 1}
 	cases := []struct {
-		name   string
-		fs     *types.FrameScript
-		wx, wy int
+		name    string
+		args    []string
+		clicked *[2]int
+		wx, wy  int
+		wok     bool
 	}{
 		// Four args name the object to approach, and it is not always the one
 		// clicked: SCENA4's ROHATGOL sends the hero to gorght because the hat
 		// glide starts at the far edge. The named cell must win.
 		{
-			"named object plus offset", aproachFS("Roby", "gorght", "1", "-1"),
-			8, 1,
+			"named object plus offset",
+			[]string{"Roby", "gorght", "1", "-1"},
+			clicked, 8, 1, true,
 		},
 		// A name this scene does not place falls back to the clicked object, so
 		// the action still happens next to the thing that was clicked.
 		{
-			"unknown name falls back", aproachFS("Roby", "ghost", "1", "0"),
-			clickedX + 1, clickedY,
+			"unknown name falls back",
+			[]string{"Roby", "ghost", "1", "0"},
+			clicked, 4, 1, true,
+		},
+		// An entry script has no clicked object to fall back on.
+		{
+			"unknown name without a click",
+			[]string{"Roby", "ghost", "1", "0"},
+			nil, 0, 0, false,
 		},
 		// Three args are an absolute cell; the clicked object is irrelevant.
-		{"absolute cell", aproachFS("Roby", "4", "2"), 4, 2},
-		// No Aproach means "act where the object is".
-		{"no aproach", &types.FrameScript{Frames: []*types.Frame{{
-			Events: []types.Command{{Kw: "sound", Args: []string{"a.wav"}}},
-		}}}, clickedX, clickedY},
-		{"empty script", &types.FrameScript{}, clickedX, clickedY},
+		{"absolute cell", []string{"Roby", "4", "2"}, clicked, 4, 2, true},
+		{"too few args", []string{"Roby"}, clicked, 0, 0, false},
 	}
 	for _, c := range cases {
-		x, y := aproachTarget(c.fs, clickedX, clickedY, cells)
-		if x != c.wx || y != c.wy {
+		x, y, ok := aproachGoal(c.args, c.clicked, cells)
+		if x != c.wx || y != c.wy || ok != c.wok {
 			t.Errorf(
-				"%s: aproachTarget = (%d,%d), want (%d,%d)",
+				"%s: aproachGoal = (%d,%d,%v), want (%d,%d,%v)",
 				c.name,
 				x,
 				y,
+				ok,
 				c.wx,
 				c.wy,
+				c.wok,
 			)
 		}
 	}
 }
 
-// The first Aproach wins: a script may carry more than one across its frames
-// (later ones re-aim a cutscene), but only the opening walk is a destination.
-func TestAproachTargetTakesTheFirstEvent(t *testing.T) {
-	fs := &types.FrameScript{Frames: []*types.Frame{
-		{Index: 0},
-		{Index: 6, Events: []types.Command{
-			{Kw: "aproach", Args: []string{"Roby", "1", "1"}},
-		}},
-		{Index: 9, Events: []types.Command{
-			{Kw: "aproach", Args: []string{"Roby", "5", "5"}},
-		}},
-	}}
-	if x, y := aproachTarget(fs, 0, 0, cellsOf(nil)); x != 1 || y != 1 {
-		t.Fatalf("aproachTarget = (%d,%d), want (1,1)", x, y)
+// recGrid is a real grid that counts the routing requests made of it, so a test
+// can tell "walked nowhere" from "was never asked to walk".
+type recGrid struct {
+	interfaces.IGrid
+	paths int
+}
+
+func (r *recGrid) Path(start, goal [2]int) [][2]int {
+	r.paths++
+	return r.IGrid.Path(start, goal)
+}
+
+// scena0 mirrors SCENA0's grid parameters, closed cells included: the pool sits
+// on (5,2), which the scene itself declares impassable.
+func scena0() *types.Scene {
+	return &types.Scene{
+		Size:        [2]int{1024, 400},
+		LeftTopGrid: [2]int{15, 150},
+		GridSize:    [2]int{144, 36},
+		GridShift:   [2]int{46, -99},
+		GridLength:  [2]int{8, 5},
+		ZPerGrid:    8,
+		ClosedVert: [][2]int{
+			{4, 2},
+			{4, 3},
+			{5, 2},
+			{5, 3},
+			{6, 3},
+			{5, 4},
+			{6, 4},
+			{7, 0},
+			{7, 1},
+			{7, 2},
+			{7, 3},
+			{7, 4},
+		},
 	}
 }
 
-// aproachTarget matches the keyword exactly, so it depends on the parser
-// lower-casing every event keyword. Run a real .FS through the real parser to
-// keep the two ends of that contract together.
-func TestAproachTargetOnParsedScript(t *testing.T) {
-	const src = `Frame 0,1;  Delay 200; Aproach Roby,axe,0,0;
-Frame 6,1;  Delay 400; DelObject CAB_B1, axe,2,2;
-End;`
-	var p repositories.SceneParser
-	fs := p.ParseFrameScript(src)
-	cells := cellsOf(map[string][2]int{"axe": {5, 3}})
-	if x, y := aproachTarget(fs, 0, 0, cells); x != 5 || y != 3 {
-		t.Fatalf("aproachTarget = (%d,%d), want the axe's cell (5,3)", x, y)
+// actRes answers every asset lookup with nothing: no movie frames, no shift and
+// no container to load walk cycles from, so the walkers fail to start and the
+// tests see the placement fallbacks rather than an animation.
+type actRes struct{ noScenes }
+
+func (actRes) MovieFrames(string) ([]*types.NGB, types.Palette) {
+	return nil, types.Palette{}
+}
+
+func (actRes) MovieShift(string) [2]int { return [2]int{} }
+
+// actGame builds the slice of Game that resolveAction and startObjectAction
+// touch: quest state, scene container, parser, grid and the placed objects. No
+// Ebiten and no art — LoadDecal over actRes yields zero frames and never asks
+// for an image.
+func actGame(
+	sc *types.Scene, script string, objs map[string][2]int, char string,
+) (*Game, *recGrid) {
+	pack := &fsPack{files: map[string][]byte{}}
+	for name, body := range map[string]string{
+		"ROHANPOO.FS": script, "FRHANPOO.FS": script, "ROHANCNT.FS": script,
+		"ROHANSTB.FS": script, "FRHANGOL.FS": script,
+	} {
+		pack.files[name] = []byte(body)
+	}
+	gs := types.NewGameState()
+	gs.ActiveChar, gs.Active = char, "hand"
+	if strings.EqualFold(char, "Frid") {
+		gs.Active = "handfr"
+	}
+	grid := &recGrid{IGrid: use_cases.NewGrid(sc, sc.Size[0], sc.Size[1])}
+	g := &Game{
+		res:        actRes{},
+		parser:     repositories.SceneParser{},
+		gs:         gs,
+		sceneC:     pack,
+		grid:       grid,
+		zper:       sc.ZPerGrid,
+		cycleCache: map[string]*walkCycle{},
+		roby:       walker{prefix: "RG", chr: "ROBY"},
+		fridWalk:   walker{prefix: "FG", chr: "FRID"},
+	}
+	for name, cell := range objs {
+		g.sceneObjs = append(g.sceneObjs, &sceneObj{
+			ref: types.ObjectRef{Name: name, GX: cell[0], GY: cell[1]},
+		})
+	}
+	return g, grid
+}
+
+// The pool's own cell is closed at scene load and ROHANPOO opens it in the very
+// frame that routes the walk. The engine runs a frame's commands in order, so
+// the SetVert has already reshaped the grid when the Aproach routes — route
+// before that edit lands and NearestFree hands back (5,1), one row north: the
+// hero then drinks 36px above the puddle. With no cycle art the walk resolves
+// by placement, so the cell itself is the observable.
+func TestActionOpensVertBeforeRouting(t *testing.T) {
+	const src = "MovieName Rohanpoo.mv;\nShift 139,29;\nTotalFrames 30;\n" +
+		"Frame 0,2;\nDelay 142;\nSetVert 5,2,open;\nAproach Roby, 5,2;\nEnd;"
+	g, rec := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{1, 0}
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0) // frame 0: SetVert, then the Aproach routes
+	if !g.grid.Valid(5, 2) {
+		t.Error("frame 0's SetVert must have opened (5,2) before routing")
+	}
+	if g.cell != [2]int{5, 2} {
+		t.Errorf("cell = %v, want the pool's own cell (5,2)", g.cell)
+	}
+	if rec.paths != 1 {
+		t.Errorf("Path called %d times, want 1", rec.paths)
+	}
+}
+
+// CAB_A1's RO*CNT refusals approach 2,0 — a wall cell no script ever opens — so
+// the nearest-walkable fallback has to stay, and nothing may be opened for them.
+func TestActionKeepsNearestFreeWhenNothingOpens(t *testing.T) {
+	const src = "MovieName Cannotdo.mv;\nTotalFrames 14;\n" +
+		"Frame 0,1;\nDelay 142;\nAproach Roby,4,2;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{1, 0}
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0)
+	if g.cell == [2]int{4, 2} {
+		t.Error("cell = (4,2), want the nearest walkable cell instead")
+	}
+	if g.grid.Blocked(g.cell[0], g.cell[1]) {
+		t.Errorf("cell = %v is closed, want a walkable cell", g.cell)
+	}
+	if !g.grid.Blocked(4, 2) {
+		t.Error("(4,2) must stay closed: the script opens nothing")
+	}
+}
+
+// An Idiot/Whynot refusal carries no Aproach, so it plays where the hero
+// stands. Counting the routing requests is what separates the fix from the
+// bug: startWalk fails either way without the cycle art, so a nil path proves
+// nothing on its own.
+func TestActionNoAproachPlaysInPlace(t *testing.T) {
+	const src = "MovieName Idiot.mv;\nTotalFrames 34;\n" +
+		"Frame 0,2;\nDelay 142;\nText 486,1;\nEnd;"
+	g, rec := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{1, 0}
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the refusal armed")
+	}
+	g.updateAction(0)
+	if g.act == nil {
+		t.Error("the refusal must still be playing")
+	}
+	if rec.paths != 0 {
+		t.Errorf("Path called %d times, want 0", rec.paths)
+	}
+	if g.path != nil || g.cell != [2]int{1, 0} || g.roby.walking() {
+		t.Errorf("the hero moved: path %v cell %v", g.path, g.cell)
+	}
+	if !g.grid.Blocked(5, 2) {
+		t.Error("a script with no Aproach must not reshape the grid")
+	}
+}
+
+// Friday's own action routes Friday, not the hero: 82 FR scripts approach only
+// her, and the hero walking in her place is what used to put her movie roughly
+// on target by accident.
+func TestActionFridWalksNotRoby(t *testing.T) {
+	const src = "MovieName Frhanpoo.mv;\nTotalFrames 12;\n" +
+		"Frame 0,1;\nDelay 142;\nSetVert 5,2,open;\nAproach Frid, pool,0,0;\nEnd;"
+	g, rec := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Frid")
+	g.cell = [2]int{1, 0}
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want Friday's action armed")
+	}
+	if g.act == nil || !g.act.frid {
+		t.Fatalf("act = %v, want one owned by Friday", g.act)
+	}
+	g.updateAction(0)
+	if g.cell != [2]int{1, 0} || g.path != nil || g.roby.walking() {
+		t.Errorf("the hero moved: path %v cell %v", g.path, g.cell)
+	}
+	// Friday has no walk cycles here, so fridWalkTo places her instead.
+	if g.fridCell != [2]int{5, 2} {
+		t.Errorf("fridCell = %v, want the pool's cell (5,2)", g.fridCell)
+	}
+	if rec.paths != 0 {
+		t.Errorf(
+			"Path called %d times, want 0: Friday uses PathStraight",
+			rec.paths,
+		)
+	}
+}
+
+// A target the hero cannot reach must not turn the click into a no-op: the
+// action still plays, just from where he is.
+func TestActionUnreachableTargetStillPlays(t *testing.T) {
+	sc := scena0()
+	// Wall off column 3 entirely, leaving the pool's side unreachable from (0,0).
+	for y := 0; y < sc.GridLength[1]; y++ {
+		sc.ClosedVert = append(sc.ClosedVert, [2]int{3, y})
+	}
+	const src = "MovieName Rohanpoo.mv;\nTotalFrames 30;\n" +
+		"Frame 0,2;\nDelay 142;\nSetVert 5,2,open;\nAproach Roby, 5,2;\nEnd;"
+	g, rec := actGame(sc, src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{0, 0}
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the action armed anyway")
+	}
+	g.updateAction(0)
+	if g.act == nil {
+		t.Error("an unreachable target must still leave the action playing")
+	}
+	if rec.paths != 1 {
+		t.Errorf("Path called %d times, want 1", rec.paths)
+	}
+	if g.path != nil || g.cell != [2]int{0, 0} {
+		t.Errorf("the hero moved: path %v cell %v", g.path, g.cell)
+	}
+}
+
+// fakeCycle builds a playable two-frame walk cycle with no art on frame 0 and
+// the given frame-0 events — enough for the walker to actually walk in a test.
+func fakeCycle(events ...types.Command) *walkCycle {
+	return &walkCycle{
+		anim: &adapters.Animation{
+			Frames: make([]*ebiten.Image, 2),
+			BBox:   make([][2]int, 2),
+		},
+		frames: []*types.Frame{
+			{Delay: 90, Events: events},
+			{Delay: 90},
+		},
+	}
+}
+
+// stepX is the authored cell step a walk cycle fires on its frame 0.
+func stepX(char string, d int) types.Command {
+	return types.Command{
+		Kw:   "shift",
+		Args: []string{char, "X", strconv.Itoa(d)},
+	}
+}
+
+// walkableCycles seeds the cycle cache with fake eastbound cycles for both
+// characters, so startWalk succeeds without any game art: accelerate (no cell
+// change), step, brake-with-step — the chain WalkCycles builds for a straight
+// two-cell route.
+func walkableCycles(g *Game) {
+	for _, c := range []struct{ prefix, char string }{
+		{"RG", "Roby"}, {"FG", "Frid"},
+	} {
+		g.cycleCache[c.prefix+"_56"] = fakeCycle()
+		g.cycleCache[c.prefix+"_66"] = fakeCycle(stepX(c.char, 1))
+		g.cycleCache[c.prefix+"_65"] = fakeCycle(stepX(c.char, 1))
+	}
+}
+
+// An Aproach is a playback event: the movie pauses on it until the walk it
+// started has finished, so the events of later frames must not fire while the
+// character is still on his way. This is what used to be lost — the route was
+// computed once, on the click, and an Aproach on frame 1+ never walked anyone.
+func TestActionAproachPausesPlayback(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 2;\n" +
+		"Frame 0,1;\nDelay 90;\nAproach Roby, 3,0;\n" +
+		"Frame 1,1;\nDelay 90;\nSetVar probe,1;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{1, 0}
+	walkableCycles(g)
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0) // frame 0 fires; its Aproach starts the walk
+	if g.act == nil || g.act.wait != waitRoby {
+		t.Fatalf("act.wait = %v, want waitRoby", g.act)
+	}
+	if !g.roby.walking() {
+		t.Fatal("the hero must be walking his cycles")
+	}
+	for i := 0; i < 200 && g.act != nil; i++ {
+		if g.act.wait == waitRoby && g.gs.Var("probe") != 0 {
+			t.Fatal("frame 1 fired while the walk was still underway")
+		}
+		g.updateWalk(0.09)
+		g.updateAction(0.09)
+	}
+	if g.act != nil {
+		t.Fatal("the action never finished")
+	}
+	if g.cell != [2]int{3, 0} {
+		t.Errorf("cell = %v, want the walked-to (3,0)", g.cell)
+	}
+	if g.gs.Var("probe") != 1 {
+		t.Error("frame 1 must have fired after the walk")
+	}
+}
+
+// One frame routinely routes both characters — SCENA6's ROBT3STB sends Friday
+// to the stumbling block and the hero one cell to its right — and the commands
+// run in order: her walk holds the movie first, his follows from the paused
+// frame's queue.
+func TestActionQueueRoutesBothCharacters(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 2;\n" +
+		"Frame 0,1;\nDelay 90;\nAproach Frid, stb, 0,0;\nAproach Roby, stb, 1,0;\n" +
+		"Frame 1,1;\nDelay 90;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"stb": {2, 0}}, "Roby")
+	g.cell = [2]int{0, 0}
+	g.fridCell = [2]int{0, 0}
+	walkableCycles(g)
+
+	if !g.startObjectAction("stb") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0)
+	if g.act == nil || g.act.wait != waitFrid {
+		t.Fatalf("act.wait = %v, want waitFrid first", g.act)
+	}
+	if g.cell != [2]int{0, 0} {
+		t.Fatal("the hero must not move before Friday has arrived")
+	}
+	for i := 0; i < 100 && g.aproachWalking(waitFrid); i++ {
+		g.updateFridWalk(0.09)
+	}
+	if g.fridCell != [2]int{2, 0} {
+		t.Fatalf("fridCell = %v, want the block's cell (2,0)", g.fridCell)
+	}
+	g.updateAction(0) // her walk is over: the paused frame routes the hero next
+	if g.act == nil || g.act.wait != waitRoby {
+		t.Fatalf("act.wait = %v, want waitRoby second", g.act)
+	}
+	for i := 0; i < 100 && g.roby.walking(); i++ {
+		g.updateWalk(0.09)
+	}
+	if g.cell != [2]int{3, 0} {
+		t.Errorf("cell = %v, want one right of the block (3,0)", g.cell)
+	}
+}
+
+// An Aproach on a late frame is the fix this model exists for: SHIP2's
+// ROHANOUT walks the hero on frame 2, and the FR*GOL exit pairs walk him on
+// frame 1, after Friday. Without cycle art the walk resolves by placement, so
+// the cell records that the event fired at all.
+func TestActionLateAproachRoutesRoby(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 3;\n" +
+		"Frame 0,1;\nDelay 142;\nAproach Frid, goleft, 0,0;\n" +
+		"Frame 1,1;\nDelay 142;\nAproach Roby, goleft, 0,1;\n" +
+		"Frame 2,1;\nDelay 142;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"goleft": {0, 1}}, "Frid")
+	g.cell = [2]int{3, 0}
+	g.fridCell = [2]int{2, 0}
+
+	if !g.startObjectAction("goleft") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0) // frame 0: Friday lands on the exit (no art: placed)
+	if g.fridCell != [2]int{0, 1} {
+		t.Fatalf("fridCell = %v, want the exit cell (0,1)", g.fridCell)
+	}
+	if g.cell != [2]int{3, 0} {
+		t.Fatal("the hero must not move on frame 0")
+	}
+	g.updateAction(0.15) // into frame 1: now the hero is routed too
+	if g.cell != [2]int{0, 2} {
+		t.Errorf("cell = %v, want the exit cell plus offset (0,2)", g.cell)
+	}
+}
+
+// Skipping a cutscene that is paused on an Aproach must not deadlock the
+// fast-forward loop: the walker lands on his goal at once, the rest of the
+// frames rush by with their sounds and subtitles muted, and the final state
+// matches what playing it out would have left.
+func TestSkipCutsceneCutsAproachShort(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 3;\n" +
+		"Frame 0,1;\nDelay 90;\nAproach Roby, 3,0;\n" +
+		"Frame 1,1;\nDelay 90;\nSetVar probe,1;\nSound \"rr001.wav\",1;\n" +
+		"Frame 2,1;\nDelay 90;\nAproach Roby, 5,0;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"pool": {5, 2}}, "Roby")
+	g.cell = [2]int{1, 0}
+	fa := &fakeAudio{}
+	g.audio = fa
+	g.gs.UI["interrupt"] = true
+	walkableCycles(g)
+
+	if !g.startObjectAction("pool") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	g.updateAction(0)
+	if g.act == nil || g.act.wait != waitRoby {
+		t.Fatalf("act.wait = %v, want waitRoby", g.act)
+	}
+	g.updateWalk(0.09) // he is mid-route when the player skips
+	if !g.skipCutscene() {
+		t.Fatal("skipCutscene = false, want the skip taken")
+	}
+	if g.act != nil {
+		t.Fatal("the action must be gone after the skip")
+	}
+	if g.gs.Var("probe") != 1 {
+		t.Error("the skipped frames' state must still land")
+	}
+	// Frame 2's Aproach re-aims him past the frame-0 goal; the skip resolves
+	// both walks instantly, so he ends where playing it out would leave him.
+	if g.cell != [2]int{5, 0} {
+		t.Errorf("cell = %v, want the final Aproach goal (5,0)", g.cell)
+	}
+	if g.roby.walking() {
+		t.Error("no walk may survive the skip")
+	}
+	if len(fa.played) != 0 {
+		t.Errorf("skipped sounds must stay muted, got %v", fa.played)
+	}
+	if fa.stops == 0 {
+		t.Error("the skip must cut the effects that had already started")
 	}
 }

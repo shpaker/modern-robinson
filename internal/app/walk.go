@@ -220,11 +220,17 @@ func (g *Game) fridWalkTo(gx, gy int) {
 	g.applyWalkEvents(evs)
 }
 
-// fridSync snaps Friday's screen position to his cell.
+// fridSync snaps Friday's screen position to his cell and ends any walk (a
+// script teleport). The walk cycles' own steps use fridSnapPos instead.
 func (g *Game) fridSync() {
+	g.fridSnapPos()
+	g.fridPath = nil
+}
+
+// fridSnapPos re-anchors Friday's screen position to his cell.
+func (g *Game) fridSnapPos() {
 	x, y := g.grid.ToScreen(g.fridCell[0], g.fridCell[1])
 	g.fridPos = [2]float64{float64(x), float64(y)}
-	g.fridPath = nil
 }
 
 func minInt(a, b int) int {

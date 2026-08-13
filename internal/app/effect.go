@@ -9,16 +9,9 @@ import (
 
 // applyEvents runs a batch of frame events through the quest interpreter
 // (evaluating If/EndIf and applying state) and enacts the world/presentation
-// commands that survive.
+// commands that survive. Action-movie frames go through enqueueAction instead,
+// which honours Aproach pauses.
 func (g *Game) applyEvents(cmds []types.Command) {
-	g.applyEventsWith(cmds, false)
-}
-
-// applyEventsWith is applyEvents with the option to drop the presentation
-// commands. Muting is for fast-forwarding a skipped cutscene: the quest state
-// and the world still have to catch up, but the frames rush by in milliseconds,
-// so their sounds and subtitles would all land at once (see skipCutscene).
-func (g *Game) applyEventsWith(cmds []types.Command, mute bool) {
 	if len(cmds) == 0 {
 		return
 	}
@@ -30,17 +23,16 @@ func (g *Game) applyEventsWith(cmds []types.Command, mute bool) {
 	// itself — it has to be able to see it.
 	g.mgResume = rest
 	for _, c := range out {
-		if mute && presentational(c.Kw) {
-			continue
-		}
 		g.applyEffect(c)
 	}
 }
 
 // presentational reports whether a command only speaks to the player, carrying
-// no state or world change a later frame could depend on.
+// no state or world change a later frame could depend on. A skipped cutscene
+// mutes these: the whole remainder fires within one tick, so its sounds and
+// subtitles would all land at once (see skipCutscene).
 func presentational(kw string) bool {
-	switch strings.ToLower(kw) {
+	switch kw {
 	case "sound", "text":
 		return true
 	}
@@ -100,7 +92,8 @@ func (g *Game) applyEffect(c types.Command) {
 		// (INT1.FS frame 313). Here the scene swap repaints anyway and
 		// loadScene cuts the sounds, so there is nothing left to do.
 	}
-	// aproach/shift still drive the walk+action phase.
+	// An action movie's aproach never reaches here (playActionQueue pauses on
+	// it); shift is the walk cycles' own step (see applyWalkEvents).
 }
 
 // setCharCoord teleports a character's grid coordinate: Set char,X|Y|Z,n.
@@ -212,15 +205,29 @@ func (g *Game) delObject(args []string) {
 	}
 }
 
+// vertArgs decodes a SetVert command's arguments: gx,gy,open|close|closed. It is
+// shared with preAproachVerts, which has to read the same edits a frame ahead of
+// the engine to route an Aproach onto a cell the frame opens (see action.go).
+func vertArgs(args []string) (types.Vert, bool) {
+	if len(args) < 3 {
+		return types.Vert{}, false
+	}
+	return types.Vert{
+		GX:   atoiArg(args[0]),
+		GY:   atoiArg(args[1]),
+		Open: strings.EqualFold(args[2], "open"),
+	}, true
+}
+
 // setVert toggles a walk cell's passability. Form: SetVert gx,gy,open|close|closed.
 func (g *Game) setVert(args []string) {
-	if len(args) < 3 {
+	v, ok := vertArgs(args)
+	if !ok {
 		return
 	}
-	gx, gy := atoiArg(args[0]), atoiArg(args[1])
-	open := strings.EqualFold(args[2], "open")
-	g.grid.SetVert(gx, gy, open)
-	g.gs.MarkVert(g.sceneName, gx, gy, open) // survives leaving the scene
+	g.grid.SetVert(v.GX, v.GY, v.Open)
+	// survives leaving the scene
+	g.gs.MarkVert(g.sceneName, v.GX, v.GY, v.Open)
 }
 
 // setMusic switches the looping background track: SetMusic id|none. Track ids

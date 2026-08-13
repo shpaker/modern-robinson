@@ -130,7 +130,7 @@ func TestApplyEventsPlaysPresentationUnmuted(t *testing.T) {
 	g, fa := skipGame(t, fs)
 	cmds := fs.Frames[0].Events
 
-	g.applyEventsWith(cmds, false)
+	g.applyEvents(cmds)
 	if len(fa.played) != 1 || fa.played[0] != "scream.wav" {
 		t.Errorf("played %v, want scream.wav", fa.played)
 	}
@@ -139,7 +139,7 @@ func TestApplyEventsPlaysPresentationUnmuted(t *testing.T) {
 	}
 
 	fa.played, g.msg = nil, ""
-	g.applyEventsWith(cmds, true)
+	g.enqueueAction(g.act, cmds, true) // the skip path mutes them
 	if len(fa.played) != 0 || g.msg != "" {
 		t.Errorf("muted run played %v / msg %q, want neither", fa.played, g.msg)
 	}

@@ -106,7 +106,7 @@ func (g *Game) setRest(args []string) {
 // updateIdle counts standing time and plays the long idle once it is due.
 func (g *Game) updateIdle(dt float64) {
 	g.updateIdlePlay(dt)
-	if g.moving || g.act != nil || g.pendingAct != nil || g.idleAct != nil {
+	if g.moving || g.act != nil || g.idleAct != nil {
 		g.idleT = 0
 		return
 	}
@@ -170,6 +170,14 @@ func (g *Game) skipCutscene() bool {
 	if g.act == nil || !g.gs.UI["interrupt"] {
 		return false
 	}
+	// A movie paused for an Aproach walk first lands the walker on his goal,
+	// then plays out the rest of the paused frame. In skip mode every further
+	// Aproach resolves instantly too, so the player below never blocks.
+	if g.act.wait != waitNone {
+		g.cutAproachShort(g.act.wait)
+		g.act.wait = waitNone
+	}
+	g.playActionQueue(g.act, true)
 	// Step the player with generous slices until it reports done, applying the
 	// state and world events it still owes but muting its sounds and subtitles:
 	// the whole remainder fires within one tick, so playing them would stack
@@ -177,11 +185,9 @@ func (g *Game) skipCutscene() bool {
 	// channels, thunder, and Robinson's scream). Stop as soon as an event ends
 	// the script, so skipping cannot run past a scene change or launch a
 	// minigame twice.
-	for i := 0; i < 10000 && !g.act.player.Done(); i++ {
-		g.applyEventsWith(g.act.player.Update(1), true)
-		if g.pending != nil || g.mg != nil {
-			break
-		}
+	for i := 0; i < 10000 && !g.act.player.Done() &&
+		g.pending == nil && g.mg == nil; i++ {
+		g.enqueueAction(g.act, g.act.player.Update(1), true)
 	}
 	g.act = nil
 	g.msg, g.msgT = "", 0 // the line on screen belonged to the skipped scene

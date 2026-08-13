@@ -56,6 +56,12 @@ func (g *Game) drawFrid(screen *ebiten.Image) {
 	if !g.fridVisible() {
 		return
 	}
+	if g.act != nil && g.act.frid && g.act.started && g.act.wait == waitNone {
+		// Her own action movie stands in for the idle (see drawAction) — but a
+		// movie paused for an Aproach walk steps aside, so she draws her own
+		// walk cycles on the way over.
+		return
+	}
 	a, fi := g.fridIdle, g.fridFrame
 	if len(g.fridPath) > 0 {
 		if w := g.fridWalk.anim(); w.OK() {
@@ -88,15 +94,19 @@ func (g *Game) fridEffect(kw string, args []string) bool {
 			}
 		}
 	case "shift":
+		// The authored cell step of her walk cycles (and a script nudge). It
+		// re-anchors her without fridSync: syncing would clear fridPath on the
+		// very first step, ending the walk as far as the rest of the engine
+		// (walk pose, a paused action movie) can tell.
 		if len(args) >= 3 {
 			n := atoiArg(args[2])
 			switch strings.ToUpper(args[1]) {
 			case "X":
 				g.fridCell[0] += n
-				g.fridSync()
+				g.fridSnapPos()
 			case "Y":
 				g.fridCell[1] += n
-				g.fridSync()
+				g.fridSnapPos()
 			}
 		}
 	case "aproach", "approach":

@@ -76,8 +76,7 @@ type Game struct {
 	hover      string
 	invScroll  int
 
-	act        *actionPlay
-	pendingAct *actionPlay
+	act *actionPlay
 
 	idle       *adapters.Animation
 	idleAct    *idlePlay
@@ -263,7 +262,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	}
 	c := g.res.SceneContainer(name)
 	g.sceneC = c
-	g.act, g.pendingAct, g.mgResume = nil, nil, nil
+	g.act, g.mgResume = nil, nil
 	g.camShift = 0 // a pan never survives the scene that asked for it
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
@@ -437,7 +436,7 @@ func (g *Game) click(mx, my int) {
 	if g.act != nil && g.skipCutscene() {
 		return // Interrupt ON: the click fast-forwards the cutscene
 	}
-	if g.act != nil || g.pendingAct != nil {
+	if g.act != nil {
 		return // ignore input while an action is walking/playing
 	}
 	if my >= PlayH {
@@ -944,14 +943,13 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
 		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  moving=%v  "+
-			"act=%s pend=%v cyc=%v goto=%v fps=%.0f",
+			"act=%s cyc=%v goto=%v fps=%.0f",
 		Version,
 		g.sceneName,
 		g.cell,
 		g.camX,
 		g.moving,
 		g.actDebug(),
-		g.pendingAct != nil,
 		g.roby.cycles,
 		g.pending != nil,
 		ebiten.ActualFPS(),
@@ -1105,7 +1103,16 @@ func (g *Game) actDebug() string {
 	if g.act == nil {
 		return "-"
 	}
-	return fmt.Sprintf("%d/%d", g.act.player.FrameIndex(), len(g.act.fs.Frames))
+	hold := ""
+	switch g.act.wait {
+	case waitRoby:
+		hold = " wait=roby"
+	case waitFrid:
+		hold = " wait=frid"
+	}
+	return fmt.Sprintf(
+		"%d/%d%s", g.act.player.FrameIndex(), len(g.act.fs.Frames), hold,
+	)
 }
 
 // applyObjectBlocking closes the cells the objects on stage stand in. An .OB
