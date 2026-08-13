@@ -665,16 +665,33 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 // edgeExit returns the scene exit reachable by clicking the viewport edge: the
 // screen edge only leads out once the camera has scrolled to the matching end of
 // the scene, which is how the original gates its left/right exits.
+//
+// The side must also have its arrow object (goleft/gorght) on stage: the quest
+// opens some paths later with a CreateObject (SCENA2's goleft appears after the
+// banana step), and until then the original shows no arrow and has no exit —
+// jumping anyway would skip the departure script and its Island bookkeeping.
 func (g *Game) edgeExit(mx int) *types.Exit {
 	const margin = 40
 	maxCam := maxInt(0, g.w-ViewW)
-	if mx < margin && g.camX == 0 && g.exitL.OK {
+	if mx < margin && g.camX == 0 && g.exitL.OK &&
+		g.exitObjPresent(exitKey(true)) {
 		return &g.exitL
 	}
-	if mx > ViewW-margin && g.camX >= maxCam && g.exitR.OK {
+	if mx > ViewW-margin && g.camX >= maxCam && g.exitR.OK &&
+		g.exitObjPresent(exitKey(false)) {
 		return &g.exitR
 	}
 	return nil
+}
+
+// exitObjPresent reports whether an exit arrow object is currently on stage.
+func (g *Game) exitObjPresent(name string) bool {
+	for _, s := range g.sceneObjs {
+		if strings.EqualFold(s.ref.Name, name) && !s.removed {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Game) cursorType(mx, my int) int {

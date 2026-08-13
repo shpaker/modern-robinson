@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 // The two edge exits are objects like any other, so their names are what the
@@ -16,6 +18,34 @@ func TestExitKeyNamesTheEdgeObjects(t *testing.T) {
 	}
 	if got := exitKey(false); got != "gorght" {
 		t.Errorf("exitKey(false) = %q, want gorght", got)
+	}
+}
+
+// An edge only leads out while its arrow object is on stage: the quest opens
+// some paths later with a CreateObject (SCENA2's goleft appears after the
+// banana step), and jumping through a gated edge used to skip the departure
+// script and play the island-discovery cutscene on the third scene.
+func TestEdgeExitNeedsTheArrowObject(t *testing.T) {
+	g := &Game{w: ViewW} // no wider than the view: both edges qualify
+	g.exitL = types.Exit{Scene: "SCENA7", Entry: "Roin6", OK: true}
+	g.exitR = types.Exit{Scene: "SCENA1", Entry: "Roin4", OK: true}
+
+	if e := g.edgeExit(0); e != nil {
+		t.Errorf("left edge with no goleft on stage = %+v, want nil", e)
+	}
+	if e := g.edgeExit(ViewW - 1); e != nil {
+		t.Errorf("right edge with no gorght on stage = %+v, want nil", e)
+	}
+
+	g.sceneObjs = []*sceneObj{
+		{ref: types.ObjectRef{Name: "goleft"}},
+		{ref: types.ObjectRef{Name: "gorght"}, removed: true},
+	}
+	if e := g.edgeExit(0); e != &g.exitL {
+		t.Errorf("left edge with goleft on stage = %+v, want exitL", e)
+	}
+	if e := g.edgeExit(ViewW - 1); e != nil {
+		t.Errorf("right edge with gorght removed = %+v, want nil", e)
 	}
 }
 

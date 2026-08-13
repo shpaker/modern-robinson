@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/shpaker/modern-robinson/internal/testutil"
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 func TestParseFrameScript(t *testing.T) {
@@ -82,6 +83,71 @@ func TestParseSceneAndExits(t *testing.T) {
 	}
 	if !right.OK || right.Scene != "SCENA3" {
 		t.Errorf("exitR = %+v, want SCENA3", right)
+	}
+}
+
+// fakeContainer serves in-memory entries, enough for SceneExits.
+type fakeContainer struct{ files map[string]string }
+
+func (f fakeContainer) Entries() []types.Entry {
+	var out []types.Entry
+	for name := range f.files {
+		out = append(out, types.Entry{Name: name})
+	}
+	return out
+}
+
+func (f fakeContainer) Find(name string) (types.Entry, bool) {
+	if _, ok := f.files[name]; ok {
+		return types.Entry{Name: name}, true
+	}
+	return types.Entry{}, false
+}
+
+func (fakeContainer) FindExt(string) (types.Entry, bool) {
+	return types.Entry{}, false
+}
+
+func (f fakeContainer) Extract(e types.Entry) ([]byte, error) {
+	return []byte(f.files[e.Name]), nil
+}
+
+func (f fakeContainer) ExtractName(name string) ([]byte, error) {
+	return []byte(f.files[name]), nil
+}
+
+// A departure script's first GoScene may be the guarded island-discovery
+// branch (Disc6); the bare-jump exit must carry the script's final,
+// unconditional GoScene instead.
+func TestSceneExitsSkipTheGuardedGoScene(t *testing.T) {
+	gol := "ScriptName x;\nMovieName Ro_left.mv;\nTotalFrames 1;\n" +
+		"Frame 0,1;\nDelay 90;\n" +
+		"If Island,0;\nIf Ban2Hou,1;\n" +
+		"SetVar Island,1;\nGoScene SCENA7, Roby, Disc6, 5, 0;\n" +
+		"EndIf;\nEndIf;\n" +
+		"GoScene SCENA7, Roby, Roin6, Frid, Frin6, 6, 0;\nEnd;\n"
+	c := fakeContainer{files: map[string]string{"ROHANGOL.FS": gol}}
+	left, _ := SceneParser{}.SceneExits(c)
+	if !left.OK || left.Entry != "Roin6" || left.GX != 6 {
+		t.Errorf("exitL = %+v, want the unconditional Roin6 (6,0)", left)
+	}
+}
+
+// The same on the shipped data: SCENA2's goleft scripts carry the island
+// check, and the exit must still name the plain arrival.
+func TestSceneExitsOnGuardedSceneData(t *testing.T) {
+	root := testutil.GameRoot(t)
+	c := NewResources(root).SceneContainer("SCENA2")
+	if c == nil {
+		t.Fatal("SCENA2 container not found")
+	}
+	left, _ := SceneParser{}.SceneExits(c)
+	if !left.OK || left.Scene != "SCENA7" {
+		t.Fatalf("exitL = %+v, want SCENA7", left)
+	}
+	if strings.EqualFold(left.Entry, "Disc6") {
+		t.Errorf("exitL.Entry = %q: the guarded discovery branch leaked "+
+			"into the bare-jump exit", left.Entry)
 	}
 }
 

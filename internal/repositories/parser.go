@@ -407,10 +407,14 @@ func (SceneParser) SceneExits(
 		if err != nil {
 			continue
 		}
-		m := goSceneRe.FindStringSubmatch(string(d))
-		if m == nil {
+		// The last GoScene is the script's unconditional exit; earlier ones
+		// sit inside If guards (the island-discovery Disc4/Disc6 branch) and
+		// must not name the bare-jump entry.
+		ms := goSceneRe.FindAllStringSubmatch(string(d), -1)
+		if len(ms) == 0 {
 			continue
 		}
+		m := ms[len(ms)-1]
 		gx, _ := strconv.Atoi(m[3])
 		gy, _ := strconv.Atoi(m[4])
 		ex := types.Exit{
