@@ -176,7 +176,11 @@ func appendUnique(xs []string, v string) []string {
 
 // report prints the findings, worst first.
 func report(f *facts) {
-	fmt.Printf("scanned %d scripts in %d scenes\n\n", len(f.scripts), len(scenes))
+	fmt.Printf(
+		"scanned %d scripts in %d scenes\n\n",
+		len(f.scripts),
+		len(scenes),
+	)
 
 	// 1. Conditions no script and no starting value can ever satisfy.
 	var stuck []string

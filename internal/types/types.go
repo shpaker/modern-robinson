@@ -67,8 +67,37 @@ type Scene struct {
 	ScrollDesc [2]int
 	ClosedVert [][2]int
 	Objects    []ObjectRef
-	SoundVars  map[string][2]string // name -> {wav, channel}
-	Music      string
+	// SoundVars resolves a Sound event's name to its wav; on the duplicate names
+	// an ambient pool uses, the last entry wins (see Sounds for the full list).
+	SoundVars map[string][2]string // name -> {wav, channel}
+	// Sounds is the SoundVariables block in file order, duplicates kept.
+	Sounds []SoundVar
+	Music  string
+}
+
+// SoundVar is one SoundVariables entry: name,"file.wav",voices[,*].
+type SoundVar struct {
+	Name, Wav string
+	// Voices is the third field: how many copies of the buffer may sound at
+	// once in the original — not a channel, though the remake still reads it as
+	// one for Sound events (see Game.playSound).
+	Voices string
+	// Ambient marks the trailing "*": the entry belongs to the scene's ambient
+	// pool, which the engine plays by itself instead of any script (birds,
+	// gulls, crickets). Pool entries share a name, so they live here, not in
+	// SoundVars.
+	Ambient bool
+}
+
+// AmbientSounds returns the scene's ambient pool in file order.
+func (sc *Scene) AmbientSounds() []SoundVar {
+	var out []SoundVar
+	for _, s := range sc.Sounds {
+		if s.Ambient {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // SceneObject is a parsed .OB (a clickable object on a scene).

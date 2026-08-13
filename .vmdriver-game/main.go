@@ -143,9 +143,9 @@ func (d *driver) Update() error {
 	// To capture the app in several states in one run — the multi-snapshot pattern — call d.snapshot(i)
 	// between segments; each call renders the current state and writes a numbered PNG next to -out.
 	//
-	// INPUT SCRIPT: quest persistence round-trip. Pick up bgstone in SCENA0
-	// (DelObject + AddItem), leave to SCENA3, return, and confirm the stone
-	// stays gone (world edits persist in GameState across scene loads).
+	// INPUT SCRIPT: the island map. Start in SCENA0 with the map button lit and
+	// Friday on stage (ROBINSON_SCENE=SCENA0 ROBINSON_UI=map ROBINSON_FRID=2,3),
+	// open the map from the bar and travel to a location from it.
 	click := func(x, y float64) {
 		d.guest.MoveCursor(x, y)
 		d.guest.AdvanceTicks(2)
@@ -153,23 +153,18 @@ func (d *driver) Update() error {
 		d.guest.AdvanceTicks(1)
 		d.guest.ReleaseMouseButton(ebiten.MouseButtonLeft)
 	}
-	// Intro check: skip the logo and title, then sample the opening cutscene
-	// chain (INT0 note -> INT1 room with the TV -> SCENA0 wake).
-	click(320, 240) // skip logo
-	d.guest.AdvanceTicks(4)
-	click(320, 240) // skip title -> New Game
-	// Walk check (ROBINSON_SCENE=SCENA0): click far left on the sand and sample
-	// the walk every few ticks — the figure must stride, not slide or jump.
-	// Rows around the log in SCENA4: walk to the ground level above the log
-	// (row 1) and then onto the log's own row (row 2), to see how each orders.
-	d.guest.AdvanceTicks(40)
-	click(60, 300) // row 1, left: above the log
-	d.guest.AdvanceTicks(220)
+	d.guest.AdvanceTicks(50)
+	click(60, 330) // walk left along the sand: ordinary scenes still walk
+	d.guest.AdvanceTicks(200)
 	_ = d.snapshot(0)
-	click(60, 340) // row 2, left: the log's own row
-	d.guest.AdvanceTicks(220)
-	_ = d.snapshot(1)
-	_ = click
+	click(524, 440) // the map button (ScisorsBox 490,407..559,473)
+	d.guest.AdvanceTicks(120)
+	d.guest.MoveCursor(320, 200) // off the bar, over the mountain's zone
+	d.guest.AdvanceTicks(30)
+	_ = d.snapshot(1) // the map: nobody on it, the button dim
+	click(271, 247)   // the big oak (zone 184,210..359,285) -> SCENA1
+	d.guest.AdvanceTicks(200)
+	_ = d.snapshot(2) // arrived, without a walk across the map
 	// ---------------------------------------------------------------------------------------------------
 
 	// Render the final frame. WaitFrame blocks until every queued tick has run and the frame is rendered,

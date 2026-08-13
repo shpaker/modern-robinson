@@ -43,9 +43,11 @@ var keywords = map[string]bool{
 }
 
 var (
-	wordRe    = regexp.MustCompile(`^([A-Za-z_]\w*)(.*)$`)
-	intRe     = regexp.MustCompile(`-?\d+`)
-	soundRe   = regexp.MustCompile(`(\w+)\s*,\s*"([^"]+)"\s*,?\s*(\d*)`)
+	wordRe  = regexp.MustCompile(`^([A-Za-z_]\w*)(.*)$`)
+	intRe   = regexp.MustCompile(`-?\d+`)
+	soundRe = regexp.MustCompile(
+		`(\w+)\s*,\s*"([^"]+)"\s*,?\s*(\d*)\s*,?\s*(\*?)`,
+	)
 	goSceneRe = regexp.MustCompile(
 		`(?is)GoScene\s+(\w+)\s*,\s*\w+\s*,\s*(\w+).*?,\s*(-?\d+)\s*,\s*(-?\d+)\s*;`,
 	)
@@ -174,6 +176,12 @@ func (SceneParser) ParseScene(text string) *types.Scene {
 		case "soundvariables":
 			if m := soundRe.FindStringSubmatch(st.args); m != nil {
 				sc.SoundVars[m[1]] = [2]string{m[2], m[3]}
+				sc.Sounds = append(sc.Sounds, types.SoundVar{
+					Name:    m[1],
+					Wav:     m[2],
+					Voices:  m[3],
+					Ambient: m[4] == "*",
+				})
 			}
 		case "music":
 			sc.Music = strings.Trim(strings.TrimSpace(st.args), `"`)

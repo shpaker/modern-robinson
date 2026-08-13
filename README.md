@@ -74,7 +74,7 @@ ROBINSON_TRACE=goscene,setvar ./robinson    # только переходы и �
 | `DATA/STARTUP.DAN` | `STARTUP.INF` (список сцен, начальные переменные) и `TEXT.DAT` (все тексты) |
 | `DATA/BEGIN.BGI` | начальное состояние объектов в каждой сцене |
 | `DATA/BAR/BAR.DAN`, `BAR.DAT` | панель инвентаря: раскладка `BAR.BAR` и её графика |
-| `DATA/OPTIONS.DAT` | экраны опций, сохранения и загрузки |
+| `DATA/OPTIONS.DAT` | главное меню (оно же экран опций), экраны сохранения и загрузки |
 | `LOGO.DAT` | логотип студии, титульный экран и экран «Загрузка» |
 | `CRYPT.DAT`, `PIPE.DAT`, `HOUSE.DAT`, `MAP.DAT`, `CHESS.DAT`, `BALOON.DAT` | мини-игры |
 | `MINIGAME.WDT` | звуки мини-игр |

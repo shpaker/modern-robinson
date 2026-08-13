@@ -76,6 +76,21 @@ func TestParseSceneAndExits(t *testing.T) {
 	if sv, ok := sc.SoundVars["step"]; !ok || sv[0] != "step.wav" {
 		t.Errorf("step sound = %v, want step.wav", sv)
 	}
+	// SCENA0's ambience is eight starred rows that all answer to "fon1", so the
+	// pool only survives as a list — the name map keeps just the last of them.
+	amb := sc.AmbientSounds()
+	if len(amb) != 8 {
+		t.Errorf("ambient pool = %d entries, want 8", len(amb))
+	}
+	for _, a := range amb {
+		if !strings.EqualFold(a.Name, "fon1") || a.Voices != "5" {
+			t.Errorf("ambient entry = %+v, want fon1 with 5 voices", a)
+		}
+		// The pool is only audible if the names it carries reach real audio.
+		if res.Sound(a.Wav) == nil {
+			t.Errorf("ambient wav %q resolves to nothing", a.Wav)
+		}
+	}
 
 	left, right := p.SceneExits(c)
 	if !left.OK || left.Scene != "SCENA1" || left.GX != 5 {
@@ -83,6 +98,33 @@ func TestParseSceneAndExits(t *testing.T) {
 	}
 	if !right.OK || right.Scene != "SCENA3" {
 		t.Errorf("exitR = %+v, want SCENA3", right)
+	}
+}
+
+// A SoundVariables block mixes plain entries, addressed by name, with the
+// starred rows of the ambient pool, which share one name and are addressed by
+// position — so the list has to keep the duplicates the name map folds away.
+func TestParseSceneSoundVariables(t *testing.T) {
+	scn := "SceneName\tTEST;\nSoundVariables\tstep,\"step.wav\",1;\n" +
+		"\t\t\tfon1,\"s11.wav\",5,*;\n\t\t\tfon1,\"s12.wav\",5,*;\nEnd;"
+	sc := SceneParser{}.ParseScene(scn)
+
+	if len(sc.Sounds) != 3 {
+		t.Fatalf("sounds = %d, want 3", len(sc.Sounds))
+	}
+	if sc.Sounds[0] != (types.SoundVar{Name: "step", Wav: "step.wav", Voices: "1"}) {
+		t.Errorf("first entry = %+v, want plain step.wav", sc.Sounds[0])
+	}
+	amb := sc.AmbientSounds()
+	if len(amb) != 2 || amb[0].Wav != "s11.wav" || amb[1].Wav != "s12.wav" {
+		t.Errorf("ambient pool = %+v, want s11 then s12 in file order", amb)
+	}
+	// The plain lookup path still works, and still collapses the pool.
+	if sv := sc.SoundVars["step"]; sv[0] != "step.wav" {
+		t.Errorf("SoundVars[step] = %v, want step.wav", sv)
+	}
+	if sv := sc.SoundVars["fon1"]; sv[0] != "s12.wav" {
+		t.Errorf("SoundVars[fon1] = %v, want the last row s12.wav", sv)
 	}
 }
 

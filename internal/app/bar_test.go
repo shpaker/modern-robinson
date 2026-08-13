@@ -109,7 +109,10 @@ func TestBarOverlayPlacement(t *testing.T) {
 	want := map[string][2]int{
 		"BAR5":  {bar.InvMask[0], bar.InvMask[1]},
 		"BAR78": {bar.LeftArrow[0], bar.LeftArrow[1]},
-		"BAR81": {bar.RightArrow[2], bar.RightArrow[1]}, // no sprites loaded: width 0
+		"BAR81": {
+			bar.RightArrow[2],
+			bar.RightArrow[1],
+		}, // no sprites loaded: width 0
 		"BAR72": {bar.ScisorsBox[0], bar.ScisorsBox[1]},
 		"BAR75": {bar.SaveBox[0], bar.SaveBox[1]},
 	}
@@ -139,5 +142,48 @@ func TestItemIndexCoversEveryPair(t *testing.T) {
 	}
 	if g.itemIndex("no-such-item") != -1 {
 		t.Error("unknown item should have no pair")
+	}
+}
+
+// The map button travels the way ROBY.EXE spells it out: GoScene MAPSCR, Roby,
+// Roin0, Frid, Frin0, 0,0. Without those two entry scripts the map keeps both
+// characters standing on it and stays walkable, so the exit carries them.
+func TestMapButtonCarriesTheEntryScripts(t *testing.T) {
+	bar := shippedBar(t)
+	mx := (bar.ScisorsBox[0] + bar.ScisorsBox[2]) / 2
+	my := (bar.ScisorsBox[1] + bar.ScisorsBox[3]) / 2
+	cases := []struct {
+		name    string
+		scene   string
+		mapOpen bool
+		want    *types.Exit
+	}{
+		{
+			name:    "map open",
+			scene:   "SCENA0",
+			mapOpen: true,
+			want: &types.Exit{
+				Scene: "MAPSCR", Entry: "Roin0", EntryFrid: "Frin0", OK: true,
+			},
+		},
+		{name: "map not found yet", scene: "SCENA0"},
+		{name: "already on the map", scene: "MAPSCR", mapOpen: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gs := types.NewGameState()
+			gs.UI["map"] = c.mapOpen
+			g := &Game{bar: bar, gs: gs, sceneName: c.scene}
+			g.clickBar(mx, my)
+			switch {
+			case c.want == nil && g.pending != nil:
+				t.Fatalf("pending = %+v, want no transition", g.pending)
+			case c.want == nil:
+			case g.pending == nil:
+				t.Fatalf("no transition, want %+v", c.want)
+			case *g.pending != *c.want:
+				t.Fatalf("pending = %+v, want %+v", *g.pending, *c.want)
+			}
+		})
 	}
 }

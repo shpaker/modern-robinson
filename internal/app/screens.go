@@ -9,9 +9,10 @@ import (
 )
 
 // Screen modes: the boot sequence shows the studio logo, then the title, then
-// the loading screen that covers the opening cutscene's decode, and only then
-// hands over to play; Esc opens the options menu, which can branch to the save
-// and load screens.
+// the main menu — the original opened on it, with "continue" and "save" inert
+// until a run starts (ROBY.PDF p.23). "New game" enters the loading screen
+// that covers the opening cutscene's decode and only then hands over to play;
+// Esc reopens the same menu from play, branching to the save and load screens.
 const (
 	modeLogo = iota
 	modeTitle
@@ -28,6 +29,33 @@ const fadeStepTime = 0.019
 // clickedThisTick reports a fresh left-button press.
 func clickedThisTick() bool {
 	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+}
+
+// serviceKey reports whether a key already has a job of its own (debug, quick
+// save/load, the options menu) and so must not double as "skip".
+func serviceKey(k ebiten.Key) bool {
+	switch k {
+	case ebiten.KeyF1, ebiten.KeyF5, ebiten.KeyF9, ebiten.KeyEscape:
+		return true
+	}
+	return false
+}
+
+// skipKeyPressed reports a fresh press of any key that means "get on with it".
+func skipKeyPressed() bool {
+	for _, k := range inpututil.AppendJustPressedKeys(nil) {
+		if !serviceKey(k) {
+			return true
+		}
+	}
+	return false
+}
+
+// skipPressed reports the player asking to move past what is on screen, by
+// click or by key. The boot screens and a skippable cutscene share it, so
+// Enter works on both.
+func skipPressed() bool {
+	return clickedThisTick() || skipKeyPressed()
 }
 
 // loadScreens fetches the boot images from LOGO.DAT (LOGO = studio logo,
@@ -51,9 +79,7 @@ func (g *Game) loadScreens() {
 	g.titleImg = load("ROBINSON")
 	g.loadingImg = load("LOADING")
 	if g.logoImg == nil {
-		// No boot pack: the intro bridge still has to run out of sight, so go
-		// through the load break anyway (it just draws black without an image).
-		g.enterLoading()
+		g.leaveBoot()
 		return
 	}
 	g.mode = modeLogo
@@ -67,8 +93,7 @@ func (g *Game) updateScreens(dt float64) bool {
 		return false
 	}
 	g.modeT += dt
-	skip := clickedThisTick() ||
-		len(inpututil.AppendJustPressedKeys(nil)) > 0
+	skip := skipPressed()
 	switch g.mode {
 	case modeLogo:
 		if skip || g.modeT > 2.5 {
@@ -76,10 +101,22 @@ func (g *Game) updateScreens(dt float64) bool {
 		}
 	case modeTitle:
 		if skip || g.modeT > 60 {
-			g.enterLoading()
+			g.leaveBoot()
 		}
 	}
 	return true
+}
+
+// leaveBoot hands the boot screens over to the main menu, where the original
+// started up (ROBY.PDF p.23). Without the menu backdrop there is nothing to
+// click, so fall back to the load break: the intro bridge still has to run out
+// of sight (it just draws black without an image).
+func (g *Game) leaveBoot() {
+	if g.optSprites["OPTIONS"] != nil {
+		g.openMenu()
+		return
+	}
+	g.enterLoading()
 }
 
 // enterLoading raises the loading screen and remembers the scene it is sitting
@@ -110,7 +147,7 @@ func (g *Game) updateLoading(dt float64) bool {
 	// The bridge has crossed — or the data is broken and never will, so bail
 	// out rather than sit on the loading screen forever.
 	if g.sceneName != g.loadingFrom || g.modeT > 30 {
-		g.mode = modePlay
+		g.mode, g.started = modePlay, true
 	}
 	return true
 }

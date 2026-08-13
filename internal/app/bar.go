@@ -300,9 +300,15 @@ func (g *Game) clickBar(mx, my int) {
 		g.mode, g.slotHover = modeSave, -1
 		return
 	case inBox(g.bar.ScisorsBox, mx, my):
-		// The map button: enabled once the island map opens (SetMap ON).
+		// The map button: enabled once the island map opens (SetMap ON). Its
+		// command is the one ROBY.EXE keeps next to the layout keys — GoScene
+		// MAPSCR, Roby, Roin0, Frid, Frin0, 0,0 — and those two entries are what
+		// makes the map a map: they park both characters at (7,0), off the far
+		// side of the stage, and switch the button back off.
 		if g.gs.UI["map"] && !strings.EqualFold(g.sceneName, "MAPSCR") {
-			g.pending = &types.Exit{Scene: "MAPSCR", GX: 0, GY: 0, OK: true}
+			g.pending = &types.Exit{
+				Scene: "MAPSCR", Entry: "Roin0", EntryFrid: "Frin0", OK: true,
+			}
 		}
 		return
 	}
@@ -332,11 +338,8 @@ func (g *Game) updateHover(mx, my int) {
 		return
 	}
 	wx, wy := mx+g.camX, my
-	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, wx, wy) {
-			g.hover = g.textLine(hs.ob.Text)
-			return
-		}
+	if hs := g.hotspotAt(wx, wy); hs != nil {
+		g.hover = g.textLine(hs.ob.Text)
 	}
 }
 

@@ -259,6 +259,10 @@ func (g *Game) startEntry(name string) {
 		player:  use_cases.NewPlayer(fs, false),
 		started: true,
 	}
+	// Fire frame 0 now rather than on the next updateAction: input runs earlier
+	// in the tick, so a cutscene's opening "Interrupt ON" would otherwise land
+	// one tick late and swallow the player's first click.
+	g.applyEvents(g.act.player.Update(0))
 }
 
 // drawAction draws the current action-movie frame (decal) if one is playing.

@@ -46,6 +46,21 @@ type IResources interface {
 	InitialVisibility(objectNames []string) map[string]bool
 }
 
+// IAudio plays the game's sounds: numbered effect channels, a looping music
+// channel, and one-shot ambient shots that belong to no channel.
+type IAudio interface {
+	Play(key string, wavBytes []byte, channel int)
+	// PlayAmbient fires a one-shot outside the channel slots, attenuated by
+	// volScale (0..1) and panned by pan (-1 left .. +1 right).
+	PlayAmbient(key string, wavBytes []byte, volScale, pan float64)
+	PlayMusic(key string, wavBytes []byte)
+	StopMusic()
+	// StopEffects silences everything but the music channel.
+	StopEffects()
+	SetVolume(v float64)
+	SetMusicVolume(v float64)
+}
+
 // ISceneParser parses NGI text scripts into Domain entities.
 type ISceneParser interface {
 	ParseScene(text string) *types.Scene

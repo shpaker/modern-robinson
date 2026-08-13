@@ -60,6 +60,7 @@ func (g *Game) loadSlot(i int) bool {
 	g.gs = types.Restore(sd)
 	g.resetRun()
 	g.loadScene(sd.Scene, &sd.Cell, "", "")
+	g.started = true // a restored run counts as started
 	g.msg, g.msgT = "Игра загружена", 2
 	return true
 }

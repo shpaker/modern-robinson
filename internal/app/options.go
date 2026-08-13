@@ -11,7 +11,8 @@ import (
 	"github.com/shpaker/modern-robinson/internal/adapters"
 )
 
-// The options, save and load screens come from DATA/OPTIONS.DAT. Every rectangle
+// The main menu (the manual's "Главное меню игры", doubling as the options
+// screen) and the save/load screens come from DATA/OPTIONS.DAT. Every rectangle
 // below is the authored placement read from the bitmaps' own headers (the five
 // menu rows are OPTS0-4, the slider knob is OPTS5, the save/load buttons are
 // BUT1x/BUT2x), so the layout matches the original pixel for pixel.
@@ -111,6 +112,11 @@ func (g *Game) updateOptions() bool {
 func (g *Game) updateOptionsMenu(mx, my int, click bool) {
 	g.optHover = -1
 	for i, r := range menuRows {
+		// Until the first run starts, "continue" (1) and "save" (3) are dead,
+		// as in the original (ROBY.PDF p.24): no highlight and no click.
+		if !g.started && (i == 1 || i == 3) {
+			continue
+		}
 		if pointIn(r, mx, my) {
 			g.optHover = i
 		}

@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"sort"
 	"strconv"
@@ -26,6 +27,7 @@ type hotspot struct {
 	key  string
 	ob   *types.SceneObject
 	rect image.Rectangle
+	z    int // its object's draw order, so the topmost zone is hit first
 }
 
 // Game is the Ebiten game: composition root wiring resources, parser, grid,
@@ -33,7 +35,7 @@ type hotspot struct {
 type Game struct {
 	res    interfaces.IResources
 	parser interfaces.ISceneParser
-	audio  *adapters.Audio
+	audio  interfaces.IAudio
 
 	sceneName string
 	bg        *ebiten.Image
@@ -96,7 +98,13 @@ type Game struct {
 	msgT    float64
 	debug   bool
 
-	mode        int // logo -> title -> loading -> play; Esc -> options/save/load
+	// the scene's ambient pool and the countdown to its next shot (ambient.go)
+	ambientPool []types.SoundVar
+	ambientT    float64
+	randn       func(n int) int // rand.Intn, swapped out in tests
+
+	mode        int  // logo -> title -> menu -> loading -> play
+	started     bool // a run is underway: "continue" and "save" are meaningful
 	modeT       float64
 	logoImg     *ebiten.Image
 	titleImg    *ebiten.Image
@@ -147,6 +155,7 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 		robyZ:      charZCoord,
 		debug:      cfg.Debug,
 		gs:         types.NewGameState(),
+		randn:      rand.Intn,
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.optHover, g.optDrag = -1, -1
@@ -171,11 +180,12 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	g.loadScene(start, nil, "", "")
 	g.loadScreens()
 	if os.Getenv("ROBINSON_SCENE") != "" {
-		g.mode = modePlay // direct scene entry skips the boot screens
+		// Direct scene entry skips the boot screens and counts as a run.
+		g.mode, g.started = modePlay, true
 	}
 	if mg := os.Getenv("ROBINSON_MINIGAME"); mg != "" {
 		// Debug/test aid: jump straight into a minigame by id.
-		g.mode = modePlay
+		g.mode, g.started = modePlay, true
 		g.startMinigame([]string{mg, "DebugResult", "Find6"})
 	}
 	if v := os.Getenv("ROBINSON_VARS"); v != "" {
@@ -240,6 +250,10 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 		g.msg, g.msgT = "?? "+name, 3
 		return
 	}
+	// Effects belong to the scene that started them: without this a cutscene's
+	// thunder (or the rest of a skipped one) keeps playing over the next scene.
+	// Music is separate — it survives on channel 0 for "Music Continue".
+	g.audio.StopEffects()
 	bg, pal, _ := g.res.SceneBackground(name)
 	g.sceneName = name
 	if bg != nil {
@@ -253,6 +267,9 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.camShift = 0 // a pan never survives the scene that asked for it
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
+	// The engine arms the ambient timer already expired, so a scene can speak up
+	// on its first tick instead of opening with silence (ambient.go).
+	g.ambientPool, g.ambientT = g.sc.AmbientSounds(), 0
 	if g.sc.Size == [2]int{0, 0} {
 		if bg != nil {
 			g.sc.Size = [2]int{bg.Width, bg.Height}
@@ -339,6 +356,18 @@ func isIntroScene(name string) bool {
 // corner (not the sprite): rect = Corner(gx,gy) + ActiveZone.xy, size AZ.wh, in
 // world space (the camera offset is applied when the zones are tested). An
 // object may own several rectangles, and each becomes its own hotspot.
+//
+// The engine looks the other way round from the way it draws: its search runs
+// z from 40 down to 0 and, within one z, over ObjectList from the start, taking
+// the first zone that contains the point. So the topmost object wins an overlap
+// — MAPSCR's hut (z=21) over the parrot clearing (z=18) it sits inside — while
+// two objects at the same z go to whichever was declared first, even though the
+// later one is the one drawn on top. Sorting by z alone reproduces both: the
+// sort is stable, so ObjectList order survives inside each z.
+//
+// The bounds are inclusive on all four sides, so a zone covers (w+1)x(h+1)
+// pixels and the 94 objects declaring ActiveZone 0,0,0,0 — the animation
+// carriers — end up owning a single pixel each rather than nothing.
 func (g *Game) buildHotspots() {
 	g.hotspots = nil
 	for _, s := range g.sceneObjs {
@@ -348,12 +377,28 @@ func (g *Game) buildHotspots() {
 		cx, cy := g.grid.Corner(s.ref.GX, s.ref.GY)
 		for _, az := range s.ob.ActiveZones {
 			x, y := cx+az[0], cy+az[1]
-			w, h := max(az[2], 8), max(az[3], 8)
 			g.hotspots = append(g.hotspots, hotspot{
-				key: s.ref.Name, ob: s.ob, rect: image.Rect(x, y, x+w, y+h),
+				key:  s.ref.Name,
+				ob:   s.ob,
+				rect: image.Rect(x, y, x+az[2]+1, y+az[3]+1),
+				z:    s.z,
 			})
 		}
 	}
+	sort.SliceStable(g.hotspots, func(i, j int) bool {
+		return g.hotspots[i].z > g.hotspots[j].z
+	})
+}
+
+// hotspotAt returns the zone a world point hits, or nil — the first match in
+// the engine's own search order (see buildHotspots).
+func (g *Game) hotspotAt(wx, wy int) *hotspot {
+	for i := range g.hotspots {
+		if pointIn(g.hotspots[i].rect, wx, wy) {
+			return &g.hotspots[i]
+		}
+	}
+	return nil
 }
 
 // playSound resolves a Sound event's name (scene SoundVar or file) and plays it.
@@ -400,10 +445,7 @@ func (g *Game) click(mx, my int) {
 		return
 	}
 	wx, wy := mx+g.camX, my // viewport -> world
-	for _, hs := range g.hotspots {
-		if !pointIn(hs.rect, wx, wy) {
-			continue
-		}
+	if hs := g.hotspotAt(wx, wy); hs != nil {
 		// Leaving is an action like any other: the hero walks to the edge, plays
 		// his departure movie, says his line and the script's own GoScene takes
 		// him across. Only fall back to a bare jump when there is no script.
@@ -422,7 +464,9 @@ func (g *Game) click(mx, my int) {
 				return
 			}
 		}
-		// No action script: examine — say the object's name.
+		// No action script: examine — say the object's name. A hit is a hit
+		// either way: the engine only walks the hero when the click landed on
+		// no object at all.
 		if s := g.textLine(hs.ob.Text); s != "" {
 			g.msg, g.msgT = s, 2.5
 		}
@@ -454,11 +498,15 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		g.debug = !g.debug
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
-		g.save()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
-		g.load()
+	// The quick save/load keys work only in play: anywhere else a load would
+	// swap the run out from under the boot screens and menus.
+	if g.mode == modePlay {
+		if inpututil.IsKeyJustPressed(ebiten.KeyF5) {
+			g.save()
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
+			g.load()
+		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.mg == nil {
 		g.toggleOptions() // inside a minigame Esc is the game's own quit
@@ -482,11 +530,25 @@ func (g *Game) Update() error {
 	// The speed slider scales the whole simulation, like the original's
 	// DelayFactor: 0.5 on the slider is the authored pace.
 	dt *= 0.5 + g.speed
+	// A cutscene starts under the new scene's fade-in, which owns the frame for
+	// ~0.3 s. Take the skip anyway, or the first press of an impatient player
+	// silently disappears. The gate excludes the fade-out half, where the scene
+	// being left is already spoken for.
+	if g.fadeCurve != nil && !g.fadeOut && g.fadeTo == nil &&
+		g.act != nil && skipPressed() {
+		g.skipCutscene()
+	}
 	if g.updateFade(dt) {
 		return nil // a scene transition is fading
 	}
 	if clickedThisTick() {
 		g.click(ebiten.CursorPosition())
+	} else if g.act != nil && skipKeyPressed() {
+		// A key means only "skip" — it carries no cursor position, so it goes
+		// straight past click()'s hotspot logic. skipCutscene itself checks
+		// whether the running script allows it (Interrupt ON).
+		g.idleAct = nil
+		g.skipCutscene()
 	}
 	g.updateHover(ebiten.CursorPosition())
 
@@ -503,6 +565,7 @@ func (g *Game) Update() error {
 	for _, s := range g.sceneObjs {
 		g.applyEvents(s.update(dt))
 	}
+	g.updateAmbient(dt)
 	g.updateAction(dt)
 	g.updateFrid(dt)
 	g.updateIdle(dt)
@@ -531,15 +594,26 @@ func (g *Game) flushPending() {
 	g.startFade(p)
 }
 
-// toggleOptions opens the options menu from play (and closes it again).
+// openMenu raises the main menu with fresh hover state and slot caches.
+func (g *Game) openMenu() {
+	g.mode, g.optHover, g.optDrag = modeOptions, -1, -1
+	g.slotCache = map[int]*ebiten.Image{}
+	g.slotInfo = map[int]string{}
+}
+
+// toggleOptions opens the main menu from play and closes it again. Before the
+// first run starts there is no play to return to, so Esc only backs the slot
+// screens out into the menu.
 func (g *Game) toggleOptions() {
 	switch g.mode {
 	case modePlay:
-		g.mode, g.optHover, g.optDrag = modeOptions, -1, -1
-		g.slotCache = map[int]*ebiten.Image{}
-		g.slotInfo = map[int]string{}
+		g.openMenu()
 	case modeOptions, modeSave, modeLoad:
-		g.mode = modePlay
+		if g.started {
+			g.mode = modePlay
+		} else if g.mode != modeOptions {
+			g.mode = modeOptions
+		}
 	}
 }
 
@@ -705,16 +779,14 @@ func (g *Game) cursorType(mx, my int) int {
 		}
 		return 2
 	}
-	for _, hs := range g.hotspots {
-		if pointIn(hs.rect, wx, wy) {
-			switch strings.ToLower(hs.key) {
-			case "goleft":
-				return 1
-			case "gorght":
-				return 2
-			}
-			return hs.ob.Cursor
+	if hs := g.hotspotAt(wx, wy); hs != nil {
+		switch strings.ToLower(hs.key) {
+		case "goleft":
+			return 1
+		case "gorght":
+			return 2
 		}
+		return hs.ob.Cursor
 	}
 	return -1
 }

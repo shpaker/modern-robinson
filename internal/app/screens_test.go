@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/types"
@@ -15,11 +17,31 @@ type noScenes struct{ interfaces.IResources }
 
 func (noScenes) SceneContainer(string) interfaces.IContainer { return nil }
 
-// Leaving the title used to drop straight into play, which drew the INT0 bridge
-// — a black room with a character sprite standing in it — for as long as the
-// intro movie took to decode. The title now hands over to the loading screen,
-// which sits out the scene it was raised on.
-func TestTitleHandsOverToLoading(t *testing.T) {
+// The original opened on the main menu (ROBY.PDF p.23), so leaving the title
+// raises it rather than dropping into the intro.
+func TestTitleHandsOverToMenu(t *testing.T) {
+	g := &Game{
+		mode:       modeTitle,
+		modeT:      61,
+		sceneName:  "INT0",
+		optSprites: map[string]*ebiten.Image{"OPTIONS": ebiten.NewImage(1, 1)},
+	}
+	if !g.updateScreens(1.0 / 60) {
+		t.Fatal("the boot screens must still own the frame")
+	}
+	if g.mode != modeOptions {
+		t.Errorf("mode = %d, want modeOptions (%d)", g.mode, modeOptions)
+	}
+	if g.started {
+		t.Error("reaching the menu must not count as a started run")
+	}
+}
+
+// Without the menu backdrop there is nothing to click, so the title falls back
+// to the loading screen, which sits out the scene it was raised on (the INT0
+// bridge — a black room with a character sprite standing in it — must not
+// show while the intro movie decodes).
+func TestTitleFallsBackToLoadingWithoutMenu(t *testing.T) {
 	g := &Game{mode: modeTitle, modeT: 61, sceneName: "INT0"}
 	if !g.updateScreens(1.0 / 60) {
 		t.Fatal("the boot screens must still own the frame")
@@ -36,15 +58,16 @@ func TestTitleHandsOverToLoading(t *testing.T) {
 // which is the whole point: hand over any earlier and the bridge shows.
 func TestLoadingOwnsTheFrameUntilTheSceneChanges(t *testing.T) {
 	cases := []struct {
-		name  string
-		mode  int
-		scene string
-		owns  bool
-		want  int
+		name    string
+		mode    int
+		scene   string
+		owns    bool
+		want    int
+		started bool
 	}{
-		{"still on the bridge", modeLoading, "INT0", true, modeLoading},
-		{"bridge crossed", modeLoading, "INT1", true, modePlay},
-		{"not loading at all", modePlay, "INT1", false, modePlay},
+		{"still on the bridge", modeLoading, "INT0", true, modeLoading, false},
+		{"bridge crossed", modeLoading, "INT1", true, modePlay, true},
+		{"not loading at all", modePlay, "INT1", false, modePlay, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -55,6 +78,9 @@ func TestLoadingOwnsTheFrameUntilTheSceneChanges(t *testing.T) {
 			}
 			if g.mode != c.want {
 				t.Errorf("mode = %d, want %d", g.mode, c.want)
+			}
+			if g.started != c.started {
+				t.Errorf("started = %v, want %v", g.started, c.started)
 			}
 		})
 	}

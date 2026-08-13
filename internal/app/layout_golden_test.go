@@ -16,7 +16,9 @@ import (
 )
 
 var updateGolden = flag.Bool(
-	"update-golden", false, "rewrite testdata/layout.golden from the game files",
+	"update-golden",
+	false,
+	"rewrite testdata/layout.golden from the game files",
 )
 
 // goldenScenes is every scene of the game, in a fixed order.
@@ -75,7 +77,10 @@ func TestSceneLayoutGolden(t *testing.T) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%v (run: go test ./internal/app -run Golden -update-golden)", err)
+		t.Fatalf(
+			"%v (run: go test ./internal/app -run Golden -update-golden)",
+			err,
+		)
 	}
 	if got != string(want) {
 		t.Errorf("scene layout changed:\n%s", firstDiff(string(want), got))

@@ -11,6 +11,14 @@ import (
 // (evaluating If/EndIf and applying state) and enacts the world/presentation
 // commands that survive.
 func (g *Game) applyEvents(cmds []types.Command) {
+	g.applyEventsWith(cmds, false)
+}
+
+// applyEventsWith is applyEvents with the option to drop the presentation
+// commands. Muting is for fast-forwarding a skipped cutscene: the quest state
+// and the world still have to catch up, but the frames rush by in milliseconds,
+// so their sounds and subtitles would all land at once (see skipCutscene).
+func (g *Game) applyEventsWith(cmds []types.Command, mute bool) {
 	if len(cmds) == 0 {
 		return
 	}
@@ -22,8 +30,21 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	// itself — it has to be able to see it.
 	g.mgResume = rest
 	for _, c := range out {
+		if mute && presentational(c.Kw) {
+			continue
+		}
 		g.applyEffect(c)
 	}
+}
+
+// presentational reports whether a command only speaks to the player, carrying
+// no state or world change a later frame could depend on.
+func presentational(kw string) bool {
+	switch strings.ToLower(kw) {
+	case "sound", "text":
+		return true
+	}
+	return false
 }
 
 // applyEffect enacts one surviving command against the live scene and engine.
@@ -74,6 +95,10 @@ func (g *Game) applyEffect(c types.Command) {
 		g.setCharCoord(c.Args)
 	case "setmusic":
 		g.setMusic(c.Args)
+	case "clearscreen":
+		// The original wipes the movie frame before leaving a cutscene
+		// (INT1.FS frame 313). Here the scene swap repaints anyway and
+		// loadScene cuts the sounds, so there is nothing left to do.
 	}
 	// aproach/shift still drive the walk+action phase.
 }
