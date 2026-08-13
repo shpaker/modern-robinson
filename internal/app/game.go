@@ -96,11 +96,13 @@ type Game struct {
 	msgT    float64
 	debug   bool
 
-	mode     int // logo -> title -> play; Esc -> options/save/load
-	modeT    float64
-	logoImg  *ebiten.Image
-	titleImg *ebiten.Image
-	quit     bool
+	mode        int // logo -> title -> loading -> play; Esc -> options/save/load
+	modeT       float64
+	logoImg     *ebiten.Image
+	titleImg    *ebiten.Image
+	loadingImg  *ebiten.Image
+	loadingFrom string // scene the loading screen is sitting out
+	quit        bool
 
 	// options menu, save/load screens
 	optSprites map[string]*ebiten.Image
@@ -471,6 +473,9 @@ func (g *Game) Update() error {
 	if g.updateOptions() {
 		return nil // options / save / load own the frame
 	}
+	if g.updateLoading(dt) {
+		return nil // the loading screen owns the frame through the handover
+	}
 	if g.updateMinigame(dt) {
 		return nil // a minigame owns the frame
 	}
@@ -512,12 +517,18 @@ func (g *Game) Update() error {
 			g.msg = ""
 		}
 	}
-	if g.pending != nil {
-		p := g.pending
-		g.pending = nil
-		g.startFade(p)
-	}
+	g.flushPending()
 	return nil
+}
+
+// flushPending starts the transition a script queued this tick.
+func (g *Game) flushPending() {
+	if g.pending == nil {
+		return
+	}
+	p := g.pending
+	g.pending = nil
+	g.startFade(p)
 }
 
 // toggleOptions opens the options menu from play (and closes it again).
@@ -558,7 +569,7 @@ func (g *Game) restart() {
 	g.gs.Active, g.gs.ActiveChar = "hand", "Roby"
 	g.resetRun()
 	g.loadScene("INT0", nil, "", "")
-	g.mode = modePlay
+	g.enterLoading()
 }
 
 // charZCoord is the hero's starting sub-slot within his grid row, the value
@@ -571,7 +582,7 @@ const charZCoord = 7
 // shifted left by camX; the bar and cursor are in viewport space.
 func (g *Game) Draw(screen *ebiten.Image) {
 	switch g.mode {
-	case modeLogo, modeTitle:
+	case modeLogo, modeTitle, modeLoading:
 		g.drawScreens(screen)
 		return
 	case modeOptions, modeSave, modeLoad:

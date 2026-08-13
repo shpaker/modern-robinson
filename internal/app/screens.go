@@ -9,11 +9,13 @@ import (
 )
 
 // Screen modes: the boot sequence shows the studio logo, then the title, then
+// the loading screen that covers the opening cutscene's decode, and only then
 // hands over to play; Esc opens the options menu, which can branch to the save
 // and load screens.
 const (
 	modeLogo = iota
 	modeTitle
+	modeLoading
 	modePlay
 	modeOptions
 	modeSave
@@ -29,7 +31,8 @@ func clickedThisTick() bool {
 }
 
 // loadScreens fetches the boot images from LOGO.DAT (LOGO = studio logo,
-// ROBINSON = title). Missing packs skip straight to play.
+// ROBINSON = title, LOADING = the load break before the intro). Missing packs
+// skip straight to the load break.
 func (g *Game) loadScreens() {
 	load := func(name string) *ebiten.Image {
 		n, pal := g.res.Screen("LOGO", name)
@@ -46,8 +49,11 @@ func (g *Game) loadScreens() {
 	}
 	g.logoImg = load("LOGO")
 	g.titleImg = load("ROBINSON")
+	g.loadingImg = load("LOADING")
 	if g.logoImg == nil {
-		g.mode = modePlay
+		// No boot pack: the intro bridge still has to run out of sight, so go
+		// through the load break anyway (it just draws black without an image).
+		g.enterLoading()
 		return
 	}
 	g.mode = modeLogo
@@ -70,8 +76,41 @@ func (g *Game) updateScreens(dt float64) bool {
 		}
 	case modeTitle:
 		if skip || g.modeT > 60 {
-			g.mode = modePlay
+			g.enterLoading()
 		}
+	}
+	return true
+}
+
+// enterLoading raises the loading screen and remembers the scene it is sitting
+// out: the intro bridge (INT0) chains onward by itself, so a changed scene name
+// is the signal that play can take the frame.
+func (g *Game) enterLoading() {
+	g.mode, g.modeT = modeLoading, 0
+	g.loadingFrom = g.sceneName
+}
+
+// updateLoading runs the opening handover out of sight: only the scene objects
+// (INT0's own driver script), the fade and the exit it queues tick — no input,
+// no walking, no camera. The multi-second decode of the intro movie happens
+// inside one of these ticks, and the loading screen is what stays on screen
+// through it. Returns true while it owns the frame.
+func (g *Game) updateLoading(dt float64) bool {
+	if g.mode != modeLoading {
+		return false
+	}
+	g.modeT += dt       // the screen's own fade-in runs on unscaled time
+	dt *= 0.5 + g.speed // the hidden run keeps the play pace
+	if !g.updateFade(dt) {
+		for _, s := range g.sceneObjs {
+			g.applyEvents(s.update(dt))
+		}
+		g.flushPending()
+	}
+	// The bridge has crossed — or the data is broken and never will, so bail
+	// out rather than sit on the loading screen forever.
+	if g.sceneName != g.loadingFrom || g.modeT > 30 {
+		g.mode = modePlay
 	}
 	return true
 }
@@ -79,8 +118,11 @@ func (g *Game) updateScreens(dt float64) bool {
 // drawScreens renders the current boot screen with a short fade-in.
 func (g *Game) drawScreens(screen *ebiten.Image) {
 	img := g.logoImg
-	if g.mode == modeTitle {
+	switch g.mode {
+	case modeTitle:
 		img = g.titleImg
+	case modeLoading:
+		img = g.loadingImg
 	}
 	if img == nil {
 		return
