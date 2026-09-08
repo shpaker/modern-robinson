@@ -60,7 +60,7 @@ release version="dev":
         GOOS="$goos" GOARCH="$goarch" CGO_ENABLED="$cgo" {{gocmd}} build -trimpath \
             -ldflags "-s -w -X {{module}}/internal/app.Version={{version}}" \
             -o "$stage/$binary" ./cmd
-        cp README.md "$stage/"
+        cp README.md THIRD_PARTY.md "$stage/"
         cp packaging/config.yml "$stage/"
         ( cd "$out" && zip -qr "modern-robinson_{{version}}_$name.zip" "$name" )
         rm -rf "$stage"

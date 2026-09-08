@@ -59,7 +59,7 @@ jobs:
           go build -trimpath \
             -ldflags "-s -w -X github.com/shpaker/modern-robinson/internal/app.Version=${VERSION}" \
             -o "$stage/${{ matrix.binary }}" ./cmd
-          cp README.md packaging/config.yml "$stage/"
+          cp README.md THIRD_PARTY.md packaging/config.yml "$stage/"
           ( cd dist && zip -qr "modern-robinson_${VERSION}_${{ matrix.name }}.zip" "${{ matrix.name }}" )
       - uses: softprops/action-gh-release@v2
         if: github.event_name == 'release'
