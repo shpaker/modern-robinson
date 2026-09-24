@@ -1,12 +1,22 @@
 name: release-artifacts
 
-# release-please cuts the release; this attaches the binaries to it. macOS is
-# built on a mac because Ebitengine needs cgo there; Windows cross-compiles from
-# Linux with cgo off.
+# One archive per OS, attached to a release. release-please.yml calls this
+# right after it cuts one. By hand: with a tag it re-attaches the archives to
+# that release, without one it is a test build kept in the run's artifacts.
+# macOS is built on a mac because Ebitengine needs cgo there; Windows
+# cross-compiles from Linux with cgo off.
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the archives to; empty for a test build"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -22,13 +32,14 @@ jobs:
             goarch: arm64
             cgo: 1
             binary: robinson_darwin_arm64
-          - os: ubuntu-latest
+          # Pinned: the cgo build inherits the runner's glibc as its floor.
+          - os: ubuntu-24.04
             name: linux
             goos: linux
             goarch: amd64
             cgo: 1
             binary: robinson_linux_amd64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             name: windows
             goos: windows
             goarch: amd64
@@ -36,13 +47,15 @@ jobs:
             binary: robinson_windows_amd64.exe
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
         with:
-          go-version: stable
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Ebitengine system deps
-        if: matrix.os == 'ubuntu-latest' && matrix.cgo == 1
+        if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxcursor-dev \
@@ -52,7 +65,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
-          VERSION: ${{ github.event.release.tag_name || 'dev' }}
+          VERSION: ${{ inputs.tag || 'dev' }}
         run: |
           stage="dist/${{ matrix.name }}"
           mkdir -p "$stage"
@@ -61,12 +74,15 @@ jobs:
             -o "$stage/${{ matrix.binary }}" ./cmd
           cp README.md THIRD_PARTY.md packaging/config.yml "$stage/"
           ( cd dist && zip -qr "modern-robinson_${VERSION}_${{ matrix.name }}.zip" "${{ matrix.name }}" )
-      - uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release'
-        with:
-          files: dist/*.zip
-      - uses: actions/upload-artifact@v4
-        if: github.event_name != 'release'
+      - name: Attach to the release
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" dist/*.zip --clobber
+      - uses: actions/upload-artifact@v7
+        if: inputs.tag == ''
         with:
           name: modern-robinson-${{ matrix.name }}
           path: dist/*.zip
