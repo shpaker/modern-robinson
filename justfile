@@ -57,7 +57,12 @@ build-wasm dir="extracted/ROBINSON_ISO/ROBINSON":
         -ldflags "-s -w -X {{module}}/internal/app.Version=${VERSION}" \
         -o "$out/robinson.wasm" ./cmd/wasm
     cp "$({{gocmd}} env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
-    cp web/index.html web/style.css web/sw.js "$out/"
+    cp web/style.css web/sw.js "$out/"
+    # Страница ссылается на движок, wasm_exec.js и стили с ?v=<хеш сборки>:
+    # новая сборка — новые адреса, и браузер не подставит закешированную старую.
+    build=$(cat "$out/robinson.wasm" "$out/wasm_exec.js" "$out/style.css" \
+        | shasum -a 256 | cut -c1-12)
+    sed "s/__BUILD__/$build/g" web/index.html > "$out/index.html"
     # Иконка — игровой ассет, в репозитории её нет: достаём из папки игры.
     # Без неё сборка не падает, страница просто останется без фавикона.
     if [ -f "{{dir}}/START.ICO" ]; then

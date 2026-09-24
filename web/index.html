@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" type="image/png" href="icon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=__BUILD__">
 </head>
 <body>
 
@@ -39,7 +39,7 @@
   <a href="https://t.me/g33ks" target="_blank" rel="noopener">Telegram</a>
 </footer>
 
-<script src="wasm_exec.js"></script>
+<script src="wasm_exec.js?v=__BUILD__"></script>
 <script>
 (function () {
   "use strict";
@@ -99,9 +99,11 @@
   var go = new Go();
 
   // instantiateStreaming needs the server to send application/wasm; fall back
-  // to buffering the module when it does not.
+  // to buffering the module when it does not. __BUILD__ is the build's content
+  // hash (just build-wasm): a new engine is a new URL, so no cached copy of an
+  // old one can stand in for it.
   function instantiate() {
-    var resp = fetch("robinson.wasm");
+    var resp = fetch("robinson.wasm?v=__BUILD__");
     if (WebAssembly.instantiateStreaming) {
       return WebAssembly.instantiateStreaming(resp, go.importObject)
         .catch(function () {
