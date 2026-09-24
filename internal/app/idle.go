@@ -3,9 +3,8 @@ package app
 import (
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
 
@@ -64,7 +63,7 @@ func (g *Game) lookAtCursor() {
 	if !g.idle.OK() || len(g.idle.Frames) < headCols*headCols {
 		return // not the nine-pose table: leave the frame alone
 	}
-	mx, my := ebiten.CursorPosition()
+	mx, my := pointer.Pos()
 	ex := int(g.pos[0]) - g.camX + headEyeDX
 	ey := int(g.pos[1]) + headEyeDY
 	g.frameI = headFrame(mx-ex, my-ey)

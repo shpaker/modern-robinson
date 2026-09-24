@@ -11,8 +11,8 @@ import (
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
+	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 )
 
@@ -128,7 +128,12 @@ func In(r image.Rectangle, x, y int) bool {
 	return x >= r.Min.X && x < r.Max.X && y >= r.Min.Y && y < r.Max.Y
 }
 
-// Clicked reports a fresh left-button press.
-func Clicked() bool {
-	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-}
+// Clicked reports a click: the left button going down, or a tap.
+func Clicked() bool { return pointer.Clicked() }
+
+// Cursor is where the pointer is: the mouse, or the finger last seen.
+func Cursor() (int, int) { return pointer.Pos() }
+
+// RightClicked reports a right click: the right button, or a finger held
+// still (it then lifts without clicking).
+func RightClicked() bool { return pointer.TakeRightClick() }
