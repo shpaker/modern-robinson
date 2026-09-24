@@ -128,7 +128,7 @@ func (g *Game) resolveAction(objName string) *actionPlay {
 	}
 	return &actionPlay{
 		fs:      fs,
-		frames:  adapters.LoadDecal(g.res, fs.MovieName),
+		frames:  adapters.LoadDecal(g.res, fs.MovieName, g.pal),
 		shift:   g.movieShift(fs),
 		player:  use_cases.NewPlayer(fs, false),
 		frid:    strings.EqualFold(g.gs.ActiveChar, "Frid"),
@@ -426,7 +426,7 @@ func (g *Game) startEntry(name string) {
 	}
 	g.act = &actionPlay{
 		fs:      fs,
-		frames:  adapters.LoadDecal(g.res, fs.MovieName),
+		frames:  adapters.LoadDecal(g.res, fs.MovieName, g.pal),
 		shift:   g.movieShift(fs),
 		player:  use_cases.NewPlayer(fs, false),
 		started: true,

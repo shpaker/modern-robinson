@@ -7,6 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 // Animation is a character animation. The engine draws every frame on the
@@ -22,9 +23,14 @@ type Animation struct {
 // OK reports whether the animation has any frames.
 func (a *Animation) OK() bool { return a != nil && len(a.Frames) > 0 }
 
-// LoadAnimation decodes a movie into cropped canvas-space frames.
-func LoadAnimation(res interfaces.IResources, movie string) *Animation {
-	frames, pal := res.MovieFrames(movie)
+// LoadAnimation decodes a movie into cropped canvas-space frames painted with
+// pal, the scene palette: the engine never reads a movie's own .COL.
+func LoadAnimation(
+	res interfaces.IResources,
+	movie string,
+	pal types.Palette,
+) *Animation {
+	frames, _ := res.MovieFrames(movie)
 	a := &Animation{Shift: res.MovieShift(movie)}
 	for _, n := range frames {
 		rgba := n.RGBA(pal)

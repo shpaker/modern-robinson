@@ -41,7 +41,8 @@ func fonScripts(c interfaces.IContainer) map[string][]byte {
 // buildSceneObj builds one live object, wiring its FonScript to movie frames and
 // a player when the script is a looping ambient animation. Returns nil if the
 // object has no .OB definition.
-func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
+func buildSceneObj(res interfaces.IResources, pal types.Palette,
+	parser interfaces.ISceneParser,
 	fsByName map[string][]byte, zper int, ref types.ObjectRef,
 	ob *types.SceneObject,
 ) *sceneObj {
@@ -59,7 +60,7 @@ func buildSceneObj(res interfaces.IResources, parser interfaces.ISceneParser,
 			inst.shift = fs.Shift
 		}
 		if fs.MovieName != "" {
-			inst.frames = adapters.LoadDecal(res, fs.MovieName)
+			inst.frames = adapters.LoadDecal(res, fs.MovieName, pal)
 			inst.visible = len(inst.frames) > 0
 			// An object's FonScript is ambient scenery, so it loops, unless its
 			// last frame closes the script out (a driver like START.FS, which
@@ -88,8 +89,9 @@ func endsScript(fs *types.FrameScript) bool {
 // loadSceneObjects builds the live objects for a scene's ObjectList, skipping
 // any the quest state records as taken plus any BEGIN.BGI marks as initially
 // hidden (they wait for a CreateObject).
-func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
-	sc *types.Scene, objects map[string]*types.SceneObject,
+func loadSceneObjects(res interfaces.IResources, pal types.Palette,
+	parser interfaces.ISceneParser, sc *types.Scene,
+	objects map[string]*types.SceneObject,
 	fsByName map[string][]byte, gone func(obj string) bool,
 ) []*sceneObj {
 	zper := sc.ZPerGrid
@@ -109,7 +111,7 @@ func loadSceneObjects(res interfaces.IResources, parser interfaces.ISceneParser,
 		if v, ok := initial[strings.ToLower(ref.Name)]; ok && !v {
 			continue // hidden at game start until a CreateObject
 		}
-		if inst := buildSceneObj(res, parser, fsByName, zper,
+		if inst := buildSceneObj(res, pal, parser, fsByName, zper,
 			ref, objects[strings.ToLower(ref.Name)]); inst != nil {
 			out = append(out, inst)
 		}

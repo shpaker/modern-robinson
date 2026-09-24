@@ -49,7 +49,7 @@ func (g *Game) loadCycle(key, chr string) *walkCycle {
 	if c, ok := g.cycleCache[key]; ok {
 		return c
 	}
-	c := &walkCycle{anim: adapters.LoadAnimation(g.res, key+".mv")}
+	c := &walkCycle{anim: adapters.LoadAnimation(g.res, key+".mv", g.pal)}
 	if cc := g.res.SceneContainer(chr); cc != nil {
 		if raw, err := cc.ExtractName(key + ".FS"); err == nil {
 			c.frames = g.parser.ParseFrameScript(string(raw)).Frames

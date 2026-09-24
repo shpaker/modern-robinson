@@ -78,7 +78,12 @@ type Game struct {
 
 	act *actionPlay
 
+	// pal is the scene palette: the engine paints every sprite on stage with
+	// it and never reads a movie's own .COL (docs/03-resource-types.md).
+	pal types.Palette
+
 	idle       *adapters.Animation
+	standMovie string // ROBY.CHR standing loop, reloaded with each palette
 	idleAct    *idlePlay
 	restSlots  [3]string
 	idleT      float64
@@ -257,6 +262,10 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.sceneName = name
 	if bg != nil {
 		g.bg = bgImage(bg, pal)
+		if pal != g.pal {
+			g.pal = pal
+			g.repaintHeroes()
+		}
 	} else {
 		g.bg = ebiten.NewImage(ViewW, PlayH) // interiors/cutscenes without a .DAT
 	}
@@ -306,7 +315,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	// him. Every other scene shows him by default.
 	g.charHidden = isIntroScene(name)
 	g.fsByName = fonScripts(c)
-	g.sceneObjs = loadSceneObjects(g.res, g.parser, g.sc, g.objects,
+	g.sceneObjs = loadSceneObjects(g.res, g.pal, g.parser, g.sc, g.objects,
 		g.fsByName, func(obj string) bool { return g.gs.IsGone(name, obj) })
 	for _, sp := range g.gs.Spawns(name) {
 		g.spawnObject(sp.Obj, sp.GX, sp.GY)

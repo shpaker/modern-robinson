@@ -6,6 +6,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 // LoadIcon renders a movie's first frame as an inventory icon: the sprite is
@@ -44,9 +45,15 @@ type DecalFrame struct {
 }
 
 // LoadDecal decodes a movie into decal frames (cropped to the opaque bbox with
-// the offset kept, since object sprites are full-canvas decals in screen space).
-func LoadDecal(res interfaces.IResources, movie string) []DecalFrame {
-	frames, pal := res.MovieFrames(movie)
+// the offset kept, since object sprites are full-canvas decals in screen space),
+// painted with pal, the scene palette. Many objects are cut-outs of the
+// background kept in its indices, while their movie carries another palette.
+func LoadDecal(
+	res interfaces.IResources,
+	movie string,
+	pal types.Palette,
+) []DecalFrame {
+	frames, _ := res.MovieFrames(movie)
 	out := make([]DecalFrame, len(frames))
 	for i, n := range frames {
 		if img, x, y, ok := cropOpaque(n.RGBA(pal), n.Width, n.Height); ok {

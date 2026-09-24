@@ -183,7 +183,8 @@ func (g *Game) spawnObject(obj string, gx, gy int) {
 		}
 	}
 	ref := types.ObjectRef{Name: obj, GX: gx, GY: gy}
-	if inst := buildSceneObj(g.res, g.parser, g.fsByName, g.zper, ref, ob); inst != nil {
+	if inst := buildSceneObj(g.res, g.pal, g.parser, g.fsByName, g.zper,
+		ref, ob); inst != nil {
 		g.sceneObjs = append(g.sceneObjs, inst)
 	}
 }
