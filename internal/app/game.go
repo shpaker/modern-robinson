@@ -865,7 +865,8 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 
 // drawAnim blits animation frame fi so the movie canvas origin sits at
 // (ox, oy) - Shift, the engine's placement (see use_cases.Grid). ox,oy is the
-// cell anchor in screen space. A soft shadow is laid under the figure's feet.
+// cell anchor in screen space. The frames carry their own shadow; nothing is
+// laid under the feet.
 func drawAnim(
 	screen *ebiten.Image,
 	a *adapters.Animation,
@@ -879,15 +880,6 @@ func drawAnim(
 	bb := a.BBox[fi]
 	fx := ox - float64(a.Shift[0]) + float64(bb[0])
 	fy := oy - float64(a.Shift[1]) + float64(bb[1])
-	fw, fh := frame.Bounds().Dx(), frame.Bounds().Dy()
-	vector.FillCircle(
-		screen,
-		float32(fx)+float32(fw)/2,
-		float32(fy)+float32(fh)-4,
-		16,
-		rgba(0, 0, 0, 70),
-		true,
-	)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(fx, fy)
 	screen.DrawImage(frame, op)
