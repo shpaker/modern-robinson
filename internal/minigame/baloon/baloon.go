@@ -1,4 +1,6 @@
-package app
+// Package baloon is the balloon landing: StartGame 3, BALOON.DAT, the result
+// goes into LandOK.
+package baloon
 
 import (
 	"image"
@@ -8,6 +10,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // The balloon flight (StartGame 3 -> LandOK). The whole navigation puzzle is
@@ -16,6 +20,7 @@ import (
 // descending (the Frid button) until the neighbouring island drifts under the
 // basket, then drops below the landing height.
 type baloonGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	x, y    float64 // world position, [30..970]
 	alt     float64 // displayed altitude
@@ -63,13 +68,14 @@ func baloonPalette(name string) int {
 	return 0
 }
 
-// newBaloonGame starts at the home island, high up.
-func newBaloonGame(g *Game) minigame {
+// New starts at the home island, high up.
+func New(host minigame.Host, _ int) minigame.Game {
 	b := &baloonGame{
-		x: balHomeX, y: balHomeY,
+		host: host,
+		x:    balHomeX, y: balHomeY,
 		alt: 412, target: 412,
 	}
-	b.sprites = g.packImagesPal("BALOON", baloonPalette)
+	b.sprites = host.Images("BALOON", baloonPalette)
 	if b.sprites["SKY"] == nil {
 		return nil
 	}
@@ -77,22 +83,22 @@ func newBaloonGame(g *Game) minigame {
 }
 
 // update flies the balloon: ease the altitude, turn with it, drift, land.
-func (b *baloonGame) update(g *Game, dt float64) (bool, int) {
+func (b *baloonGame) Update(dt float64) (bool, int) {
 	if b.won {
 		b.finishT += dt
-		return b.finishT > 3 || clickedThisTick(), 1
+		return b.finishT > 3 || minigame.Clicked(), 1
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
-	if clickedThisTick() {
+	if minigame.Clicked() {
 		mx, my := ebiten.CursorPosition()
 		switch {
-		case pointIn(balExit, mx, my):
+		case minigame.In(balExit, mx, my):
 			return true, 0
-		case pointIn(balRoby, mx, my) && !b.landing:
+		case minigame.In(balRoby, mx, my) && !b.landing:
 			b.target = math.Min(balAltMax, b.target+32)
-		case pointIn(balFrid, mx, my) && !b.landing:
+		case minigame.In(balFrid, mx, my) && !b.landing:
 			b.target = math.Max(balAltMin, b.target-16)
 		}
 	}
@@ -104,7 +110,7 @@ func (b *baloonGame) update(g *Game, dt float64) (bool, int) {
 	}
 
 	// The engine runs this at 30 fps; scale to our tick.
-	steps := dt * enginePace
+	steps := dt * 30
 	// Once the basket is coming down the descent owns the altitude: easing it
 	// toward the target as well would put back exactly what the descent takes
 	// off, and the landing would never finish.
@@ -112,7 +118,7 @@ func (b *baloonGame) update(g *Game, dt float64) (bool, int) {
 		b.alt -= 2 * steps
 		if b.alt < balLandFloor {
 			b.won = true
-			g.playSound([]string{"final3.wav", "1"})
+			b.host.PlaySound("final3.wav", 1)
 		}
 		return false, 0
 	}
@@ -133,15 +139,15 @@ func (b *baloonGame) update(g *Game, dt float64) (bool, int) {
 	if b.x < balWorldMin || b.x > balWorldMax ||
 		b.y < balWorldMin || b.y > balWorldMax {
 		b.wind += 2 * math.Pi / 3
-		b.x = clampF(b.x, balWorldMin, balWorldMax)
-		b.y = clampF(b.y, balWorldMin, balWorldMax)
+		b.x = min(max(b.x, balWorldMin), balWorldMax)
+		b.y = min(max(b.y, balWorldMin), balWorldMax)
 	}
 	// The landing test.
 	if b.alt <= balLandAlt &&
 		math.Abs(b.x-balLandX) < balLandDist &&
 		math.Abs(b.y-balLandY) < balLandDist {
 		b.landing = true
-		g.playSound([]string{"stnbalon.wav", "1"})
+		b.host.PlaySound("stnbalon.wav", 1)
 	}
 	return false, 0
 }
@@ -166,10 +172,10 @@ func (b *baloonGame) island(base string, d float64) *ebiten.Image {
 
 // draw paints the sky, the islands sliding under the basket, and the panel
 // with its course strip, altitude ruler and radar blip.
-func (b *baloonGame) draw(_ *Game, screen *ebiten.Image) {
+func (b *baloonGame) Draw(screen *ebiten.Image) {
 	// Sky scroll: high altitude shows the clouds, low the sea.
 	skyY := 120*b.alt/550 - 130
-	blitAt(screen, b.sprites["SKY"], 0, int(skyY))
+	minigame.Blit(screen, b.sprites["SKY"], 0, int(skyY))
 
 	// The two islands drift relative to the balloon (screen centre).
 	for _, is := range [2]struct {
@@ -184,11 +190,11 @@ func (b *baloonGame) draw(_ *Game, screen *ebiten.Image) {
 		bd := img.Bounds()
 		x := 320 + int(is.wx-b.x) - bd.Dx()/2
 		y := 200 + int(is.wy-b.y) - bd.Dy()/2
-		blitAt(screen, img, x, y)
+		minigame.Blit(screen, img, x, y)
 	}
 
 	// The instrument panel.
-	blitAt(screen, b.sprites["BAR"], 0, 400)
+	minigame.Blit(screen, b.sprites["BAR"], 0, 400)
 	// Course strip in its window: 360 degrees = 240 px, zero at x 83.
 	theta := b.wind + 3*math.Pi*b.alt/550
 	vx := math.Sin(theta) + math.Cos(theta)
@@ -198,11 +204,11 @@ func (b *baloonGame) draw(_ *Game, screen *ebiten.Image) {
 		cx += 243
 	}
 	sub := screen.SubImage(image.Rect(148, 449, 259, 461)).(*ebiten.Image)
-	blitAt(sub, b.sprites["COURSE"], int(cx), 448)
+	minigame.Blit(sub, b.sprites["COURSE"], int(cx), 448)
 	// Altitude ruler in its window.
 	subA := screen.SubImage(image.Rect(355, 416, 390, 464)).(*ebiten.Image)
-	blitAt(subA, b.sprites["ALT"], 358, int(0.21*(b.alt-550)+37)+400)
+	minigame.Blit(subA, b.sprites["ALT"], 358, int(0.21*(b.alt-550)+37)+400)
 	// Radar blip.
-	blitAt(screen, b.sprites["BALL"],
+	minigame.Blit(screen, b.sprites["BALL"],
 		3+int(0.127*b.x), 406+int(0.065*b.y))
 }

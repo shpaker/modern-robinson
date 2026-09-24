@@ -10,8 +10,10 @@ internal/
   use_cases/    логика: изосетка, pathfinding (stateless)
   repositories/ доступ к файлам игры; codec/ — кодеки NGI
   adapters/     Ebiten-образы из Domain (анимации, звук)
+  minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
-cmd/main.go
+cmd/main.go     игра
+cmd/minigames/  мини-игры без приключения (отладка, в релиз не идёт)
 ```
 
 ## Правила

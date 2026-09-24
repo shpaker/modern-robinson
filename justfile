@@ -73,6 +73,10 @@ release version="dev":
 run: build
     ./{{binary_name}}
 
+# Мини-игры без приключения (отладка): меню, или сразу игра: just minigames 4
+minigames id="":
+    {{gocmd}} run ./cmd/minigames {{ if id != "" { "-game " + id } else { "" } }}
+
 # Запустить без сборки бинарника
 dev:
     {{gocmd}} run ./cmd
@@ -150,6 +154,11 @@ snapshot ticks="30" out="/tmp/frame.png":
 # Демонстрационный прогон со вводом, пишет dbg_00..03.png
 demo:
     {{gocmd}} run ./.vmdriver-game -pkg ./cmd -ticks 800 -out /tmp/dbg.png -w 640 -h 480
+
+# Кадр мини-игры без приключения: just minigame-shot 1 -> /tmp/mg1.png
+minigame-shot id ticks="30":
+    ROBINSON_MINIGAME={{id}} {{gocmd}} run ./.vmdriver -pkg ./cmd/minigames \
+        -ticks {{ticks}} -out /tmp/mg{{id}}.png -w 640 -h 480
 
 # Кадр конкретной сцены: just scene PALACE
 scene name="SCENA0" ticks="40":

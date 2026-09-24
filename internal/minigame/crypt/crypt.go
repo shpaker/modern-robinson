@@ -1,4 +1,6 @@
-package app
+// Package crypt is the translator puzzle: StartGame 5, CRYPT.DAT, the result
+// goes into Translt.
+package crypt
 
 import (
 	"image"
@@ -9,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
-	"github.com/shpaker/modern-robinson/internal/repositories"
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // The translator puzzle (StartGame 5 -> Translt), rebuilt to the original's
@@ -21,6 +23,7 @@ import (
 // Cell values use the engine's own encoding: 0..n-1 a cipher pictogram,
 // n..n+4 punctuation, n+5.. a placed letter, -1 an empty cell.
 type cryptGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	n       int   // alphabet size (30)
 	perm    []int // letter index -> pictogram index
@@ -53,20 +56,18 @@ var (
 	cryptExitBtn  = image.Rect(550, 406, 633, 465)
 )
 
-// newCryptGame loads CRYPT.DAT, scrambles the alphabet and typesets the text.
-func newCryptGame(g *Game) minigame {
-	raw := g.res.ScreenFile("CRYPT", "CRYPT.TXT")
-	if raw == nil {
-		return nil
-	}
-	text := strings.ReplaceAll(repositories.DecodeCP1251(raw), "\r\n", "\n")
+// New loads CRYPT.DAT, scrambles the alphabet and typesets the text. The
+// alphabet comes from the text itself, so param (Find6, its size) is not read.
+func New(host minigame.Host, _ int) minigame.Game {
+	text := strings.ReplaceAll(host.Text("CRYPT", "CRYPT.TXT"), "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 	if len(lines) < 3 {
 		return nil
 	}
 	lower := []rune(strings.TrimSpace(lines[0]))
 	c := &cryptGame{
-		sprites: g.packImages("CRYPT"),
+		host:    host,
+		sprites: host.Images("CRYPT", nil),
 		n:       len(lower),
 		sel:     -1,
 	}
@@ -136,14 +137,14 @@ func (c *cryptGame) encode(r rune, letter int) int {
 
 // stripX is the left edge of the letter strip: centred for n letters.
 func (c *cryptGame) stripX() int {
-	return (ViewW - cryptPitchX*c.n) / 2
+	return (minigame.ScreenW - cryptPitchX*c.n) / 2
 }
 
 // update implements the engine's click logic.
-func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
+func (c *cryptGame) Update(dt float64) (bool, int) {
 	if c.solved {
 		c.solvedT += dt
-		if c.solvedT > 3 || clickedThisTick() {
+		if c.solvedT > 3 || minigame.Clicked() {
 			return true, 1
 		}
 		return false, 0
@@ -151,21 +152,21 @@ func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
-	if !clickedThisTick() {
+	if !minigame.Clicked() {
 		return false, 0
 	}
 	mx, my := ebiten.CursorPosition()
 	switch {
-	case pointIn(cryptExitBtn, mx, my):
+	case minigame.In(cryptExitBtn, mx, my):
 		return true, 0
-	case pointIn(cryptEraseBtn, mx, my):
+	case minigame.In(cryptEraseBtn, mx, my):
 		// The erase button is a full reset, not an undo.
 		copy(c.working, c.pristine)
 		for i := range c.used {
 			c.used[i] = false
 		}
 		c.sel = -1
-		g.playSound([]string{"r_all.wav", "1"})
+		c.host.PlaySound("r_all.wav", 1)
 		return false, 0
 	}
 	if c.sel < 0 {
@@ -175,7 +176,7 @@ func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 			if mx >= c.stripX() && i >= 0 && i < c.n && !c.used[i] {
 				c.sel = i
 				c.used[i] = true
-				g.playSound([]string{"r_take.wav", "1"})
+				c.host.PlaySound("r_take.wav", 1)
 				return false, 0
 			}
 		}
@@ -188,7 +189,7 @@ func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 				}
 			}
 			c.used[letter] = false
-			g.playSound([]string{"r_back.wav", "1"})
+			c.host.PlaySound("r_back.wav", 1)
 		}
 		return false, 0
 	}
@@ -201,18 +202,18 @@ func (c *cryptGame) update(g *Game, dt float64) (bool, int) {
 				c.working[i] = placed
 			}
 		}
-		g.playSound([]string{"r_put.wav", "1"})
+		c.host.PlaySound("r_put.wav", 1)
 		c.sel = -1
 		if c.check() {
 			c.solved = true
-			g.playSound([]string{"final5.wav", "1"})
+			c.host.PlaySound("final5.wav", 1)
 		}
 		return false, 0
 	}
 	// Dropped anywhere else: the letter goes back to the strip.
 	c.used[c.sel] = false
 	c.sel = -1
-	g.playSound([]string{"r_error.wav", "1"})
+	c.host.PlaySound("r_error.wav", 1)
 	return false, 0
 }
 
@@ -263,24 +264,24 @@ func (c *cryptGame) glyphSprite(v int) string {
 
 // draw paints the parchment, the text grid, the letter strip and the letter in
 // hand following the cursor.
-func (c *cryptGame) draw(_ *Game, screen *ebiten.Image) {
-	blitAt(screen, c.sprites["CRYPT"], 0, 0)
+func (c *cryptGame) Draw(screen *ebiten.Image) {
+	minigame.Blit(screen, c.sprites["CRYPT"], 0, 0)
 	for row := 0; row < cryptRows; row++ {
 		for col := 0; col < cryptCols; col++ {
 			if s := c.glyphSprite(c.working[row*cryptCols+col]); s != "" {
-				blitAt(screen, c.sprites[s],
+				minigame.Blit(screen, c.sprites[s],
 					cryptGridX+col*cryptPitchX, cryptGridY+row*cryptPitchY)
 			}
 		}
 	}
 	for i := 0; i < c.n; i++ {
 		if !c.used[i] {
-			blitAt(screen, c.sprites["R"+strconv.Itoa(i+1)],
+			minigame.Blit(screen, c.sprites["R"+strconv.Itoa(i+1)],
 				c.stripX()+i*cryptPitchX, cryptStripY)
 		}
 	}
 	if c.sel >= 0 {
 		mx, my := ebiten.CursorPosition()
-		blitAt(screen, c.sprites["R"+strconv.Itoa(c.sel+1)], mx-10, my-9)
+		minigame.Blit(screen, c.sprites["R"+strconv.Itoa(c.sel+1)], mx-10, my-9)
 	}
 }

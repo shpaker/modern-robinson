@@ -325,6 +325,12 @@ func (r *Resources) ScreenFile(pack, name string) []byte {
 	return d
 }
 
+// ScreenText returns a text entry of a top-level pack decoded from CP1251 (the
+// translator's CRYPT.TXT), or "" when the pack or the entry is missing.
+func (r *Resources) ScreenText(pack, name string) string {
+	return decodeCP1251(r.ScreenFile(pack, name))
+}
+
 // Screen returns a named full-screen bitmap from a top-level screen pack:
 // Screen("LOGO", "ROBINSON") is the title image of LOGO.DAT (pairs NAME.NGB +
 // NAME.COL). Returns nil if the pack or the image is absent.

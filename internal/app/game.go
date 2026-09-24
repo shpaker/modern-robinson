@@ -18,6 +18,7 @@ import (
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/types"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
@@ -130,9 +131,8 @@ type Game struct {
 	volMusic   float64
 	speed      float64 // 0..1 game speed slider (0.5 = original pace)
 
-	mg       minigame        // the minigame currently taking over the screen
+	mg       minigame.Game   // the minigame currently taking over the screen
 	mgVar    string          // quest variable its result goes into
-	mgParam  int             // paramVar value the script passed in
 	mgResume []types.Command // frame tail waiting on the minigame's result
 
 	// scene transition fade driven by the scene's .FAD table
@@ -637,7 +637,7 @@ func (g *Game) toggleOptions() {
 func (g *Game) resetRun() {
 	g.fadeCurve, g.fadeTo, g.fadeOut, g.fadeStep = nil, nil, false, 0
 	g.pending = nil
-	g.mg, g.mgVar, g.mgParam, g.mgResume = nil, "", 0, nil
+	g.mg, g.mgVar, g.mgResume = nil, "", nil
 	g.idleAct, g.idleT = nil, 0
 	g.robyZ = charZCoord
 	g.camShift = 0
@@ -782,7 +782,7 @@ func (g *Game) exitObjPresent(name string) bool {
 
 func (g *Game) cursorType(mx, my int) int {
 	if my >= PlayH {
-		return -1 // bar area
+		return cursorPointer // bar area
 	}
 	wx, wy := mx+g.camX, my
 	if e := g.edgeExit(mx); e != nil {
@@ -800,16 +800,25 @@ func (g *Game) cursorType(mx, my int) int {
 		}
 		return hs.ob.Cursor
 	}
-	return -1
+	return cursorPointer
 }
 
 // drawCursor draws our own cursor (the game's are proprietary) by zone type.
 func (g *Game) drawCursor(screen *ebiten.Image) {
 	mx, my := ebiten.CursorPosition()
+	drawCursorAs(screen, g.cursorType(mx, my))
+}
+
+// cursorPointer is the plain pointer, for places with no zones to hint at.
+const cursorPointer = -1
+
+// drawCursorAs draws the cursor of the given zone type at the mouse.
+func drawCursorAs(screen *ebiten.Image, kind int) {
+	mx, my := ebiten.CursorPosition()
 	x, y := float32(mx), float32(my)
 	white := rgba(255, 255, 255, 255)
 	dark := rgba(0, 0, 0, 200)
-	switch g.cursorType(mx, my) {
+	switch kind {
 	case 1: // ◄
 		drawTriangle(screen, x-10, y, x+4, y-8, x+4, y+8, white, dark)
 	case 2: // ►

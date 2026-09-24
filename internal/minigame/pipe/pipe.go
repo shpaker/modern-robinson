@@ -1,4 +1,6 @@
-package app
+// Package pipe is the bamboo organ: StartGame 4, PIPE.DAT, the result goes
+// into OrganOK.
+package pipe
 
 import (
 	"image"
@@ -6,6 +8,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // The bamboo organ (StartGame 4 -> OrganOK), rebuilt to the original's rules:
@@ -15,6 +19,7 @@ import (
 // mouths; a mouth sounds its tube's note, an empty mouth plays the dud note.
 // The organ is solved when the tubes stand in the right order.
 type pipeGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	avail   [8]bool // which tubes the hero has (the Tubs mask)
 	mouth   [8]int  // tube -> mouth, -1 = at home
@@ -59,15 +64,15 @@ var pipeWins = [2][8]int{
 	{2, 7, 1, 3, 4, 5, 6, 0},
 }
 
-// newPipeGame builds the organ. The Tubs variable is a bit mask: bit 2 grants
+// New builds the organ. The Tubs variable is a bit mask: bit 2 grants
 // tubes 0-5, bit 1 tube 7, bit 0 tube 6 — the quest reaches 7 (all of them).
-func newPipeGame(g *Game) minigame {
-	p := &pipeGame{held: -1}
-	p.sprites = g.packImages("PIPE")
+func New(host minigame.Host, param int) minigame.Game {
+	p := &pipeGame{host: host, held: -1}
+	p.sprites = host.Images("PIPE", nil)
 	if p.sprites["BACK"] == nil {
 		return nil
 	}
-	mask := g.mgParam
+	mask := param
 	for i := 0; i < 6; i++ {
 		p.avail[i] = mask&4 != 0
 	}
@@ -98,13 +103,13 @@ func (p *pipeGame) tubeRect(i int) image.Rectangle {
 }
 
 // note sounds mouth m with whatever tube sits in it (the dud when empty).
-func (p *pipeGame) note(g *Game, m int) {
+func (p *pipeGame) note(m int) {
 	t := p.inMouth[m]
 	name := "pipe00.wav"
 	if t >= 0 {
 		name = "pipe0" + strconv.Itoa(t+1) + ".wav"
 	}
-	g.playSound([]string{name, "3"})
+	p.host.PlaySound(name, 3)
 }
 
 // solvedNow tests the two accepted arrangements.
@@ -125,16 +130,16 @@ func (p *pipeGame) solvedNow() bool {
 }
 
 // update carries tubes and drives the phrase playback.
-func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
+func (p *pipeGame) Update(dt float64) (bool, int) {
 	if p.done {
 		p.finishT += dt
-		return p.finishT > 2 || clickedThisTick(), p.result
+		return p.finishT > 2 || minigame.Clicked(), p.result
 	}
 	if p.playing {
 		p.noteT -= dt
 		if p.noteT <= 0 {
 			if p.noteIdx < len(pipeTune) {
-				p.note(g, pipeTune[p.noteIdx])
+				p.note(pipeTune[p.noteIdx])
 				p.noteT = pipeTick * float64(pipeBeat[p.noteIdx])
 				p.noteIdx++
 			} else {
@@ -149,18 +154,18 @@ func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
-	if !clickedThisTick() {
+	if !minigame.Clicked() {
 		return false, 0
 	}
 	mx, my := ebiten.CursorPosition()
 	if p.held < 0 {
-		if pointIn(pipeListen, mx, my) {
+		if minigame.In(pipeListen, mx, my) {
 			p.playing, p.noteIdx, p.noteT = true, 0, 0.4
 			return false, 0
 		}
 		// Pick the tube under the cursor (top row or seated in a mouth).
 		for i := 0; i < 8; i++ {
-			if !p.avail[i] || !pointIn(p.tubeRect(i), mx, my) {
+			if !p.avail[i] || !minigame.In(p.tubeRect(i), mx, my) {
 				continue
 			}
 			if m := p.mouth[i]; m >= 0 {
@@ -174,11 +179,11 @@ func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
 	}
 	// Carrying a tube: drop it into an empty mouth, else send it home.
 	for m := 0; m < 8; m++ {
-		if pointIn(mouthRect(m), mx, my) && p.inMouth[m] < 0 {
+		if minigame.In(mouthRect(m), mx, my) && p.inMouth[m] < 0 {
 			p.mouth[p.held] = m
 			p.inMouth[m] = p.held
 			p.held = -1
-			p.note(g, m)
+			p.note(m)
 			return false, 0
 		}
 	}
@@ -187,20 +192,20 @@ func (p *pipeGame) update(g *Game, dt float64) (bool, int) {
 }
 
 // draw paints the beach, the organ, the tubes and the one in hand.
-func (p *pipeGame) draw(_ *Game, screen *ebiten.Image) {
-	blitAt(screen, p.sprites["BACK"], 0, 0)
-	blitAt(screen, p.sprites["PIPE18"], 255, 99) // the organ frame
+func (p *pipeGame) Draw(screen *ebiten.Image) {
+	minigame.Blit(screen, p.sprites["BACK"], 0, 0)
+	minigame.Blit(screen, p.sprites["PIPE18"], 255, 99) // the organ frame
 	for i := 0; i < 8; i++ {
 		if !p.avail[i] || i == p.held {
 			continue
 		}
 		r := p.tubeRect(i)
-		blitAt(screen, p.sprites["PIPE1"+strconv.Itoa(i)], r.Min.X, r.Min.Y)
+		minigame.Blit(screen, p.sprites["PIPE1"+strconv.Itoa(i)], r.Min.X, r.Min.Y)
 	}
-	blitAt(screen, p.sprites["PIPE112"], 6, 443) // the rail over seated tubes
+	minigame.Blit(screen, p.sprites["PIPE112"], 6, 443) // the rail over seated tubes
 	if p.held >= 0 {
 		mx, my := ebiten.CursorPosition()
-		blitAt(screen, p.sprites["PIPE1"+strconv.Itoa(p.held)],
+		minigame.Blit(screen, p.sprites["PIPE1"+strconv.Itoa(p.held)],
 			mx-pipeCell/2, my-pipeCell/2)
 	}
 }

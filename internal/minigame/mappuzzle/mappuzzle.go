@@ -1,12 +1,17 @@
-package app
+// Package mappuzzle is the torn sea-chart jigsaw: StartGame 0, MAP.DAT, the
+// result goes into MapOK.
+package mappuzzle
 
 import (
+	"image"
 	"math/rand"
 	"sort"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // The torn sea-chart jigsaw (StartGame 0 -> MapOK). Twelve ragged fragments
@@ -14,6 +19,7 @@ import (
 // fragments snap to each other, aligned groups are picked up and dragged as
 // one, and the chart is done when all twelve agree on their relative offsets.
 type mapGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	pos     [12][2]int // fragment centre
 	rot     [12]int
@@ -212,23 +218,24 @@ var mapAdj = [12][12]bool{
 	},
 }
 
-var mapExit = houseExit // the same floppy button spot
+// mapExit is the floppy button, at the same spot as in the hut puzzle.
+var mapExit = image.Rect(565, 406, 633, 472)
 
-// newMapGame loads MAP.DAT and scatters the fragments over the whole mat.
-func newMapGame(g *Game) minigame {
-	m := &mapGame{}
-	m.sprites = g.packImages("MAP")
+// New loads MAP.DAT and scatters the fragments over the whole mat.
+func New(host minigame.Host, _ int) minigame.Game {
+	m := &mapGame{host: host}
+	m.sprites = host.Images("MAP", nil)
 	if m.sprites["DESK"] == nil {
 		return nil
 	}
 	for i := 0; i < 12; i++ {
 		m.rot[i] = rand.Intn(3)
 		w, h := m.size(i)
-		spanX := ViewW - w - 8
+		spanX := minigame.ScreenW - w - 8
 		if spanX < 1 {
 			spanX = 1
 		}
-		spanY := ViewH - h - 8
+		spanY := minigame.ScreenH - h - 8
 		if spanY < 1 {
 			spanY = 1
 		}
@@ -292,10 +299,10 @@ func (m *mapGame) selCount() int {
 }
 
 // update drives pick (with gluing), carry, rotate, snap and the win test.
-func (m *mapGame) update(g *Game, dt float64) (bool, int) {
+func (m *mapGame) Update(dt float64) (bool, int) {
 	if m.won {
 		m.finishT += dt
-		return m.finishT > 3 || clickedThisTick(), 1
+		return m.finishT > 3 || minigame.Clicked(), 1
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
@@ -321,22 +328,22 @@ func (m *mapGame) update(g *Game, dt float64) (bool, int) {
 			m.selCount() == 1 {
 			// Only a lone fragment can be turned.
 			m.rot[anchor] = (m.rot[anchor] + 1) & 3
-			g.playSound([]string{"m_turn.wav", "1"})
+			m.host.PlaySound("m_turn.wav", 1)
 		}
-		if !clickedThisTick() {
+		if !minigame.Clicked() {
 			return false, 0
 		}
 		m.held = false
-		m.drop(g)
+		m.drop()
 		for i := range m.sel {
 			m.sel[i] = false
 		}
 		return false, 0
 	}
-	if !clickedThisTick() {
+	if !minigame.Clicked() {
 		return false, 0
 	}
-	if pointIn(mapExit, mx, my) {
+	if minigame.In(mapExit, mx, my) {
 		return true, 0
 	}
 	// Pick the front-most fragment under the cursor and glue its group.
@@ -346,7 +353,7 @@ func (m *mapGame) update(g *Game, dt float64) (bool, int) {
 			continue
 		}
 		x, y := m.topLeft(i)
-		if opaqueAt(m.sprite(i), mx-x, my-y) {
+		if minigame.Opaque(m.sprite(i), mx-x, my-y) {
 			best, bestZ = i, m.z[i]
 		}
 	}
@@ -369,13 +376,13 @@ func (m *mapGame) update(g *Game, dt float64) (bool, int) {
 		}
 	}
 	m.held = true
-	g.playSound([]string{"m_take.wav", "1"})
+	m.host.PlaySound("m_take.wav", 1)
 	return false, 0
 }
 
 // drop snaps the carried group to any adjacent resting fragment within the
 // engine's ten-pixel tolerance, then tests the whole chart.
-func (m *mapGame) drop(g *Game) {
+func (m *mapGame) drop() {
 	snapped := false
 	for a := 0; a < 12 && !snapped; a++ {
 		if !m.sel[a] || m.rot[a] != 0 {
@@ -398,14 +405,14 @@ func (m *mapGame) drop(g *Game) {
 						m.pos[i][1] += dy
 					}
 				}
-				g.playSound([]string{"m_good.wav", "1"})
+				m.host.PlaySound("m_good.wav", 1)
 				snapped = true
 				break
 			}
 		}
 	}
 	if !snapped {
-		g.playSound([]string{"m_put.wav", "1"})
+		m.host.PlaySound("m_put.wav", 1)
 	}
 	// Win: every fragment upright and aligned with fragment 10.
 	x10, y10 := m.topLeft(10)
@@ -419,12 +426,12 @@ func (m *mapGame) drop(g *Game) {
 		}
 	}
 	m.won = true
-	g.playSound([]string{"final0.wav", "1"})
+	m.host.PlaySound("final0.wav", 1)
 }
 
 // draw paints the mat and the fragments back-to-front.
-func (m *mapGame) draw(_ *Game, screen *ebiten.Image) {
-	blitAt(screen, m.sprites["DESK"], 0, 0)
+func (m *mapGame) Draw(screen *ebiten.Image) {
+	minigame.Blit(screen, m.sprites["DESK"], 0, 0)
 	order := make([]int, len(m.z))
 	for i := range order {
 		order[i] = i
@@ -435,6 +442,13 @@ func (m *mapGame) draw(_ *Game, screen *ebiten.Image) {
 	)
 	for _, i := range order {
 		x, y := m.topLeft(i)
-		blitAt(screen, m.sprite(i), x, y)
+		minigame.Blit(screen, m.sprite(i), x, y)
 	}
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

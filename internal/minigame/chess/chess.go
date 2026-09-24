@@ -1,4 +1,6 @@
-package app
+// Package chess is the draughts game against the sailor: StartGame 2,
+// CHESS.DAT, the result goes into Dames.
+package chess
 
 import (
 	"image"
@@ -6,6 +8,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // Draughts against the sailor (StartGame 2 -> Dames), on the engine's 6x6
@@ -15,6 +19,7 @@ import (
 // could not be recovered from the DLL, so this one plays a straightforward
 // greedy game: it takes the longest capture it sees, otherwise a random move.
 type chessGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	board   [36]int
 	sel     int // selected cell, -1
@@ -33,9 +38,13 @@ const (
 
 var chessBoard = image.Rect(364, 71, 621, 328)
 
-func newChessGame(g *Game) minigame {
-	c := &chessGame{sel: -1}
-	c.sprites = g.packImages("CHESS")
+// chessExit is the floppy button, at the same spot as in the jigsaw puzzles.
+var chessExit = image.Rect(565, 406, 633, 472)
+
+// New sets up the board for a fresh game.
+func New(host minigame.Host, _ int) minigame.Game {
+	c := &chessGame{host: host, sel: -1}
+	c.sprites = host.Images("CHESS", nil)
 	if c.sprites["BACK"] == nil {
 		return nil
 	}
@@ -148,26 +157,26 @@ func (c *chessGame) sideMoves(isRed bool) []cmove {
 }
 
 // apply plays a move; returns true when the same piece must keep capturing.
-func (c *chessGame) apply(g *Game, m cmove) bool {
+func (c *chessGame) apply(m cmove) bool {
 	v := c.board[m.from]
 	c.board[m.from] = 0
 	c.board[m.to] = v
 	if m.takes >= 0 {
 		c.board[m.takes] = 0
-		g.playSound([]string{"eat.wav", "1"})
+		c.host.PlaySound("eat.wav", 1)
 	} else if king(v) {
-		g.playSound([]string{"movelady.wav", "1"})
+		c.host.PlaySound("movelady.wav", 1)
 	} else {
-		g.playSound([]string{"move.wav", "1"})
+		c.host.PlaySound("move.wav", 1)
 	}
 	// Promotion on the far row.
 	if v == 1 && m.to/6 == 0 {
 		c.board[m.to] = 3
-		g.playSound([]string{"lady.wav", "1"})
+		c.host.PlaySound("lady.wav", 1)
 	}
 	if v == 2 && m.to/6 == 5 {
 		c.board[m.to] = 4
-		g.playSound([]string{"lady.wav", "1"})
+		c.host.PlaySound("lady.wav", 1)
 	}
 	if m.takes < 0 {
 		return false
@@ -177,10 +186,10 @@ func (c *chessGame) apply(g *Game, m cmove) bool {
 }
 
 // update runs the player's clicks and the opponent's replies.
-func (c *chessGame) update(g *Game, dt float64) (bool, int) {
+func (c *chessGame) Update(dt float64) (bool, int) {
 	if c.won {
 		c.finishT += dt
-		return c.finishT > 3 || clickedThisTick(), 1
+		return c.finishT > 3 || minigame.Clicked(), 1
 	}
 	if c.lost > 0 {
 		if c.lost -= dt; c.lost <= 0 {
@@ -195,15 +204,15 @@ func (c *chessGame) update(g *Game, dt float64) (bool, int) {
 		if c.aiWait -= dt; c.aiWait > 0 {
 			return false, 0
 		}
-		c.aiTurn(g)
+		c.aiTurn()
 		return false, 0
 	}
-	if !clickedThisTick() {
+	if !minigame.Clicked() {
 		return false, 0
 	}
 	mx, my := ebiten.CursorPosition()
-	if !pointIn(chessBoard, mx, my) {
-		if pointIn(houseExit, mx, my) {
+	if !minigame.In(chessBoard, mx, my) {
+		if minigame.In(chessExit, mx, my) {
 			return true, 0
 		}
 		return false, 0
@@ -231,12 +240,12 @@ func (c *chessGame) update(g *Game, dt float64) (bool, int) {
 		if m.from != c.sel || m.to != cell {
 			continue
 		}
-		if c.apply(g, m) {
+		if c.apply(m) {
 			c.sel, c.chain = m.to, true // must keep capturing
 			return false, 0
 		}
 		c.sel, c.chain = -1, false
-		if c.gameOver(g) {
+		if c.gameOver() {
 			return false, 0
 		}
 		c.aiWait = 0.7
@@ -246,26 +255,26 @@ func (c *chessGame) update(g *Game, dt float64) (bool, int) {
 }
 
 // aiTurn plays the opponent: the capture chain when one exists, else random.
-func (c *chessGame) aiTurn(g *Game) {
+func (c *chessGame) aiTurn() {
 	ms := c.sideMoves(false)
 	if len(ms) == 0 {
 		c.won = true // the sailor cannot move: the player wins
-		g.playSound([]string{"final1.wav", "1"})
+		c.host.PlaySound("final1.wav", 1)
 		return
 	}
 	m := ms[rand.Intn(len(ms))]
-	for c.apply(g, m) {
+	for c.apply(m) {
 		next := c.moves(m.to, true)
 		m = next[rand.Intn(len(next))]
 	}
-	c.gameOver(g)
+	c.gameOver()
 }
 
 // gameOver checks both sides; a player defeat restarts the board.
-func (c *chessGame) gameOver(g *Game) bool {
+func (c *chessGame) gameOver() bool {
 	if len(c.sideMoves(false)) == 0 {
 		c.won = true
-		g.playSound([]string{"final1.wav", "1"})
+		c.host.PlaySound("final1.wav", 1)
 		return true
 	}
 	if len(c.sideMoves(true)) == 0 {
@@ -276,20 +285,20 @@ func (c *chessGame) gameOver(g *Game) bool {
 }
 
 // draw paints the cabin, the pots and bottles, and the selection frame.
-func (c *chessGame) draw(_ *Game, screen *ebiten.Image) {
-	blitAt(screen, c.sprites["BACK"], 0, 0)
+func (c *chessGame) Draw(screen *ebiten.Image) {
+	minigame.Blit(screen, c.sprites["BACK"], 0, 0)
 	names := map[int]string{1: "R1", 2: "G1", 3: "R2", 4: "G2"}
 	for i, v := range c.board {
 		if v == 0 {
 			continue
 		}
 		r, col := i/6, i%6
-		blitAt(screen, c.sprites[names[v]],
+		minigame.Blit(screen, c.sprites[names[v]],
 			369+chessCell*col, 40+chessCell*r)
 	}
 	if c.sel >= 0 {
 		r, col := c.sel/6, c.sel%6
-		blitAt(screen, c.sprites["ACCENT"],
+		minigame.Blit(screen, c.sprites["ACCENT"],
 			361+chessCell*col, 68+chessCell*r)
 	}
 }
