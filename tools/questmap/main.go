@@ -73,8 +73,7 @@ func scan(res *repositories.Resources) *facts {
 	}
 	if c := res.SceneContainer("STARTUP"); c != nil {
 		if d, err := c.ExtractName("STARTUP.INF"); err == nil {
-			vars, _ := p.ParseStartup(string(d))
-			for k, v := range vars {
+			for k, v := range p.ParseStartup(string(d)).Vars {
 				f.initial[k] = v
 			}
 		}

@@ -144,6 +144,16 @@ type FrameScript struct {
 	Frames     []*Frame
 }
 
+// Startup is what STARTUP.INF gives the run: the quest variables with their
+// initial values and the engine's one debug switch.
+type Startup struct {
+	Vars     map[string]int    // IntVariables, folded to lower case
+	CharVars map[string]string // CharVariables, folded to lower case
+	// GridDebug is the raw GridDebug value; ROBY.EXE draws its walk lattice
+	// only when it is exactly 1 (0x4145c7).
+	GridDebug int
+}
+
 // Character is a parsed .CHR: the walk mode and the three idle slots the engine
 // cycles through — [0] standing, [1] the acknowledge animation, [2] the long
 // idle SetRest swaps out.

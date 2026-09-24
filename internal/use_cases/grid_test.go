@@ -230,3 +230,18 @@ func TestNearestFreeFollowsSetVert(t *testing.T) {
 		)
 	}
 }
+
+// Fenced reads the fences as authored: per cell and direction, one-way.
+func TestFenced(t *testing.T) {
+	g := scena0Grid()
+	if !g.Fenced(2, 3, 3) || !g.Fenced(3, 4, 7) {
+		t.Error("the palm's diagonals must read as fenced")
+	}
+	if g.Fenced(2, 3, 6) || g.Fenced(3, 3, 3) {
+		t.Error("an unfenced step reads as fenced")
+	}
+	g.SetDir(2, 3, 3, true)
+	if g.Fenced(2, 3, 3) {
+		t.Error("a lifted fence still reads as fenced")
+	}
+}

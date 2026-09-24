@@ -13,7 +13,12 @@ import (
 // world- and presentation-affecting commands that survived the conditionals,
 // for the caller to enact against the scene and engine. It is stateless: all
 // mutable data lives in the passed *GameState.
-type Interpreter struct{}
+type Interpreter struct {
+	// Observe, when set, sees every state command the interpreter consumes —
+	// the ones that never reach the caller, so a trace of the effects alone
+	// would miss them.
+	Observe func(types.Command)
+}
 
 // Exec runs cmds against st and returns the commands the caller must enact
 // (Sound, Text, CreateObject, DelObject, GoScene, HideChar/ShowChar, SetVert,
@@ -23,7 +28,7 @@ type Interpreter struct{}
 // If/EndIf nest as logical AND: a command runs only when every enclosing If is
 // true. Unbalanced blocks (rare author edits) are tolerated — a missing EndIf
 // simply ends with the run, a stray EndIf is ignored.
-func (Interpreter) Exec(
+func (in Interpreter) Exec(
 	cmds []types.Command,
 	st *types.GameState,
 ) ([]types.Command, []types.Command) {
@@ -49,6 +54,9 @@ func (Interpreter) Exec(
 				continue // inside a false block
 			}
 			if applyState(c, st) {
+				if in.Observe != nil {
+					in.Observe(c)
+				}
 				continue
 			}
 			out = append(out, c) // world/presentation command
