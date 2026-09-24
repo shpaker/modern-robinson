@@ -63,7 +63,4 @@ func (g *Game) drawMinigame(screen *ebiten.Image) {
 		return
 	}
 	g.mg.Draw(screen)
-	// The scene's zones lie under the minigame, not in it: the plain pointer,
-	// whatever the scene below would have shown there.
-	drawCursorAs(screen, cursorPointer)
 }

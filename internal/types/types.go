@@ -45,6 +45,15 @@ func (n *NGB) RGBA(p Palette) []byte {
 	return out
 }
 
+// Cursor is one of the game's mouse cursors: a premultiplied RGBA bitmap
+// (W*H*4, transparent pixels fully zero) and the hotspot that sits on the
+// pointer.
+type Cursor struct {
+	W, H       int
+	HotX, HotY int
+	Pix        []byte
+}
+
 // ObjectRef places an object on the scene grid.
 type ObjectRef struct {
 	Name   string

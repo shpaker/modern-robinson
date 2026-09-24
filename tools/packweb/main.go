@@ -40,6 +40,11 @@ var wanted = map[string]bool{
 	".BGI": true, // BEGIN.BGI initial object visibility
 }
 
+// wantedNames are single files read by name whose extension the rest of the
+// folder does not earn: of all the executables, only the game's own is read,
+// for the mouse cursors among its resources.
+var wantedNames = map[string]bool{"ROBY.EXE": true}
+
 // skipDirs hold no game resources — only the DirectX 7 redistributable and the
 // scanned manual, together 55 MB of the disc.
 var skipDirs = map[string]bool{"DIRECTX": true, "DOCUMENT": true}
@@ -135,7 +140,8 @@ func collect(root string) ([]string, error) {
 				}
 				return nil
 			}
-			if !wanted[strings.ToUpper(filepath.Ext(d.Name()))] {
+			name := strings.ToUpper(d.Name())
+			if !wanted[filepath.Ext(name)] && !wantedNames[name] {
 				return nil
 			}
 			rel, err := filepath.Rel(root, p)

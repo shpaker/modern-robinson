@@ -311,7 +311,6 @@ func (g *Game) drawOptions(screen *ebiten.Image) {
 			g.blitOpt(screen, slotButtons(g.mode)[btn], r.Min.X, r.Min.Y)
 		}
 	}
-	g.drawCursor(screen)
 }
 
 // drawSlots paints each slot's thumbnail (or its scene caption) and marks the
