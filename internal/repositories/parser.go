@@ -388,26 +388,28 @@ func (SceneParser) ParseBar(text string) *types.Bar {
 // into the quest namespace with their initial values (most flags start 0, but a
 // few — TreeIs=1, MapParts=4, Find6=30 — do not; dialogue selectors point at
 // their first variant script). Seeding these is required for correct If-branching.
-func (SceneParser) ParseStartup(
-	text string,
-) (vars map[string]int, charVars map[string]string) {
-	vars = map[string]int{}
-	charVars = map[string]string{}
+// It also keeps GridDebug, the only debug switch the original engine has.
+func (SceneParser) ParseStartup(text string) types.Startup {
+	s := types.Startup{Vars: map[string]int{}, CharVars: map[string]string{}}
 	for _, st := range statements(text) {
 		switch st.kw {
 		case "intvariables":
 			a := argSplit(st.args)
 			if len(a) >= 2 {
-				vars[strings.ToLower(a[0])] = atoiSafe(a[1])
+				s.Vars[strings.ToLower(a[0])] = atoiSafe(a[1])
 			}
 		case "charvariables":
 			a := argSplit(st.args)
 			if len(a) >= 2 {
-				charVars[strings.ToLower(a[0])] = a[1]
+				s.CharVars[strings.ToLower(a[0])] = a[1]
+			}
+		case "griddebug":
+			if a := argSplit(st.args); len(a) >= 1 {
+				s.GridDebug = atoiSafe(a[0])
 			}
 		}
 	}
-	return vars, charVars
+	return s
 }
 
 func atoiSafe(s string) int {

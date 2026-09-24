@@ -99,6 +99,12 @@ func (g *Grid) SetDir(gx, gy, d int, open bool) {
 	}
 }
 
+// Fenced reports whether a ClosedDir fence forbids leaving (gx,gy) in numpad
+// direction d.
+func (g *Grid) Fenced(gx, gy, d int) bool {
+	return g.closedDir[[3]int{gx, gy, d}]
+}
+
 // floorDiv divides rounding toward negative infinity, so a point just left of
 // the grid maps to a negative cell rather than snapping to column zero.
 func floorDiv(a, b int) int {

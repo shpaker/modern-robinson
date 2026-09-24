@@ -9,8 +9,9 @@ import (
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
-// Tracing writes every world-affecting script command to stderr when
-// ROBINSON_TRACE is set. The quest is data, so when a step misbehaves the
+// Tracing writes every script command that runs to stderr when ROBINSON_TRACE
+// is set: the effects as they are enacted, the state commands as the
+// interpreter consumes them. The quest is data, so when a step misbehaves the
 // question is almost always "which script ran, and what did it decide" —
 // answering that from a log beats guessing from the screen.
 //
@@ -45,8 +46,10 @@ func parseTrace(v string) map[string]bool {
 // tracing reports whether commands should be logged at all.
 func tracing() bool { return traceKw() != nil }
 
-// trace logs one command with the scene it ran in.
+// trace logs one command with the scene it ran in, and keeps it for the debug
+// panel's command log whether or not tracing is on.
 func (g *Game) trace(c types.Command) {
+	g.logCommand(c)
 	kws := traceKw()
 	if kws == nil {
 		return

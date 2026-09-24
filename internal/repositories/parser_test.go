@@ -236,7 +236,8 @@ func TestParseStartup(t *testing.T) {
 		"IntVariables\tCrabNeed,0;\n\t\tTreeIs,1;\n\t\tMapParts,4;\n\t\tFind6,30;\n" +
 		"CharVariables\trohanbgs,\"rohanbgs\";\n\t\trohanpop,\"hirobin\";\n" +
 		"GridDebug 0;\nEnd;\n"
-	vars, chars := SceneParser{}.ParseStartup(inf)
+	st := SceneParser{}.ParseStartup(inf)
+	vars, chars := st.Vars, st.CharVars
 	if vars["treeis"] != 1 || vars["mapparts"] != 4 || vars["find6"] != 30 {
 		t.Fatalf("int vars = %v", vars)
 	}
@@ -245,6 +246,20 @@ func TestParseStartup(t *testing.T) {
 	}
 	if chars["rohanbgs"] != "rohanbgs" || chars["rohanpop"] != "hirobin" {
 		t.Fatalf("char vars = %v", chars)
+	}
+}
+
+// GridDebug is kept as written: the engine tests it for exactly 1.
+func TestParseStartupGridDebug(t *testing.T) {
+	for inf, want := range map[string]int{
+		"GridDebug 0;\nEnd;\n": 0,
+		"GridDebug 1;\nEnd;\n": 1,
+		"GridDebug 2;\nEnd;\n": 2,
+		"End;\n":               0,
+	} {
+		if got := (SceneParser{}).ParseStartup(inf).GridDebug; got != want {
+			t.Errorf("%q: GridDebug = %d, want %d", inf, got, want)
+		}
 	}
 }
 

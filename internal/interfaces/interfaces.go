@@ -76,7 +76,7 @@ type ISceneParser interface {
 	ParseScene(text string) *types.Scene
 	ParseObject(text string) *types.SceneObject
 	ParseFrameScript(text string) *types.FrameScript
-	ParseStartup(text string) (vars map[string]int, charVars map[string]string)
+	ParseStartup(text string) types.Startup
 	ParseBar(text string) *types.Bar
 	ParseChar(text string) *types.Character
 	SceneExits(c IContainer) (left, right types.Exit)
@@ -92,6 +92,8 @@ type IGrid interface {
 	SetVert(gx, gy int, open bool)
 	// SetDir toggles a single step fence: leaving (gx,gy) in numpad direction d.
 	SetDir(gx, gy, d int, open bool)
+	// Fenced reports whether leaving (gx,gy) in numpad direction d is fenced.
+	Fenced(gx, gy, d int) bool
 	NearestFree(gx, gy int) (int, int, bool)
 	Path(start, goal [2]int) [][2]int
 	// PathStraight avoids diagonals, for ArrowGoing characters.

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -12,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
@@ -101,7 +99,8 @@ type Game struct {
 	pending *types.Exit
 	msg     string
 	msgT    float64
-	debug   bool
+	debug   bool      // F1: the world as the engine sees it (debug.go)
+	dbg     debugView // F2 panel, command log, STARTUP.INF GridDebug
 
 	// the scene's ambient pool and the countdown to its next shot (ambient.go)
 	ambientPool []types.SoundVar
@@ -169,6 +168,8 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 		gs:         types.NewGameState(),
 		randn:      rand.Intn,
 	}
+	// State commands never reach applyEffect; the trace hears them from here.
+	g.interp.Observe = g.trace
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.optHover, g.optDrag = -1, -1
 	g.slotHover, g.slotSel, g.btnDown = -1, -1, -1
@@ -221,7 +222,8 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 }
 
 // seedStartup loads STARTUP.INF's initial quest variables into the game state so
-// early If-checks branch correctly (most flags are 0, some are not).
+// early If-checks branch correctly (most flags are 0, some are not), and its
+// GridDebug switch.
 func (g *Game) seedStartup() {
 	sc := g.res.SceneContainer("STARTUP")
 	if sc == nil {
@@ -231,13 +233,14 @@ func (g *Game) seedStartup() {
 	if err != nil {
 		return
 	}
-	vars, charVars := g.parser.ParseStartup(string(d))
-	for k, v := range vars {
+	st := g.parser.ParseStartup(string(d))
+	for k, v := range st.Vars {
 		g.gs.SetVar(k, v)
 	}
-	for k, v := range charVars {
+	for k, v := range st.CharVars {
 		g.gs.SetCharVar(k, v)
 	}
+	g.dbg.grid = st.GridDebug == 1 // the engine tests for exactly 1
 }
 
 // startItems is what each character carries when his .CHR cannot be read.
@@ -595,6 +598,9 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		g.debug = !g.debug
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
+		g.dbg.state = !g.dbg.state
+	}
 	// The quick save/load keys work only in play: anywhere else a load would
 	// swap the run out from under the boot screens and menus.
 	if g.mode == modePlay {
@@ -677,6 +683,7 @@ func (g *Game) Update() error {
 			g.msg = ""
 		}
 	}
+	g.noteStateChanges(dt)
 	g.flushPending()
 	return nil
 }
@@ -819,6 +826,9 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	for _, it := range items {
 		it.fn()
 	}
+	if g.dbg.grid {
+		g.drawGridDebug(screen) // the engine's own, over the sprites
+	}
 
 	if !hud {
 		return
@@ -826,6 +836,9 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	g.drawBar(screen)
 	if g.debug {
 		g.drawDebug(screen)
+	}
+	if g.dbg.state {
+		g.drawStatePanel(screen)
 	}
 }
 
@@ -990,96 +1003,6 @@ func drawAnim(
 	screen.DrawImage(frame, op)
 }
 
-func (g *Game) drawDebug(screen *ebiten.Image) {
-	xoff := -g.camX
-	nx, ny := g.grid.Dims()
-	// The lattice is drawn at the cell corners, not at the sprite anchors: Corner
-	// is what ToCell inverts, so a dot sits exactly where clicking it lands, and
-	// it is the lattice the original GridDebug draws (docs/08-scene-objects.md).
-	for gy := 0; gy < ny; gy++ {
-		for gx := 0; gx < nx; gx++ {
-			x, y := g.grid.Corner(gx, gy)
-			x += xoff
-			var col color.Color
-			switch {
-			case g.grid.Blocked(gx, gy):
-				col = rgba(255, 60, 60, 200)
-			case g.grid.Valid(gx, gy):
-				col = rgba(60, 255, 120, 200)
-			default:
-				continue
-			}
-			vector.FillCircle(screen, float32(x), float32(y), 3, col, true)
-			ebitenutil.DebugPrintAt(
-				screen,
-				fmt.Sprintf("%d,%d", gx, gy),
-				x+4,
-				y-6,
-			)
-		}
-	}
-	for _, c := range g.path {
-		x, y := g.grid.Corner(c[0], c[1])
-		vector.FillCircle(
-			screen,
-			float32(x+xoff),
-			float32(y),
-			4,
-			rgba(255, 230, 0, 230),
-			true,
-		)
-	}
-	for _, hs := range g.hotspots {
-		r := hs.rect
-		vector.StrokeRect(
-			screen,
-			float32(r.Min.X+xoff),
-			float32(r.Min.Y),
-			float32(r.Dx()),
-			float32(r.Dy()),
-			1,
-			rgba(255, 230, 0, 200),
-			false,
-		)
-		ebitenutil.DebugPrintAt(screen, hs.ob.Name, r.Min.X+xoff, r.Min.Y-12)
-	}
-	rx, ry := g.grid.ToScreen(g.cell[0], g.cell[1])
-	vector.StrokeCircle(
-		screen,
-		float32(rx+xoff),
-		float32(ry),
-		9,
-		2,
-		rgba(0, 200, 255, 255),
-		true,
-	)
-
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
-		"DEBUG (F1)  v=%s  scene=%s  cell=%v  cam=%d  moving=%v  "+
-			"act=%s cyc=%v goto=%v fps=%.0f",
-		Version,
-		g.sceneName,
-		g.cell,
-		g.camX,
-		g.moving,
-		g.actDebug(),
-		g.roby.cycles,
-		g.pending != nil,
-		ebiten.ActualFPS(),
-	), 8, PlayH-32)
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf(
-		"exitL=%s(%d,%d) exitR=%s(%d,%d)  objects=%d hotspots=%d",
-		g.exitL.Scene,
-		g.exitL.GX,
-		g.exitL.GY,
-		g.exitR.Scene,
-		g.exitR.GX,
-		g.exitR.GY,
-		len(g.objects),
-		len(g.hotspots),
-	), 8, PlayH-18)
-}
-
 // Layout is the fixed original window: a 640x400 scene viewport plus the 80px
 // inventory bar. Wide scenes scroll horizontally within it.
 func (g *Game) Layout(_, _ int) (int, int) {
@@ -1209,23 +1132,6 @@ func exitKey(left bool) string {
 		return "goleft"
 	}
 	return "gorght"
-}
-
-// actDebug describes the running action for the debug overlay.
-func (g *Game) actDebug() string {
-	if g.act == nil {
-		return "-"
-	}
-	hold := ""
-	switch g.act.wait {
-	case waitRoby:
-		hold = " wait=roby"
-	case waitFrid:
-		hold = " wait=frid"
-	}
-	return fmt.Sprintf(
-		"%d/%d%s", g.act.player.FrameIndex(), len(g.act.fs.Frames), hold,
-	)
 }
 
 // applyObjectBlocking closes the cells and step fences the objects on stage

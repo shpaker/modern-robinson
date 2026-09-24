@@ -30,6 +30,7 @@ const (
 // stands: the engine has no implicit approach, and 1716 action scripts rely on
 // that — every Cannotdo/Fool/Idiot/Whynot refusal is authored without one.
 type actionPlay struct {
+	name    string // the script it plays, as resolved (for the debug HUD)
 	fs      *types.FrameScript
 	frames  []adapters.DecalFrame
 	shift   [2]int // the movie's canvas hotspot (.SCR origin)
@@ -142,7 +143,7 @@ func (g *Game) resolveNamed(name string, cell [2]int) *actionPlay {
 	if g.sceneC == nil {
 		return nil
 	}
-	_, raw, ok := g.lookupScript(name)
+	script, raw, ok := g.lookupScript(name)
 	if !ok {
 		return nil
 	}
@@ -152,6 +153,7 @@ func (g *Game) resolveNamed(name string, cell [2]int) *actionPlay {
 	}
 	// Click actions always play once.
 	return &actionPlay{
+		name:    script,
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName, g.pal),
 		shift:   g.movieShift(fs),
@@ -213,11 +215,8 @@ func (g *Game) startObjectAction(objName string) bool {
 // is spoken for: with the bare hand, or with an item the scene ships no script
 // for, the click is eaten without a walk — only a click elsewhere walks.
 func (g *Game) startSelfAction(cx, cy int) bool {
-	cell, walking := g.cell, g.roby.walking()
-	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
-		cell, walking = g.fridCell, len(g.fridPath) > 0
-	}
-	if [2]int{cx, cy} != cell || walking {
+	cell, standing := g.actingCell()
+	if [2]int{cx, cy} != cell || !standing {
 		return false
 	}
 	if scriptTok(g.gs.Active) == "HAN" || g.gs.Active == "" {
@@ -227,6 +226,15 @@ func (g *Game) startSelfAction(cx, cy int) bool {
 		selfActionName(g.gs.ActiveChar, g.gs.Active), cell,
 	))
 	return true
+}
+
+// actingCell is the cell of the character the player controls, and whether he
+// is standing on it rather than walking through.
+func (g *Game) actingCell() ([2]int, bool) {
+	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
+		return g.fridCell, len(g.fridPath) == 0
+	}
+	return g.cell, !g.roby.walking()
 }
 
 // beginAction installs a resolved action as the playing one and, like the
@@ -512,6 +520,7 @@ func (g *Game) startEntry(name string) {
 		return
 	}
 	g.act = &actionPlay{
+		name:    name,
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName, g.pal),
 		shift:   g.movieShift(fs),

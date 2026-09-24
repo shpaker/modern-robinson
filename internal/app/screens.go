@@ -56,7 +56,8 @@ func readMouse() mouseState {
 // save/load, the options menu) and so must not double as "skip".
 func serviceKey(k ebiten.Key) bool {
 	switch k {
-	case ebiten.KeyF1, ebiten.KeyF5, ebiten.KeyF9, ebiten.KeyEscape:
+	case ebiten.KeyF1, ebiten.KeyF2, ebiten.KeyF5, ebiten.KeyF9,
+		ebiten.KeyEscape:
 		return true
 	}
 	return false

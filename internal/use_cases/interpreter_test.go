@@ -305,3 +305,22 @@ func TestItemCommandsAddressTheirCharacter(t *testing.T) {
 		t.Fatalf("frid=%v active=%s", f, st.ActiveChar)
 	}
 }
+
+// Observe sees the state commands the interpreter swallows — only those, and
+// only from the branches that ran — so a trace can show them next to effects.
+func TestObserveSeesConsumedStateCommands(t *testing.T) {
+	st := types.NewGameState()
+	var seen []string
+	in := use_cases.Interpreter{
+		Observe: func(c types.Command) { seen = append(seen, c.Kw) },
+	}
+	execOut(in, []types.Command{
+		cmd("SetVar", "Crab", "1"),
+		cmd("If", "Crab", "0"),
+		cmd("AddItem", "axe"), // a false branch: never ran
+		cmd("EndIf"),
+		cmd("Sound", "rr093.wav", "1"), // an effect: the caller's to trace
+		cmd("AddVar", "coins", "2"),
+	}, st)
+	eq(t, seen, []string{"SetVar", "AddVar"})
+}
