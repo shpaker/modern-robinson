@@ -135,7 +135,7 @@ release version="dev":
         rm -rf "$stage"
     done
     ls -la "$out"
-    echo "The archives go next to the game's DATA/ folder; see README.md."
+    echo "Put the binary for your OS next to the game's DATA/ folder; see README.md."
 
 
 # Запустить (нужна папка игры рядом или путём аргументом)
