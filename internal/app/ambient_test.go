@@ -16,7 +16,7 @@ func ambientGame(pool []string, rolls ...int) (*Game, *fakeAudio) {
 	for _, w := range pool {
 		entries = append(
 			entries,
-			types.SoundVar{Name: "fon1", Wav: w, Ambient: true},
+			types.SoundVar{Name: "fon1", Wav: w, Voices: "7", Ambient: true},
 		)
 	}
 	i := 0
@@ -40,8 +40,11 @@ func TestAmbientFiresThenWaits(t *testing.T) {
 	g, fa := ambientGame([]string{"bird01.wav", "bird02.wav"}, 1, 0, 0, 2000)
 
 	g.updateAmbient(1.0 / 60)
-	if len(fa.ambient) != 1 || fa.ambient[0] != "bird02.wav" {
-		t.Fatalf("ambient = %v, want bird02.wav on the first tick", fa.ambient)
+	if len(fa.voiced) != 1 || fa.voiced[0] != "bird02.wav" {
+		t.Fatalf("ambient = %v, want bird02.wav on the first tick", fa.voiced)
+	}
+	if fa.counts[0] != 7 {
+		t.Errorf("voices = %d, want the entry's own 7", fa.counts[0])
 	}
 	if fa.vols[0] != 1 {
 		t.Errorf("volScale = %v, want 1 for a zero fade roll", fa.vols[0])
@@ -61,14 +64,14 @@ func TestAmbientFiresThenWaits(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		g.updateAmbient(1.0 / 60)
 	}
-	if len(fa.ambient) != 1 {
-		t.Errorf("fired %d shots inside the gap, want 1", len(fa.ambient))
+	if len(fa.voiced) != 1 {
+		t.Errorf("fired %d shots inside the gap, want 1", len(fa.voiced))
 	}
 	for i := 0; i < 61; i++ {
 		g.updateAmbient(1.0 / 60)
 	}
-	if len(fa.ambient) != 2 {
-		t.Errorf("fired %d shots after the gap, want 2", len(fa.ambient))
+	if len(fa.voiced) != 2 {
+		t.Errorf("fired %d shots after the gap, want 2", len(fa.voiced))
 	}
 }
 
@@ -96,7 +99,7 @@ func TestAmbientEmptyPoolIsSilent(t *testing.T) {
 	g.randn = func(int) int { panic("an empty pool must not roll the dice") }
 
 	g.updateAmbient(1)
-	if len(fa.ambient) != 0 {
-		t.Errorf("ambient = %v, want silence", fa.ambient)
+	if len(fa.voiced) != 0 {
+		t.Errorf("ambient = %v, want silence", fa.voiced)
 	}
 }

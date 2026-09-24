@@ -74,7 +74,7 @@ type Scene struct {
 	Objects   []ObjectRef
 	// SoundVars resolves a Sound event's name to its wav; on the duplicate names
 	// an ambient pool uses, the last entry wins (see Sounds for the full list).
-	SoundVars map[string][2]string // name -> {wav, channel}
+	SoundVars map[string][2]string // name -> {wav, voices}
 	// Sounds is the SoundVariables block in file order, duplicates kept.
 	Sounds []SoundVar
 	Music  string
@@ -83,9 +83,8 @@ type Scene struct {
 // SoundVar is one SoundVariables entry: name,"file.wav",voices[,*].
 type SoundVar struct {
 	Name, Wav string
-	// Voices is the third field: how many copies of the buffer may sound at
-	// once in the original — not a channel, though the remake still reads it as
-	// one for Sound events (see Game.playSound).
+	// Voices is the third field: how many copies of the sound may play at
+	// once — not a channel (see Game.playSound and IAudio.PlayVoice).
 	Voices string
 	// Ambient marks the trailing "*": the entry belongs to the scene's ambient
 	// pool, which the engine plays by itself instead of any script (birds,

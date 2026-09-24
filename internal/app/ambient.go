@@ -36,7 +36,8 @@ func (g *Game) updateAmbient(dt float64) {
 	// Hundredths of a decibel to a linear factor: 0 -> 1, 3000 -> ~0.03.
 	vol := math.Pow(10, -float64(g.randn(ambientMaxFade))/2000)
 	pan := float64(g.randn(2*ambientMaxPanUnits)-ambientMaxPanUnits) / panScale
-	g.audio.PlayAmbient(strings.ToLower(e.Wav), g.res.Sound(e.Wav), vol, pan)
+	g.audio.PlayVoice(strings.ToLower(e.Wav), g.res.Sound(e.Wav),
+		atoiArg(e.Voices), vol, pan)
 	g.ambientT = float64(g.randn(int(ambientMaxGap*1000))) / 1000
 }
 

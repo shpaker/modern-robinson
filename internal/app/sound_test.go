@@ -1,31 +1,41 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 	"github.com/shpaker/modern-robinson/internal/repositories"
+	"github.com/shpaker/modern-robinson/internal/testutil"
 	"github.com/shpaker/modern-robinson/internal/types"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
 
 // fakeAudio records what it was asked to play instead of opening a device.
 type fakeAudio struct {
-	played  []string  // keys sent to the effect channels
-	ambient []string  // keys sent as one-shots, outside the channels
-	vols    []float64 // and their level and placement, shot by shot
-	pans    []float64
-	stops   int
+	played []string  // every key asked for, on a channel or a voice
+	voiced []string  // the keys sent to a sound variable's voices
+	counts []int     // and how many voices each variable has,
+	vols   []float64 // its level and placement, shot by shot
+	pans   []float64
+	stops  int
 }
 
 func (a *fakeAudio) Play(key string, _ []byte, _ int) {
 	a.played = append(a.played, key)
 }
 
-func (a *fakeAudio) PlayAmbient(key string, _ []byte, volScale, pan float64) {
-	a.ambient = append(a.ambient, key)
+func (a *fakeAudio) PlayVoice(
+	key string,
+	_ []byte,
+	voices int,
+	volScale, pan float64,
+) {
+	a.played = append(a.played, key)
+	a.voiced = append(a.voiced, key)
+	a.counts = append(a.counts, voices)
 	a.vols = append(a.vols, volScale)
 	a.pans = append(a.pans, pan)
 }
@@ -257,6 +267,72 @@ func TestServiceKeysAreNotSkipKeys(t *testing.T) {
 	for _, c := range cases {
 		if got := serviceKey(c.key); got != c.want {
 			t.Errorf("serviceKey(%s) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// A Sound event names either a scene's sound variable or a quoted file, and the
+// engine treats them apart (0x41B4D4): the file goes to the numbered channel,
+// the variable to its own voices whatever channel the event names.
+func TestPlaySoundVariableIgnoresChannel(t *testing.T) {
+	fa := &fakeAudio{}
+	g := &Game{
+		res:   silentRes{},
+		audio: fa,
+		sc: &types.Scene{SoundVars: map[string][2]string{
+			"wave0": {"Wave.wav", "1"},
+			"fon1":  {"sound26.wav", "7"},
+		}},
+	}
+
+	g.playSound([]string{"wave0", "8"})
+	g.playSound([]string{"fon1", "7"})
+	g.playSound([]string{"rr088.wav", "1"})
+
+	if len(fa.voiced) != 2 || fa.voiced[0] != "wave.wav" ||
+		fa.voiced[1] != "sound26.wav" {
+		t.Fatalf("voiced %v, want the two variables", fa.voiced)
+	}
+	if fa.counts[0] != 1 || fa.counts[1] != 7 {
+		t.Errorf("voices %v, want the SoundVariables counts [1 7]", fa.counts)
+	}
+	if fa.vols[0] != 1 || fa.pans[0] != 0 {
+		t.Errorf("a script's sound plays at %v pan %v, want 1 and 0",
+			fa.vols[0], fa.pans[0])
+	}
+	if len(fa.played) != 3 || fa.played[2] != "rr088.wav" {
+		t.Errorf("played %v, want the quoted file on its channel last",
+			fa.played)
+	}
+}
+
+// A direct scene entry (ROBINSON_SCENE, ?scene= on the web) skips INT0, the
+// script that hides Friday before she joins. Leaving SCENA0 by the oak aims an
+// Aproach at her, and with her left shown she walked there unseen, her steps
+// (at2, at, step_pp) sounding over Robinson's exit.
+func TestLeavingScena0DirectEntryKeepsFridaySilent(t *testing.T) {
+	t.Setenv("ROBINSON_SCENE", "SCENA0")
+	res := repositories.NewResources(testutil.GameRoot(t))
+	g := NewGameWith(res, DefaultConfig())
+	fa := &fakeAudio{}
+	g.audio = fa
+	if !g.fridHidden {
+		t.Fatal("a run must open with Friday hidden")
+	}
+
+	if !g.startObjectAction("goleft") {
+		t.Fatal("no ROHANGOL")
+	}
+	for i := 0; i < 60*30 && g.sceneName == "SCENA0"; i++ {
+		_ = g.Update()
+	}
+	if g.sceneName != "SCENA1" {
+		t.Fatalf("scene = %s, want the walk to reach SCENA1", g.sceneName)
+	}
+	for _, k := range fa.played {
+		switch strings.ToLower(k) {
+		case "step_pp.wav", "at.wav", "at2.wav", "left.wav", "right.wav":
+			t.Errorf("Friday's %s sounded, want her absent: %v", k, fa.played)
 		}
 	}
 }
