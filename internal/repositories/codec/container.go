@@ -139,17 +139,24 @@ func (c *Container) Entries() []types.Entry { return c.entries }
 
 // Raw returns the stored (still-compressed) bytes for an entry, reading them
 // from disk when the container streams. Offsets and sizes come from the file
-// itself, so they are range-checked: a truncated or damaged container reports an
-// empty entry instead of taking the process down.
+// itself, so they are range-checked: an entry that starts outside the file
+// reports empty instead of taking the process down.
+//
+// One that runs past the end is cut at the end instead. The packer that built
+// the minigame packs counted the last entry one byte long: HOUSE.DAT's and
+// MAP.DAT's palettes, CHESS.DAT's board, BALOON.DAT's farthest island. Their
+// streams are complete without that byte, and refusing them left the hut and
+// the map puzzles black and the draughts board missing.
 func (c *Container) Raw(e types.Entry) []byte {
 	start, end := int64(e.Offset), int64(e.Offset)+int64(e.CSize)
-	if start < 0 || end < start || end > c.size {
+	if start < 0 || end < start || start > c.size {
 		return nil
 	}
+	end = min(end, c.size)
 	if c.data != nil {
 		return c.data[start:end]
 	}
-	buf := make([]byte, e.CSize)
+	buf := make([]byte, end-start)
 	if _, err := c.f.ReadAt(buf, start); err != nil {
 		return nil
 	}

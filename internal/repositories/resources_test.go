@@ -1,9 +1,11 @@
 package repositories
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/shpaker/modern-robinson/internal/testutil"
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 func TestResources(t *testing.T) {
@@ -40,5 +42,46 @@ func TestResources(t *testing.T) {
 	}
 	if fpal[1] == [4]byte{} && fpal[2] == [4]byte{} {
 		t.Error("movie palette not loaded")
+	}
+}
+
+// Every bitmap and palette of the six minigame packs decodes. The packs' last
+// entries run a byte past the end of the file, and dropping them cost the hut
+// and the map puzzles their palettes (both drew black) and the draughts game
+// its board (so it never opened and the quest counted a win).
+func TestMinigamePacksDecodeWhole(t *testing.T) {
+	r := NewResources(testutil.GameRoot(t))
+	for pack, backdrop := range map[string]string{
+		"MAP": "DESK", "HOUSE": "BACK", "CHESS": "BACK",
+		"BALOON": "SKY", "PIPE": "BACK", "CRYPT": "CRYPT",
+	} {
+		c := r.container(r.screenDat[pack])
+		if c == nil {
+			t.Fatalf("%s: no container", pack)
+		}
+		bitmaps, palettes := 0, 0
+		for _, e := range c.Entries() {
+			switch up := strings.ToUpper(e.Name); {
+			case strings.HasSuffix(up, ".NGB"):
+				bitmaps++
+			case strings.HasSuffix(up, ".COL"):
+				palettes++
+			}
+		}
+		sprites, pal := r.ScreenPack(pack)
+		if len(sprites) != bitmaps {
+			t.Errorf("%s: %d sprites decoded, the pack has %d", pack,
+				len(sprites), bitmaps)
+		}
+		if n := sprites[backdrop]; n == nil || n.Width != 640 {
+			t.Errorf("%s: backdrop %s missing", pack, backdrop)
+		}
+		if pal == (types.Palette{}) {
+			t.Errorf("%s: no palette", pack)
+		}
+		if got := len(r.ScreenPalettes(pack)); got != palettes {
+			t.Errorf("%s: %d palettes decoded, the pack has %d", pack, got,
+				palettes)
+		}
 	}
 }
