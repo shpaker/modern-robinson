@@ -27,6 +27,8 @@
 
 В ремейке — `internal/minigame`: по пакету на игру, таблица `catalog` по
 `gameId`, ресурсы и звук — только через `minigame.Host`.
+Для отладки любая игра запускается без приключения: `just minigames` (меню) или
+`just minigames 4`; `just minigame-shot 4` пишет кадр headless в `/tmp/mg4.png`.
 
 **Результат всегда 0 или 1**: возвращается `g_state == 4` (успех); `g_state = 3`
 ставят ESC и кнопка выхода. Других кодов нет. `paramVar` — только вход, обратно
