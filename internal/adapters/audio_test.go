@@ -88,3 +88,35 @@ func TestPanPCMIgnoresPartialFrame(t *testing.T) {
 }
 
 func closeF32(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-6 }
+
+// A sound variable's voices follow the engine (0x422dd0): a quiet current voice
+// takes the trigger, a lone busy one drops it — SCENA0's surf is 6.8 s long and
+// re-fired every 2.3 s, and must play through rather than restart — and several
+// take turns, the next one cut and restarted if it is still sounding.
+func TestVoicePoolPick(t *testing.T) {
+	quiet := func(int) bool { return false }
+	busy := func(int) bool { return true }
+
+	one := &voicePool{voices: make([]voice, 1)}
+	if i := one.pick(quiet); i != 0 {
+		t.Errorf("quiet lone voice: pick = %d, want 0", i)
+	}
+	if i := one.pick(busy); i != -1 {
+		t.Errorf("busy lone voice: pick = %d, want -1 (trigger dropped)", i)
+	}
+
+	three := &voicePool{voices: make([]voice, 3)}
+	if i := three.pick(quiet); i != 0 {
+		t.Errorf("quiet current voice: pick = %d, want it reused (0)", i)
+	}
+	for _, want := range []int{1, 2, 0} {
+		if i := three.pick(busy); i != want {
+			t.Fatalf("busy voices: pick = %d, want %d in turn", i, want)
+		}
+	}
+	// Only the current voice is asked about: once it falls quiet it is reused,
+	// whatever the others are doing.
+	if i := three.pick(func(i int) bool { return i != 0 }); i != 0 {
+		t.Errorf("current voice quiet again: pick = %d, want 0", i)
+	}
+}

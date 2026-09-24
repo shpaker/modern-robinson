@@ -50,12 +50,19 @@ type IResources interface {
 }
 
 // IAudio plays the game's sounds: numbered effect channels, a looping music
-// channel, and one-shot ambient shots that belong to no channel.
+// channel, and the scene's sound variables, each on its own set of voices.
 type IAudio interface {
 	Play(key string, wavBytes []byte, channel int)
-	// PlayAmbient fires a one-shot outside the channel slots, attenuated by
-	// volScale (0..1) and panned by pan (-1 left .. +1 right).
-	PlayAmbient(key string, wavBytes []byte, volScale, pan float64)
+	// PlayVoice sounds a sound variable on one of its voices (how many copies
+	// may play at once), attenuated by volScale (0..1) and panned by pan (-1
+	// left .. +1 right); with every voice busy a lone one drops the trigger and
+	// several take turns.
+	PlayVoice(
+		key string,
+		wavBytes []byte,
+		voices int,
+		volScale, pan float64,
+	)
 	PlayMusic(key string, wavBytes []byte)
 	StopMusic()
 	// StopEffects silences everything but the music channel.

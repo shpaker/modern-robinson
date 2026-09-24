@@ -161,6 +161,10 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 		cycleCache: map[string]*walkCycle{},
 		curDir:     6,
 		robyZ:      charZCoord,
+		// A run opens with Friday hidden, as resetRun leaves it: INT0 hides her
+		// anyway, but a direct scene entry skips INT0, and there an Aproach
+		// Frid (ROHANGOL's) would walk her unseen with her steps audible.
+		fridHidden: true,
 		debug:      cfg.Debug,
 		gs:         types.NewGameState(),
 		randn:      rand.Intn,
@@ -427,12 +431,22 @@ func (g *Game) soundFile(name string) string {
 	return name
 }
 
-// playSound plays a Sound event. A third argument never trims the sound — it
-// retimes the animation under it (see parseFS), so only the name and channel
-// matter here, as in the engine (0x41B4D4).
+// playSound plays a Sound event the way the engine's handler does (0x41B4D4).
+// A SoundVariables name sounds on the variable's own voices and ignores the
+// channel: "Sound wave0,8" and "Sound step,1" share nothing with channels 8
+// and 1. Only a quoted file takes the channel, cutting what that channel was
+// playing. A third argument never trims the sound — it retimes the animation
+// under it (see parseFS).
 func (g *Game) playSound(args []string) {
 	if len(args) == 0 {
 		return
+	}
+	if g.sc != nil {
+		if sv, ok := g.sc.SoundVars[args[0]]; ok {
+			g.audio.PlayVoice(strings.ToLower(sv[0]), g.res.Sound(sv[0]),
+				atoiArg(sv[1]), 1, 0)
+			return
+		}
 	}
 	ch := 1
 	if len(args) > 1 {
