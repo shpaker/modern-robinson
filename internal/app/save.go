@@ -36,9 +36,19 @@ func slotName(i int) string { return fmt.Sprintf("robinson%02d.sav", i) }
 
 func slotThumbName(i int) string { return fmt.Sprintf("robinson%02d.png", i) }
 
+// snapshot is the run as a save records it: the quest state, the hero's cell
+// and Friday's own place — without her, a load would lose her (see loadSlot).
+func (g *Game) snapshot() types.SaveData {
+	sd := g.gs.Snapshot(g.sceneName, g.cell)
+	sd.Frid = &types.CharSave{
+		Cell: g.fridCell, Z: g.fridZ, Hidden: g.fridHidden,
+	}
+	return sd
+}
+
 // saveSlot writes the quest state and the current thumbnail into slot i.
 func (g *Game) saveSlot(i int) {
-	sd := g.gs.Snapshot(g.sceneName, g.cell)
+	sd := g.snapshot()
 	sd.Saved = time.Now().Format("02.01.2006 15:04")
 	b, err := json.MarshalIndent(sd, "", " ")
 	if err != nil {
@@ -71,9 +81,34 @@ func (g *Game) loadSlot(i int) bool {
 	g.gs = types.Restore(sd)
 	g.resetRun()
 	g.loadScene(sd.Scene, &sd.Cell, "", "")
+	// Friday stands where the save left her. Arriving by load runs no entry
+	// script to place her, and resetRun hides her, so a party saved together
+	// used to come back without her.
+	switch {
+	case sd.Frid != nil:
+		g.fridHidden, g.fridZ = sd.Frid.Hidden, sd.Frid.Z
+		g.placeFrid(sd.Frid.Cell)
+	case g.gs.Var("FridIs") == 1:
+		// An older save knows only that she has joined: bring her back
+		// beside the hero.
+		g.fridHidden = false
+		g.placeFrid(g.besideHero())
+	}
 	g.started = true // a restored run counts as started
 	g.msg, g.msgT = "Игра загружена", 2
 	return true
+}
+
+// besideHero is a cell next to the hero for Friday when a save does not say
+// where she stood: the first walkable neighbour, else his own cell.
+func (g *Game) besideHero() [2]int {
+	for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+		c := [2]int{g.cell[0] + d[0], g.cell[1] + d[1]}
+		if g.grid.Valid(c[0], c[1]) {
+			return c
+		}
+	}
+	return g.cell
 }
 
 // save/load keep the quick-save keys (F5/F9) on slot 0.

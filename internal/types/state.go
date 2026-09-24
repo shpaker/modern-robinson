@@ -190,6 +190,17 @@ type SaveData struct {
 	Gone       map[string][]string `json:"gone"`
 	Spawned    map[string][]Spawn  `json:"spawned"`
 	Verts      map[string][]Vert   `json:"verts,omitempty"`
+	// Frid is Friday's own place on the scene. The engine writes every
+	// character's cell, z and hidden flag into the save (0x41fba0: +0x254,
+	// +0x258, +0x25c, +0x73c); saves made before the remake kept it have none.
+	Frid *CharSave `json:"frid,omitempty"`
+}
+
+// CharSave is a character's place and visibility as a save records them.
+type CharSave struct {
+	Cell   [2]int `json:"cell"`
+	Z      int    `json:"z"`
+	Hidden bool   `json:"hidden"`
 }
 
 // Snapshot captures the full state for saving.
