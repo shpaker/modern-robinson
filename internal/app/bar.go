@@ -269,9 +269,10 @@ func (g *Game) drawTextBox(screen *ebiten.Image) {
 }
 
 // clickBar handles a click in the bar: pick an inventory item (SetActive) or
-// operate the scroll arrows.
+// operate the scroll arrows. LockBar is the bar's own gate — SetMouse only
+// silences the scene above it.
 func (g *Game) clickBar(mx, my int) {
-	if g.bar == nil {
+	if g.bar == nil || g.gs.UI["barlock"] {
 		return
 	}
 	switch {
@@ -296,8 +297,9 @@ func (g *Game) clickBar(mx, my int) {
 		}
 		return
 	case inBox(g.bar.SaveBox, mx, my):
-		// The disk button opens the authored save screen.
-		g.mode, g.slotHover = modeSave, -1
+		// The disk button raises the game's main menu (ROBY.PDF p. 27), where
+		// saving is one of the rows — not the save screen itself.
+		g.openMenu()
 		return
 	case inBox(g.bar.ScisorsBox, mx, my):
 		// The map button: enabled once the island map opens (SetMap ON). Its
@@ -332,9 +334,10 @@ func inBox(b [4]int, x, y int) bool {
 }
 
 // updateHover refreshes the hovered-object caption (object Text id -> table).
+// SetMouse OFF silences it along with the clicks (engine 0x4153e9).
 func (g *Game) updateHover(mx, my int) {
 	g.hover = ""
-	if my >= PlayH {
+	if my >= PlayH || !g.gs.UI["mouse"] {
 		return
 	}
 	wx, wy := mx+g.camX, my

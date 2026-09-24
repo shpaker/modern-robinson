@@ -206,3 +206,27 @@ func TestScreenToNumpad(t *testing.T) {
 		}
 	}
 }
+
+// An action script may open its own target cell before it routes the walk, so
+// the order of the two matters: routed while (5,2) is still closed, the pool's
+// approach lands on (5,1) and the hero drinks a row north of the puddle.
+func TestNearestFreeFollowsSetVert(t *testing.T) {
+	g := scena0Grid()
+	if x, y, ok := g.NearestFree(5, 2); x != 5 || y != 1 || !ok {
+		t.Fatalf(
+			"closed: NearestFree(5,2) = (%d,%d,%v), want (5,1,true)",
+			x,
+			y,
+			ok,
+		)
+	}
+	g.SetVert(5, 2, true)
+	if x, y, ok := g.NearestFree(5, 2); x != 5 || y != 2 || !ok {
+		t.Errorf(
+			"opened: NearestFree(5,2) = (%d,%d,%v), want (5,2,true)",
+			x,
+			y,
+			ok,
+		)
+	}
+}

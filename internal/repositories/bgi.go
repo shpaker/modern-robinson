@@ -84,7 +84,7 @@ func parseBGI(d []byte) [][]bgiRecord {
 // belonging to the scene is picked by best name overlap with objectNames.
 func (r *Resources) InitialVisibility(objectNames []string) map[string]bool {
 	if r.bgi == nil {
-		d, err := readFileUpper(r.root, "DATA", "BEGIN.BGI")
+		d, err := r.readFileUpper("DATA", "BEGIN.BGI")
 		if err != nil {
 			r.bgi = [][]bgiRecord{}
 		} else {

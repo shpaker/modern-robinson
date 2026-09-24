@@ -16,8 +16,8 @@ import (
 // board. Cell values follow the original: 1 red man (the player, moving up),
 // 2 green man, 3 and 4 their kings. Captures are compulsory and kings fly, as
 // in the Russian rules the engine implements. The original opponent's search
-// could not be recovered from the DLL, so this one plays a straightforward
-// greedy game: it takes the longest capture it sees, otherwise a random move.
+// could not be recovered from the DLL, so this one plays a random legal move,
+// captures first because they are compulsory, and chains them at random.
 type chessGame struct {
 	host    minigame.Host
 	sprites map[string]*ebiten.Image

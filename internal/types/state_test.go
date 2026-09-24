@@ -64,3 +64,20 @@ func TestWorldSpawnAndCancelGone(t *testing.T) {
 		t.Fatalf("spawns=%v, want single updated", sp)
 	}
 }
+
+// A save taken mid-script may carry the mouse switched off; the engine forces
+// it back on at the end of every load (0x4213cf), so a restored game can never
+// come back deaf to clicks.
+func TestRestoreForcesTheMouseOn(t *testing.T) {
+	st := types.NewGameState()
+	st.UI["mouse"] = false
+	sd := st.Snapshot("SCENA0", [2]int{1, 2})
+	if got := types.Restore(sd); !got.UI["mouse"] {
+		t.Error("a restored game must have the mouse on")
+	}
+	// Saves from builds that predate the flag carry no "mouse" key at all.
+	sd.UI = map[string]bool{"bar": true}
+	if got := types.Restore(sd); !got.UI["mouse"] {
+		t.Error("an old save without the key must not come back deaf")
+	}
+}

@@ -1,0 +1,48 @@
+# Пример сайта для Caddy, который отдаёт браузерную версию: оболочку
+# (dist/web) в корне и наборы ресурсов (dist/webdata/vN) под /vN/ — на одном
+# origin, как её ждёт сборка (адрес данных по умолчанию — «v1/» от страницы).
+#
+# Имя сайта и каталог — из окружения:
+#     ROBINSON_SITE=play.example.org ROBINSON_ROOT=/var/www/robinson \
+#         caddy run --config packaging/Caddyfile.example --adapter caddyfile
+# Оболочка — в корне сайта: правила ниже узнают наборы по /vN/ от корня.
+# Выкладка в каталог — `just web-push` (см. docs/11-web-build.md).
+
+{$ROBINSON_SITE:example.org} {
+	root * {$ROBINSON_ROOT:/var/www/robinson}
+
+	# Ресурсы можно читать и с другого origin — например, с локальной сборки
+	# через ?data=. Оболочке это не мешает: она тут же, на своём origin.
+	header {
+		Access-Control-Allow-Origin "*"
+		Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+	}
+
+	# Ресурсы: путь версионирован префиксом /vN/, содержимое по адресу никогда
+	# не меняется — перепроверять его незачем.
+	@versioned {
+		path_regexp ver ^/v[0-9]+/
+		not path_regexp man ^/v[0-9]+/manifest\.json$
+	}
+	header @versioned Cache-Control "public, max-age=31536000, immutable"
+
+	# Манифест — единственный изменяемый файл внутри версии: через минуту видны
+	# добавленные и убранные файлы. Изменённый файл — это уже новая /vN/.
+	@manifest path_regexp ^/v[0-9]+/manifest\.json$
+	header @manifest Cache-Control "public, max-age=60"
+
+	# Оболочка пересобирается на каждый деплой, поэтому её нельзя пиннить:
+	# no-cache — это не «не кешировать», а «спросить ETag», так что 24-МБ wasm
+	# при неизменной сборке отдаётся как 304.
+	@shell not path_regexp ^/v[0-9]+/
+	header @shell Cache-Control "no-cache"
+
+	@options method OPTIONS
+	respond @options 204
+
+	file_server {
+		# Рядом с файлами лежат .gz (packweb для ресурсов, build-wasm для
+		# оболочки). Отдавать готовое дешевле, чем жать их на каждый запрос.
+		precompressed gzip
+	}
+}

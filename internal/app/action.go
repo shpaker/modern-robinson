@@ -55,41 +55,56 @@ func scriptTok(s string) string {
 	return s
 }
 
-// actionNames lists the script names a click may run, best first: <RO|FR> + the
-// held item's token + the object's (ROHANGOL is Roby, bare hand, the left exit;
-// ROAXEWOO is Roby chopping wood with the axe), then the bare-handed default so
-// a tool the object does not answer to still gets the plain reaction.
-func actionNames(activeChar, active, objName string) []string {
-	char := "RO"
+// charTok is the two-letter prefix an action script spends on the acting
+// character: RO for the hero, FR for Friday.
+func charTok(activeChar string) string {
 	if strings.EqualFold(activeChar, "Frid") {
-		char = "FR"
+		return "FR"
 	}
-	obj := scriptTok(objName)
-	item := scriptTok(active)
-	names := []string{char + item + obj}
-	if item != "HAN" {
-		names = append(names, char+"HAN"+obj) // the empty-handed default
-	}
-	return names
+	return "RO"
 }
 
-// actionScript picks the script a click runs from actionNames' candidates. A
-// script may redirect its own successor through a character variable named after
-// itself — ROHANGOL ends with SetCharVar rohangol,"r1hangol", which is how the
-// hero's remark changes each time he leaves — so that redirection wins when set.
+// actionName is the one script name a click on an object runs: <RO|FR> + the
+// held item's token + the object's (ROHANGOL is Roby, bare hand, the left
+// exit; ROAXEWOO is Roby chopping wood with the axe). The engine composes
+// exactly this name (0x41e320) and gives up silently when the scene ships no
+// such script — there is no bare-handed fallback, and the manual's promise of
+// a reaction to "any" use of an item is kept by data: the scenes carry a
+// script per item even for the plain refusals (641 of them share Cannotdo.mv,
+// the arms-spread "can't do that" shrug).
+func actionName(activeChar, active, objName string) string {
+	return charTok(activeChar) + scriptTok(active) + scriptTok(objName)
+}
+
+// selfActionName is the five-letter script of using the held item on the
+// acting character himself — ROHAT puts the hat on (engine 0x40f414).
+func selfActionName(activeChar, active string) string {
+	return charTok(activeChar) + scriptTok(active)
+}
+
+// actionScript resolves the script a click on an object runs, following the
+// CharVar redirection (see lookupScript).
 func (g *Game) actionScript(objName string) (string, []byte, bool) {
-	for _, base := range actionNames(g.gs.ActiveChar, g.gs.Active, objName) {
-		name := base
-		if v := g.gs.CharVar(strings.ToLower(base)); v != "" {
-			name = v // the script handed off to a variant of itself
-		}
-		if raw, err := g.sceneC.ExtractName(strings.ToUpper(name) + ".FS"); err == nil {
-			return name, raw, true
-		}
-		if name != base {
-			if raw, err := g.sceneC.ExtractName(base + ".FS"); err == nil {
-				return base, raw, true
-			}
+	return g.lookupScript(
+		actionName(g.gs.ActiveChar, g.gs.Active, objName),
+	)
+}
+
+// lookupScript fetches an action script by its composed name. A script may
+// redirect its own successor through a character variable named after itself —
+// ROHANGOL ends with SetCharVar rohangol,"r1hangol", which is how the hero's
+// remark changes each time he leaves — so that redirection wins when set.
+func (g *Game) lookupScript(base string) (string, []byte, bool) {
+	name := base
+	if v := g.gs.CharVar(strings.ToLower(base)); v != "" {
+		name = v // the script handed off to a variant of itself
+	}
+	if raw, err := g.sceneC.ExtractName(strings.ToUpper(name) + ".FS"); err == nil {
+		return name, raw, true
+	}
+	if name != base {
+		if raw, err := g.sceneC.ExtractName(base + ".FS"); err == nil {
+			return base, raw, true
 		}
 	}
 	return "", nil, false
@@ -110,29 +125,39 @@ func (g *Game) movieShift(fs *types.FrameScript) [2]int {
 // resolveAction builds the action a click on an object runs: walk to its Aproach
 // cell, then play the script's movie and events.
 func (g *Game) resolveAction(objName string) *actionPlay {
-	if g.sceneC == nil {
-		return nil
-	}
-	_, raw, ok := g.actionScript(objName)
-	if !ok {
-		return nil
-	}
-	fs := g.parser.ParseFrameScript(string(raw))
-	if fs.MovieName == "" {
-		return nil
-	}
-	// Click actions always play once.
 	ocx, ocy, ok := g.objCell(objName)
 	if !ok {
 		return nil
 	}
+	return g.resolveNamed(
+		actionName(g.gs.ActiveChar, g.gs.Active, objName),
+		[2]int{ocx, ocy},
+	)
+}
+
+// resolveNamed builds the one-shot action of a composed script name, anchored
+// to the given cell (the clicked object's, or the acting character's own for a
+// self action).
+func (g *Game) resolveNamed(name string, cell [2]int) *actionPlay {
+	if g.sceneC == nil {
+		return nil
+	}
+	_, raw, ok := g.lookupScript(name)
+	if !ok {
+		return nil
+	}
+	fs := g.parseFS(raw)
+	if fs.MovieName == "" {
+		return nil
+	}
+	// Click actions always play once.
 	return &actionPlay{
 		fs:      fs,
 		frames:  adapters.LoadDecal(g.res, fs.MovieName, g.pal),
 		shift:   g.movieShift(fs),
 		player:  use_cases.NewPlayer(fs, false),
 		frid:    strings.EqualFold(g.gs.ActiveChar, "Frid"),
-		clicked: &[2]int{ocx, ocy},
+		clicked: &cell,
 	}
 }
 
@@ -175,11 +200,40 @@ func (g *Game) objCell(name string) (int, int, bool) {
 }
 
 // startObjectAction resolves and begins an object's action; returns false if
-// there is no action script (caller falls back to examine). The script starts
+// there is no action script (the engine then eats the click). The script starts
 // this very tick — updateAction fires frame 0, and its Aproach (if any) walks
 // the character over before the movie advances.
 func (g *Game) startObjectAction(objName string) bool {
-	ap := g.resolveAction(objName)
+	return g.beginAction(g.resolveAction(objName))
+}
+
+// startSelfAction handles a click on the acting character's own cell: the held
+// item is aimed at himself (ROHAT is how the hat goes on — engine 0x40f110,
+// which compares grid cells, not sprite pixels). It reports whether the click
+// is spoken for: with the bare hand, or with an item the scene ships no script
+// for, the click is eaten without a walk — only a click elsewhere walks.
+func (g *Game) startSelfAction(cx, cy int) bool {
+	cell, walking := g.cell, g.roby.walking()
+	if strings.EqualFold(g.gs.ActiveChar, "Frid") {
+		cell, walking = g.fridCell, len(g.fridPath) > 0
+	}
+	if [2]int{cx, cy} != cell || walking {
+		return false
+	}
+	if scriptTok(g.gs.Active) == "HAN" || g.gs.Active == "" {
+		return true // the bare hand on himself: eaten, nothing to do
+	}
+	g.beginAction(g.resolveNamed(
+		selfActionName(g.gs.ActiveChar, g.gs.Active), cell,
+	))
+	return true
+}
+
+// beginAction installs a resolved action as the playing one and, like the
+// engine at every movie start (0x40e936), turns the mouse off for its run —
+// updateAction turns it back on when the movie is over, which half the scripts
+// setting SetMouse OFF silently rely on.
+func (g *Game) beginAction(ap *actionPlay) bool {
 	if ap == nil {
 		return false
 	}
@@ -187,6 +241,7 @@ func (g *Game) startObjectAction(objName string) bool {
 	// runs its frame 0 at once (0x4101d0), so its Aproach reroutes the walk
 	// without cutting the step, and the movie holds until the hero stands.
 	g.act = ap
+	g.gs.UI["mouse"] = false
 	return true
 }
 
@@ -237,6 +292,9 @@ func (g *Game) updateAction(dt float64) {
 	}
 	if g.act == ap && ap.wait == waitNone && ap.player.Done() {
 		g.act = nil
+		// The movie is over: the engine hands the mouse back by itself
+		// (0x40ebea) — 51 scripts end on SetMouse OFF and lean on this.
+		g.gs.UI["mouse"] = true
 	}
 }
 
@@ -395,7 +453,9 @@ func (g *Game) cutAproachShort(w aproachWait) {
 	}
 }
 
-// hideObject removes an object's sprite and hotspot (picked up / consumed).
+// hideObject removes an object's sprite, hotspot and walk blocking (picked up /
+// consumed / chased away): the caught crab and the fed crocodile have to open
+// the cells they were lying on, or the hero stays walled off the ford.
 func (g *Game) hideObject(name string) {
 	name = strings.ToLower(name)
 	for _, s := range g.sceneObjs {
@@ -447,7 +507,7 @@ func (g *Game) startEntry(name string) {
 	if err != nil {
 		return
 	}
-	fs := g.parser.ParseFrameScript(string(raw))
+	fs := g.parseFS(raw)
 	if fs.MovieName == "" {
 		return
 	}
@@ -458,6 +518,7 @@ func (g *Game) startEntry(name string) {
 		player:  use_cases.NewPlayer(fs, false),
 		started: true,
 	}
+	g.gs.UI["mouse"] = false // as at every movie start; see beginAction
 	// Fire frame 0 now rather than on the next updateAction: input runs earlier
 	// in the tick, so a cutscene's opening "Interrupt ON" would otherwise land
 	// one tick late and swallow the player's first click.

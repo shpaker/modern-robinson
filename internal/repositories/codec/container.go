@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -19,12 +20,12 @@ import (
 // Container is a parsed NL resource file. It implements interfaces.IContainer.
 //
 // Small containers are held in memory; a large one keeps only its directory and
-// reads entries from disk on demand. The sound bank is the reason: WAVE.DAN is
-// 115 MB of uncompressed PCM, so holding it resident costs that much for the
-// whole session while any one sound needs a few dozen kilobytes.
+// reads entries from its backing store on demand. The sound bank is the reason:
+// WAVE.DAN is 115 MB of uncompressed PCM, so holding it resident costs that
+// much for the whole session while any one sound needs a few dozen kilobytes.
 type Container struct {
-	data    []byte   // whole file, or nil when entries stream from f
-	f       *os.File // open file for streaming containers
+	data    []byte      // whole file, or nil when entries stream from ra
+	ra      io.ReaderAt // backing store for streaming containers
 	size    int64
 	count   int
 	key     uint32
@@ -54,19 +55,67 @@ func Open(path string) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	head := make([]byte, 0x20)
-	if _, err := f.ReadAt(head, 0); err != nil {
+	c, err := NewAt(f, st.Size())
+	if err != nil {
 		_ = f.Close()
 		return nil, err
 	}
-	c := &Container{f: f, size: st.Size()}
-	if err := c.parseHeader(head); err != nil {
-		_ = f.Close()
+	return c, nil
+}
+
+// OpenFS parses an NL container out of any fs.FS. A large one is left on its
+// backing store when the FS hands out files that can seek — os.DirFS does (its
+// files are *os.File) and so does the browser build's in-memory FS; anything
+// else is simply read whole.
+func OpenFS(fsys fs.FS, name string) (*Container, error) {
+	st, err := fs.Stat(fsys, name)
+	if err != nil {
 		return nil, err
+	}
+	if st.Size() > residentLimit {
+		f, err := fsys.Open(name)
+		if err != nil {
+			return nil, err
+		}
+		if ra, ok := f.(io.ReaderAt); ok {
+			c, err := NewAt(ra, st.Size())
+			if err != nil {
+				_ = f.Close()
+				return nil, err
+			}
+			return c, nil
+		}
+		_ = f.Close()
+	}
+	data, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return nil, err
+	}
+	return New(data)
+}
+
+// NewAt parses an NL container that stays on its backing store: only the header
+// and the directory are read now, entry bytes are fetched through ra on demand.
+// The file handle (or whatever else backs ra) is kept alive by the returned
+// Container for as long as it is used.
+func NewAt(ra io.ReaderAt, size int64) (*Container, error) {
+	head := make([]byte, 0x20)
+	if _, err := ra.ReadAt(head, 0); err != nil {
+		return nil, err
+	}
+	c := &Container{ra: ra, size: size}
+	if err := c.parseHeader(head); err != nil {
+		return nil, err
+	}
+	// Same guard as New: the entry count is an unchecked header field, so a
+	// truncated file would otherwise ask for a directory past the end.
+	if end := int64(0x20 + c.count*32); end > size {
+		return nil, fmt.Errorf(
+			"NL directory needs %d bytes, file has %d", end, size,
+		)
 	}
 	dir := make([]byte, c.count*32)
-	if _, err := f.ReadAt(dir, 0x20); err != nil {
-		_ = f.Close()
+	if _, err := ra.ReadAt(dir, 0x20); err != nil {
 		return nil, err
 	}
 	c.readDirectoryFrom(dir)
@@ -138,9 +187,9 @@ func (c *Container) readDirectoryFrom(ct []byte) {
 func (c *Container) Entries() []types.Entry { return c.entries }
 
 // Raw returns the stored (still-compressed) bytes for an entry, reading them
-// from disk when the container streams. Offsets and sizes come from the file
-// itself, so they are range-checked: an entry that starts outside the file
-// reports empty instead of taking the process down.
+// from the backing store when the container streams. Offsets and sizes come
+// from the file itself, so they are range-checked: an entry that starts outside
+// the file reports empty instead of taking the process down.
 //
 // One that runs past the end is cut at the end instead. The packer that built
 // the minigame packs counted the last entry one byte long: HOUSE.DAT's and
@@ -157,7 +206,7 @@ func (c *Container) Raw(e types.Entry) []byte {
 		return c.data[start:end]
 	}
 	buf := make([]byte, end-start)
-	if _, err := c.f.ReadAt(buf, start); err != nil {
+	if _, err := c.ra.ReadAt(buf, start); err != nil {
 		return nil
 	}
 	return buf

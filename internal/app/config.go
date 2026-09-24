@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -62,10 +63,22 @@ func LoadConfig(root string) Config {
 	return cfg
 }
 
+// LoadConfigFrom is LoadConfig for settings that do not come from a file on
+// disk — the browser build hands it the query string turned into the same
+// "key: value" lines.
+func LoadConfigFrom(r io.Reader) Config {
+	cfg := DefaultConfig()
+	if r != nil {
+		cfg.apply(r)
+	}
+	cfg.clamp()
+	return cfg
+}
+
 // apply reads "key: value" lines, ignoring blanks, comments and anything it
 // does not recognise — an unknown key is a note to a future version, not an
 // error worth refusing to start over.
-func (c *Config) apply(r *os.File) {
+func (c *Config) apply(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := sc.Text()

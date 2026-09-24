@@ -187,3 +187,18 @@ func TestMapButtonCarriesTheEntryScripts(t *testing.T) {
 		})
 	}
 }
+
+// The disk button raises the main menu, not the save screen: the manual has it
+// take the player "в главное меню игры" (ROBY.PDF p. 27), and saving is a row
+// of that menu.
+func TestDiskButtonOpensTheMainMenu(t *testing.T) {
+	bar := shippedBar(t)
+	g := &Game{bar: bar, gs: types.NewGameState(), mode: modePlay}
+	g.clickBar(
+		(bar.SaveBox[0]+bar.SaveBox[2])/2,
+		(bar.SaveBox[1]+bar.SaveBox[3])/2,
+	)
+	if g.mode != modeOptions {
+		t.Fatalf("mode = %d, want modeOptions (%d)", g.mode, modeOptions)
+	}
+}

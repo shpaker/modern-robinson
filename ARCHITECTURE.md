@@ -8,11 +8,12 @@ internal/
   types/        Domain: сущности, без зависимостей
   interfaces/   контракты (только types)
   use_cases/    логика: изосетка, pathfinding (stateless)
-  repositories/ доступ к файлам игры; codec/ — кодеки NGI
+  repositories/ доступ к файлам игры; codec/ — кодеки NGI; webfs/, webdata/ — веб
   adapters/     Ebiten-образы из Domain (анимации, звук)
   minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
 cmd/main.go     игра
+cmd/wasm/       браузерная сборка
 cmd/minigames/  мини-игры без приключения (отладка, в релиз не идёт)
 ```
 

@@ -4,8 +4,9 @@ package repositories
 
 import (
 	"encoding/binary"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
@@ -16,6 +17,7 @@ import (
 // Resources indexes every NL container under the game root and resolves assets
 // by name. It implements interfaces.IResources.
 type Resources struct {
+	fsys        fs.FS
 	root        string
 	movies      map[string]string
 	sceneDirs   map[string]string
@@ -29,68 +31,87 @@ type Resources struct {
 	bgi         [][]bgiRecord // BEGIN.BGI initial object states, lazily parsed
 }
 
-// readFileUpper reads a file under root joining path elements, trying the exact
-// name (game files ship upper-case on the ISO).
-func readFileUpper(root string, parts ...string) ([]byte, error) {
-	p := filepath.Join(append([]string{root}, parts...)...)
-	return os.ReadFile(p)
+// readFileUpper reads a file under the resource FS joining path elements,
+// trying the exact name (game files ship upper-case on the ISO).
+func (r *Resources) readFileUpper(parts ...string) ([]byte, error) {
+	return fs.ReadFile(r.fsys, path.Join(parts...))
 }
 
 var _ interfaces.IResources = (*Resources)(nil)
 
 // NewResources indexes the game folder at root.
 func NewResources(root string) *Resources {
+	r := NewResourcesFS(os.DirFS(root), nil)
+	r.root = root
+	return r
+}
+
+// NewResourcesFS indexes a game folder served by any fs.FS. When names is nil
+// the FS is walked; otherwise it is the ready-made list of files to index,
+// which is what the browser build passes — it has the list from its manifest
+// and no directory tree to walk.
+func NewResourcesFS(fsys fs.FS, names []string) *Resources {
 	r := &Resources{
-		root:      root,
+		fsys:      fsys,
 		movies:    map[string]string{},
 		sceneDirs: map[string]string{},
 		sceneDat:  map[string]string{},
 		screenDat: map[string]string{},
 		cache:     map[string]*codec.Container{},
 	}
-	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+	if names != nil {
+		for _, p := range names {
+			r.index(p)
+		}
+		return r
+	}
+	_ = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return nil
 		}
-		up := strings.ToUpper(info.Name())
-		switch {
-		case strings.HasSuffix(up, ".MV"):
-			r.movies[up] = p
-		case strings.HasSuffix(up, ".DAN"):
-			// Every scene/interior/global script container (SCENA*, CAB_*,
-			// INT*, PALACE, STARTUP, BAR, ...) keyed by base name.
-			r.sceneDirs[up[:len(up)-4]] = p
-		case strings.HasSuffix(up, ".DAT"):
-			// Background bitmaps live in DATA/SCEN (scenes) and DATA/BAR (the
-			// inventory bar); top-level .DAT (LOGO, OPTIONS, ...) are screen
-			// packs; the rest (CONFIG, LANG, ...) fail codec.Open harmlessly.
-			dir := strings.ToUpper(p)
-			sep := string(os.PathSeparator)
-			if strings.Contains(dir, sep+"SCEN"+sep) ||
-				strings.Contains(dir, sep+"BAR"+sep) {
-				r.sceneDat[up[:len(up)-4]] = p
-			} else {
-				r.screenDat[up[:len(up)-4]] = p
-			}
-		}
+		r.index(p)
 		return nil
 	})
 	return r
 }
 
-func (r *Resources) container(path string) *codec.Container {
-	if c, ok := r.cache[path]; ok {
+// index files one slash-separated path into the name maps.
+func (r *Resources) index(p string) {
+	up := strings.ToUpper(path.Base(p))
+	switch {
+	case strings.HasSuffix(up, ".MV"):
+		r.movies[up] = p
+	case strings.HasSuffix(up, ".DAN"):
+		// Every scene/interior/global script container (SCENA*, CAB_*, INT*,
+		// PALACE, STARTUP, BAR, ...) keyed by base name.
+		r.sceneDirs[up[:len(up)-4]] = p
+	case strings.HasSuffix(up, ".DAT"):
+		// Background bitmaps live in DATA/SCEN (scenes) and DATA/BAR (the
+		// inventory bar); top-level .DAT (LOGO, OPTIONS, ...) are screen
+		// packs; the rest (CONFIG, LANG, ...) fail codec.OpenFS harmlessly.
+		dir := strings.ToUpper(p)
+		if strings.Contains(dir, "/SCEN/") || strings.Contains(dir, "/BAR/") {
+			r.sceneDat[up[:len(up)-4]] = p
+		} else {
+			r.screenDat[up[:len(up)-4]] = p
+		}
+	}
+}
+
+func (r *Resources) container(name string) *codec.Container {
+	if c, ok := r.cache[name]; ok {
 		return c
 	}
-	c, err := codec.Open(path)
+	c, err := codec.OpenFS(r.fsys, name)
 	if err != nil {
 		return nil
 	}
-	r.cache[path] = c
+	r.cache[name] = c
 	return c
 }
 
-// Root is the game folder this Resources indexes.
+// Root is the game folder this Resources indexes; empty when the resources do
+// not come from a directory on disk (the browser build).
 func (r *Resources) Root() string { return r.root }
 
 // Movie returns the container for a movie by name (e.g. "Roby1.mv").
@@ -173,9 +194,7 @@ func (r *Resources) Sound(name string) []byte {
 func (r *Resources) indexWaves() {
 	if r.waveIndex == nil {
 		r.waveIndex = map[string]types.Entry{}
-		r.wave = r.container(
-			filepath.Join(r.root, "DATA", "WAVE", "WAVE.DAN"),
-		)
+		r.wave = r.container("DATA/WAVE/WAVE.DAN")
 		if r.wave != nil {
 			for _, e := range r.wave.Entries() {
 				r.waveIndex[strings.ToUpper(e.Name)] = e
@@ -184,7 +203,7 @@ func (r *Resources) indexWaves() {
 	}
 	if r.mgWaveIndex == nil {
 		r.mgWaveIndex = map[string]types.Entry{}
-		r.mgWave = r.container(filepath.Join(r.root, "MINIGAME.WDT"))
+		r.mgWave = r.container("MINIGAME.WDT")
 		if r.mgWave != nil {
 			for _, e := range r.mgWave.Entries() {
 				r.mgWaveIndex[strings.ToUpper(e.Name)] = e

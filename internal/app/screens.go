@@ -31,6 +31,27 @@ func clickedThisTick() bool {
 	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 }
 
+// mouseState is one frame's cursor and left-button state. The screens take it
+// as a value so their logic stays testable without a live input device.
+type mouseState struct {
+	x, y     int
+	clicked  bool // went down this frame
+	released bool // came up this frame
+	pressed  bool // held down
+}
+
+// readMouse samples the cursor and the left button for this frame.
+func readMouse() mouseState {
+	x, y := ebiten.CursorPosition()
+	return mouseState{
+		x:        x,
+		y:        y,
+		clicked:  clickedThisTick(),
+		released: inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft),
+		pressed:  ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft),
+	}
+}
+
 // serviceKey reports whether a key already has a job of its own (debug, quick
 // save/load, the options menu) and so must not double as "skip".
 func serviceKey(k ebiten.Key) bool {

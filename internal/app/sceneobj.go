@@ -39,11 +39,17 @@ func fonScripts(c interfaces.IContainer) map[string][]byte {
 }
 
 // buildSceneObj builds one live object, wiring its FonScript to movie frames and
-// a player when the script is a looping ambient animation. Returns nil if the
+// a player when the script is a looping ambient animation. pal is the scene's
+// palette, which scene sprites are drawn with; parse turns the raw .FS into a
+// script (Game.parseFS, so voice lines retime their frames). Returns nil if the
 // object has no .OB definition.
-func buildSceneObj(res interfaces.IResources, pal types.Palette,
-	parser interfaces.ISceneParser,
-	fsByName map[string][]byte, zper int, ref types.ObjectRef,
+func buildSceneObj(
+	res interfaces.IResources,
+	pal types.Palette,
+	parse func([]byte) *types.FrameScript,
+	fsByName map[string][]byte,
+	zper int,
+	ref types.ObjectRef,
 	ob *types.SceneObject,
 ) *sceneObj {
 	if ob == nil {
@@ -52,7 +58,7 @@ func buildSceneObj(res interfaces.IResources, pal types.Palette,
 	inst := &sceneObj{ref: ref, ob: ob, z: ref.GY*zper + ob.Z}
 	fon := strings.ToLower(ob.FonScript)
 	if raw, ok := fsByName[fon]; fon != "" && fon != "null" && ok {
-		fs := parser.ParseFrameScript(string(raw))
+		fs := parse(raw)
 		// The FonScript's own Shift wins; the movie's .SCR origin is the
 		// fallback for the scripts that omit it (see Game.movieShift).
 		inst.shift = res.MovieShift(fs.MovieName)
@@ -89,10 +95,14 @@ func endsScript(fs *types.FrameScript) bool {
 // loadSceneObjects builds the live objects for a scene's ObjectList, skipping
 // any the quest state records as taken plus any BEGIN.BGI marks as initially
 // hidden (they wait for a CreateObject).
-func loadSceneObjects(res interfaces.IResources, pal types.Palette,
-	parser interfaces.ISceneParser, sc *types.Scene,
+func loadSceneObjects(
+	res interfaces.IResources,
+	pal types.Palette,
+	parse func([]byte) *types.FrameScript,
+	sc *types.Scene,
 	objects map[string]*types.SceneObject,
-	fsByName map[string][]byte, gone func(obj string) bool,
+	fsByName map[string][]byte,
+	gone func(obj string) bool,
 ) []*sceneObj {
 	zper := sc.ZPerGrid
 	if zper == 0 {
@@ -111,7 +121,7 @@ func loadSceneObjects(res interfaces.IResources, pal types.Palette,
 		if v, ok := initial[strings.ToLower(ref.Name)]; ok && !v {
 			continue // hidden at game start until a CreateObject
 		}
-		if inst := buildSceneObj(res, pal, parser, fsByName, zper,
+		if inst := buildSceneObj(res, pal, parse, fsByName, zper,
 			ref, objects[strings.ToLower(ref.Name)]); inst != nil {
 			out = append(out, inst)
 		}
