@@ -83,10 +83,31 @@ func (g *Game) loadCharacter() {
 	ch := g.parser.ParseChar(string(d))
 	g.restSlots = ch.Idle
 	if s := ch.Idle[restStand]; s != "" {
-		if a := adapters.LoadAnimation(g.res, s+".mv"); a.OK() {
-			g.idle = a // HEAD.mv: the real standing loop
-		}
+		g.standMovie = s + ".mv" // HEAD.mv: the real standing loop
 	}
+	g.loadStand()
+}
+
+// loadStand paints the standing loop in the current scene palette.
+func (g *Game) loadStand() {
+	if g.standMovie == "" {
+		return
+	}
+	if a := adapters.LoadAnimation(g.res, g.standMovie, g.pal); a.OK() {
+		g.idle = a
+	}
+}
+
+// repaintHeroes drops the heroes' frames painted in the previous scene's
+// palette. The game's scenes share one palette and the intro bridges carry
+// their own, so in practice this fires on the way out of the intro.
+func (g *Game) repaintHeroes() {
+	g.cycleCache = map[string]*walkCycle{}
+	g.loadStand()
+	if g.fridIdle != nil {
+		g.fridIdle = adapters.LoadAnimation(g.res, fridMovie, g.pal)
+	}
+	g.idleAct = nil
 }
 
 // setRest applies SetRest char,state,anim: it swaps one of the hero's idle
@@ -145,7 +166,7 @@ func (g *Game) playIdleSlot(slot int) {
 	if fs.MovieName == "" {
 		return
 	}
-	a := adapters.LoadAnimation(g.res, fs.MovieName)
+	a := adapters.LoadAnimation(g.res, fs.MovieName, g.pal)
 	if !a.OK() {
 		return
 	}

@@ -14,11 +14,14 @@ import (
 // him between scenes with the 7-arg GoScene. When he is the active character
 // (SetActive Frid) object clicks resolve FRHAN* scripts instead of ROHAN*.
 
+// fridMovie is Friday's standing loop.
+const fridMovie = "Frhead.mv"
+
 // fridInit resets Friday's per-scene presentation state (STARTUP.INF declares
 // him at ZCoord 7; INT0 hides him for the whole intro).
 func (g *Game) fridInit() {
 	if g.fridIdle == nil {
-		g.fridIdle = adapters.LoadAnimation(g.res, "Frhead.mv")
+		g.fridIdle = adapters.LoadAnimation(g.res, fridMovie, g.pal)
 		g.fridZ = 7 // STARTUP.INF: Frid, 7, 0, 0, *
 		// Debug/test aid: place Friday explicitly ("gx,gy").
 		if v := os.Getenv("ROBINSON_FRID"); v != "" {

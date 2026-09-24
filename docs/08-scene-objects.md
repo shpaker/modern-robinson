@@ -5,6 +5,7 @@
 спрайты), `Scene::ObjectAtPoint` (`0x4151a0`), `BuildDrawList` (`0x414860`).
 `NGI32.DLL` даёт только «положить NGB в точку» (`ngiSetNgbOrigin`,
 `vrtPutNgb`) — координатной логики там нет.
+Палитра у всех спрайтов — палитра сцены (см. `03-resource-types.md`, `COL`).
 
 Глобальные константы сцен: `GridSize=(144,36)`, `ZPerGrid=8`. `GridShift`
 **НЕ константа** — обычно `(46,-99)`, но `CAB_B1=(46,-97)`, `CAB_C2=(46,-94)`;
