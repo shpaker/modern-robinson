@@ -782,7 +782,7 @@ func (g *Game) exitObjPresent(name string) bool {
 
 func (g *Game) cursorType(mx, my int) int {
 	if my >= PlayH {
-		return -1 // bar area
+		return cursorPointer // bar area
 	}
 	wx, wy := mx+g.camX, my
 	if e := g.edgeExit(mx); e != nil {
@@ -800,16 +800,25 @@ func (g *Game) cursorType(mx, my int) int {
 		}
 		return hs.ob.Cursor
 	}
-	return -1
+	return cursorPointer
 }
 
 // drawCursor draws our own cursor (the game's are proprietary) by zone type.
 func (g *Game) drawCursor(screen *ebiten.Image) {
 	mx, my := ebiten.CursorPosition()
+	drawCursorAs(screen, g.cursorType(mx, my))
+}
+
+// cursorPointer is the plain pointer, for places with no zones to hint at.
+const cursorPointer = -1
+
+// drawCursorAs draws the cursor of the given zone type at the mouse.
+func drawCursorAs(screen *ebiten.Image, kind int) {
+	mx, my := ebiten.CursorPosition()
 	x, y := float32(mx), float32(my)
 	white := rgba(255, 255, 255, 255)
 	dark := rgba(0, 0, 0, 200)
-	switch g.cursorType(mx, my) {
+	switch kind {
 	case 1: // ◄
 		drawTriangle(screen, x-10, y, x+4, y-8, x+4, y+8, white, dark)
 	case 2: // ►
