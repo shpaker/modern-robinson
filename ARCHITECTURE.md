@@ -23,8 +23,8 @@ cmd/minigames/  мини-игры без приключения (отладка,
 - DI через `New*`; у реализаций — `var _ interfaces.X = (*Y)(nil)`.
 - `types`/`interfaces`/`use_cases` не импортируют движок.
 - gofumpt + golines (80). Тесты ядра; хелперы — в `testutil`; `t.Skip` без ресурсов.
-- Коммиты — Conventional Commits (`feat:`, `fix:`, `refactor:`, …): по ним CI
-  считает версию и пишет CHANGELOG.
+- Коммиты и заголовки PR — Conventional Commits (`feat:`, `fix:`, `refactor:`,
+  …): по коммитам CI считает версию и пишет CHANGELOG.
 - В коммитах и PR — только суть изменений: без `Co-Authored-By`, подписей
   и упоминаний инструментов, которыми сделана работа.
 - Описание PR — крайне коротко: один список основных сделанных работ, другого
