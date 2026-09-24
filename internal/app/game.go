@@ -568,16 +568,6 @@ func (g *Game) click(mx, my int) {
 		// log). The object's name already lives on the hover caption.
 		return
 	}
-	// The exit zones sit off the edge of the scene, so once the view has
-	// scrolled inward they are no longer clickable; clicking the very edge of
-	// the viewport at the end of the scene means the same thing.
-	if e := g.edgeExit(mx); e != nil {
-		if g.startObjectAction(exitKey(e == &g.exitL)) {
-			return
-		}
-		g.pending = e
-		return
-	}
 	// Every walk the click starts aims the camera at the click, even one that
 	// ends up going nowhere: WalkTo sets the target before it looks at the cell.
 	g.aimCamera(wx)
@@ -849,30 +839,6 @@ func (g *Game) drawPlay(screen *ebiten.Image, hud bool) {
 	}
 }
 
-// cursorType returns the cursor for the hovered zone: 1..4 = arrows
-// (left/right/up/down), 0 = hand (object action), -1 = default pointer.
-// edgeExit returns the scene exit reachable by clicking the viewport edge: the
-// screen edge only leads out once the camera has scrolled to the matching end of
-// the scene, which is how the original gates its left/right exits.
-//
-// The side must also have its arrow object (goleft/gorght) on stage: the quest
-// opens some paths later with a CreateObject (SCENA2's goleft appears after the
-// banana step), and until then the original shows no arrow and has no exit —
-// jumping anyway would skip the departure script and its Island bookkeeping.
-func (g *Game) edgeExit(mx int) *types.Exit {
-	const margin = 40
-	maxCam := maxInt(0, g.w-ViewW)
-	if mx < margin && g.camX == 0 && g.exitL.OK &&
-		g.objPresent(exitKey(true)) {
-		return &g.exitL
-	}
-	if mx > ViewW-margin && g.camX >= maxCam && g.exitR.OK &&
-		g.objPresent(exitKey(false)) {
-		return &g.exitR
-	}
-	return nil
-}
-
 // objPresent reports whether an object is currently on stage (an exit arrow,
 // an object a spawn record would otherwise build twice).
 func (g *Game) objPresent(name string) bool {
@@ -888,6 +854,10 @@ func (g *Game) objPresent(name string) bool {
 // swaps in an hourglass everywhere, the bar included, without hiding it.
 const cursorBusy = 5
 
+// cursorType returns the cursor for the hovered zone: 1..4 = arrows
+// (left/right/up/down), 0 = hand (object action), -1 = default pointer. Only a
+// zone shows an arrow: the original has no exit off its zones, so the edge of
+// the screen is just scenery unless an exit object lies there.
 func (g *Game) cursorType(mx, my int) int {
 	if !g.gs.UI["mouse"] {
 		return cursorBusy // SetMouse OFF: the waiting cursor (engine #247)
@@ -896,12 +866,6 @@ func (g *Game) cursorType(mx, my int) int {
 		return cursorPointer // bar area
 	}
 	wx, wy := mx+g.camX, my
-	if e := g.edgeExit(mx); e != nil {
-		if e == &g.exitL {
-			return 1
-		}
-		return 2
-	}
 	if hs := g.hotspotAt(wx, wy); hs != nil {
 		switch strings.ToLower(hs.key) {
 		case "goleft":
