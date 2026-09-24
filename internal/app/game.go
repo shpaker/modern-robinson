@@ -45,7 +45,7 @@ type Game struct {
 	w, h      int     // scene (world) size; the viewport is ViewW x PlayH
 	camX      int     // horizontal scroll offset into the scene (drawn)
 	camXf     float64 // the same offset before rounding, so easing stays smooth
-	camShift  int     // ShiftScreen pan, in pixels, on top of following the hero
+	camTarget float64 // where the camera eases to (scene+0x70 in ROBY.EXE)
 	zper      int
 	objects   map[string]*types.SceneObject
 	sceneObjs []*sceneObj
@@ -310,7 +310,6 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	c := g.res.SceneContainer(name)
 	g.sceneC = c
 	g.act, g.mgResume = nil, nil
-	g.camShift = 0 // a pan never survives the scene that asked for it
 	scnData, _ := c.ExtractName(name + ".SCN")
 	g.sc = g.parser.ParseScene(string(scnData))
 	// The engine arms the ambient timer already expired, so a scene can speak up
@@ -376,7 +375,11 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.cell = start
 	px, py := g.grid.ToScreen(start[0], start[1])
 	g.pos = [2]float64{float64(px), float64(py)}
-	g.clampCamera()
+	if spawn != nil {
+		g.showCell(start[0], start[1])
+	} else {
+		g.centreOnHero()
+	}
 	g.path = nil
 	g.frameI = 0
 
@@ -575,6 +578,9 @@ func (g *Game) click(mx, my int) {
 		g.pending = e
 		return
 	}
+	// Every walk the click starts aims the camera at the click, even one that
+	// ends up going nowhere: WalkTo sets the target before it looks at the cell.
+	g.aimCamera(wx)
 	cx, cy := g.grid.ToCell(wx, wy)
 	if g.startSelfAction(cx, cy) {
 		return // the held item was aimed at the character himself
@@ -653,7 +659,9 @@ func (g *Game) Update() error {
 		g.idleAct = nil
 		g.skipCutscene()
 	}
-	g.updateHover(ebiten.CursorPosition())
+	mx, my := ebiten.CursorPosition()
+	g.updateHover(mx, my)
+	g.edgeScroll(mx, my, dt)
 
 	// Walking is the cycle chain playing out: the animation carries the motion
 	// and its frame events move the cell (see walk.go).
@@ -732,7 +740,6 @@ func (g *Game) resetRun() {
 	g.mg, g.mgVar, g.mgResume = nil, "", nil
 	g.idleAct, g.idleT = nil, 0
 	g.robyZ = charZCoord
-	g.camShift = 0
 	g.fridHidden, g.fridCell, g.fridZ = true, [2]int{}, 7
 	g.invScroll = 0
 	g.loadCharacter() // SetRest edits do not outlive the run that made them
@@ -1024,8 +1031,8 @@ func (g *Game) heroAnim() (*adapters.Animation, int) {
 }
 
 // heroVisualX is the hero's drawn centre in world pixels. Walking motion lives
-// in the frame bitmaps, not in his cell, so the camera has to follow this rather
-// than the cell anchor or it would lurch a whole cell at every step.
+// in the frame bitmaps, not in his cell, so the cell anchor can be a whole step
+// off from where he is seen.
 func (g *Game) heroVisualX() float64 {
 	x := g.pos[0]
 	a, fidx := g.heroAnim()
@@ -1043,18 +1050,48 @@ func (g *Game) heroVisualX() float64 {
 	return x
 }
 
-// cameraTarget is where the camera wants to be: the hero centred, offset by any
-// ShiftScreen pan a script asked for, clamped to the scene.
-func (g *Game) cameraTarget() int {
-	return clampInt(
-		int(g.heroVisualX())-ViewW/2+g.camShift, 0, maxInt(0, g.w-ViewW),
-	)
+// scrollMax is the widest scroll the scene allows: its width past the viewport.
+func (g *Game) scrollMax() float64 { return float64(maxInt(0, g.w-ViewW)) }
+
+// clampScroll keeps a scroll inside the scene.
+func (g *Game) clampScroll(x float64) float64 {
+	return math.Min(math.Max(x, 0), g.scrollMax())
 }
 
-// shiftScreen applies "ShiftScreen dx,dy": the engine moves the scroll target by
-// whole grid cells, which the scripts use to pan away from the hero for a beat
-// and then back (they always come in ±1 pairs). Vertical scroll never happens —
-// no scene is taller than the viewport — so only the x step is honoured.
+// aimCamera sets where the camera eases to: world x in the middle of the view.
+// The engine aims it at the start of every walk (WalkTo 0x40f14e) — on the
+// point clicked, or on the corner of the cell an Aproach names — and never
+// follows the walker after that, so the hero may well leave the frame.
+func (g *Game) aimCamera(x int) {
+	g.camTarget = g.clampScroll(float64(x - ViewW/2))
+}
+
+// setCamera puts the view on scroll x at once, its target along with it:
+// there is nothing to ease from on a scene entry or a load.
+func (g *Game) setCamera(x int) {
+	g.camTarget = g.clampScroll(float64(x))
+	g.camXf = g.camTarget
+	g.camX = int(math.Round(g.camXf))
+}
+
+// showCell opens the view on a cell: GoScene's closing pair names the screen
+// too, and the engine puts the scene's left edge on that cell's corner
+// (0x41b03d), clamped to the scene, wherever the entry script then puts the
+// hero.
+func (g *Game) showCell(gx, gy int) {
+	x, _ := g.grid.Corner(gx, gy)
+	g.setCamera(x)
+}
+
+// centreOnHero puts the view on the hero, for a scene entered without a
+// GoScene naming the screen (a new game, a direct debug entry, an old save).
+func (g *Game) centreOnHero() { g.setCamera(int(g.heroVisualX()) - ViewW/2) }
+
+// shiftScreen applies "ShiftScreen dx,dy": the engine aims the camera whole
+// grid cells away from where it stands now (0x415690), which the scripts use
+// to pan away for a beat and then back (they always come in ±1 pairs).
+// Vertical scroll never happens — no scene is taller than the viewport — so
+// only the x step is honoured.
 func (g *Game) shiftScreen(args []string) {
 	if len(args) < 1 || g.sc == nil {
 		return
@@ -1063,7 +1100,45 @@ func (g *Game) shiftScreen(args []string) {
 	if step <= 0 {
 		step = 1
 	}
-	g.camShift += atoiArg(args[0]) * step
+	g.camTarget = g.clampScroll(g.camXf + float64(atoiArg(args[0])*step))
+}
+
+// Edge scrolling, ROBY.EXE 0x418d04: every engine frame the cursor resting on
+// the left or right edge of the scene pushes the view this many pixels.
+const (
+	edgeScrollZone = 10
+	edgeScrollStep = 5
+)
+
+// edgeScroll is the original's free look. With the mouse on, a cursor over the
+// scene (not the bar) at x <= 10 or x >= 630 moves the view and its eased
+// target together, and only while the move stays inside the scene — so the
+// hero can be left off screen until the next walk aims the camera back. A
+// cursor outside the window is on no edge.
+func (g *Game) edgeScroll(mx, my int, dt float64) {
+	if !g.gs.UI["mouse"] || mx < 0 || mx >= ViewW || my < 0 || my > g.h {
+		return
+	}
+	step := edgeScrollStep * dt * enginePace
+	switch {
+	case mx <= edgeScrollZone:
+		step = -step
+	case mx >= ViewW-edgeScrollZone:
+	default:
+		return
+	}
+	g.panCamera(step)
+}
+
+// panCamera moves the view and its target by dx, refusing a move that would
+// leave the scene, as the engine's edge scroll does.
+func (g *Game) panCamera(dx float64) {
+	x := g.camXf + dx
+	if x < 0 || x > g.scrollMax() {
+		return
+	}
+	g.camXf, g.camTarget = x, g.camTarget+dx
+	g.camX = int(math.Round(g.camXf))
 }
 
 // followCamera eases the camera toward its target the way the engine does: each
@@ -1072,8 +1147,7 @@ func (g *Game) shiftScreen(args []string) {
 // float and only rounded for drawing — rounding it every tick would make the
 // view jitter back and forth around a moving target.
 func (g *Game) followCamera(dt float64) {
-	target := float64(g.cameraTarget())
-	gap := target - g.camXf
+	gap := g.camTarget - g.camXf
 	if gap == 0 {
 		return
 	}
@@ -1095,12 +1169,6 @@ func (g *Game) followCamera(dt float64) {
 	}
 	g.camXf += moved
 	g.camX = int(math.Round(g.camXf))
-}
-
-// clampCamera puts the camera on its target at once (scene entry, teleports).
-func (g *Game) clampCamera() {
-	g.camX = g.cameraTarget()
-	g.camXf = float64(g.camX)
 }
 
 func clampInt(v, lo, hi int) int {

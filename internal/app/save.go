@@ -43,6 +43,8 @@ func (g *Game) snapshot() types.SaveData {
 	sd.Frid = &types.CharSave{
 		Cell: g.fridCell, Z: g.fridZ, Hidden: g.fridHidden,
 	}
+	scroll := g.camX
+	sd.Scroll = &scroll
 	return sd
 }
 
@@ -81,6 +83,13 @@ func (g *Game) loadSlot(i int) bool {
 	g.gs = types.Restore(sd)
 	g.resetRun()
 	g.loadScene(sd.Scene, &sd.Cell, "", "")
+	// The view comes back where it was saved; a save from before the scroll
+	// was kept finds the hero instead.
+	if sd.Scroll != nil {
+		g.setCamera(*sd.Scroll)
+	} else {
+		g.centreOnHero()
+	}
 	// Friday stands where the save left her. Arriving by load runs no entry
 	// script to place her, and resetRun hides her, so a party saved together
 	// used to come back without her.

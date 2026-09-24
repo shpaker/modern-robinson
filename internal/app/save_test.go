@@ -131,3 +131,32 @@ func TestLoadOldSlotPlacesFridayBesideHero(t *testing.T) {
 		}
 	}
 }
+
+// The view comes back where it was saved (the engine keeps every scene's
+// scroll, 0x41fba0); a save without it finds the hero.
+func TestLoadSlotKeepsTheView(t *testing.T) {
+	saves := memSaves{}
+	g := saveGame(t, saves)
+	g.loadScene("SCENA0", &[2]int{2, 3}, "", "")
+	g.setCamera(250)
+	writeSlot(t, saves, g.snapshot())
+
+	g = saveGame(t, saves)
+	if !g.loadSlot(0) {
+		t.Fatal("the slot must load")
+	}
+	if g.camX != 250 || g.camTarget != 250 {
+		t.Errorf("camX %d target %.0f, want the saved view 250",
+			g.camX, g.camTarget)
+	}
+
+	writeSlot(t, saves, types.NewGameState().Snapshot("SCENA0", [2]int{6, 3}))
+	g = saveGame(t, saves)
+	if !g.loadSlot(0) {
+		t.Fatal("the old slot must load")
+	}
+	want := clampInt(int(g.heroVisualX())-ViewW/2, 0, g.w-ViewW)
+	if g.camX != want {
+		t.Errorf("camX = %d, want the hero centred at %d", g.camX, want)
+	}
+}
