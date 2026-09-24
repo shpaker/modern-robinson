@@ -48,7 +48,8 @@ func TestLeavingScena0ReachesGoScene(t *testing.T) {
 	g.fsByName = fonScripts(c)
 	g.sceneObjs = loadSceneObjects(res, g.pal, g.parseFS, sc, g.objects,
 		g.fsByName,
-		func(string) bool { return false })
+		func(string) bool { return false },
+		func(string) (types.Spawn, bool) { return types.Spawn{}, false })
 	g.applyObjectBlocking()
 	g.buildHotspots()
 	g.loadCharacter()

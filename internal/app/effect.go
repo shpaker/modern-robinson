@@ -15,7 +15,7 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	if len(cmds) == 0 {
 		return
 	}
-	out, rest := g.interp.Exec(cmds, g.gs)
+	out, rest := g.exec(cmds)
 	// A StartGame in the batch suspends the script: the tail is re-judged once
 	// the minigame has written its result, so the success branch can actually be
 	// taken. Hand it over before enacting anything, because StartGame runs
@@ -25,6 +25,21 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	for _, c := range out {
 		g.applyEffect(c)
 	}
+}
+
+// exec runs commands through the quest interpreter. When they rebuilt the bar
+// (an item came or went, control changed hands) the inventory window goes back
+// to its first slot, as the engine's rebuild does (0x4044e0 zeroes the
+// scroll): a delete made while scrolled no longer leaves a gap.
+func (g *Game) exec(
+	cmds []types.Command,
+) ([]types.Command, []types.Command) {
+	rev := g.gs.InvRev
+	out, rest := g.interp.Exec(cmds, g.gs)
+	if g.gs.InvRev != rev {
+		g.invScroll = 0
+	}
+	return out, rest
 }
 
 // presentational reports whether a command only speaks to the player, carrying
@@ -148,6 +163,9 @@ func (g *Game) setToggle(kw string, args []string) {
 //
 //	CreateObject scene,obj,gx,gy          absolute cell
 //	CreateObject scene,obj,char,dx,dy     cell relative to the character
+//
+// The character is the one named, not the hero: ROCON puts Friday's double
+// (Fraskcon, Frid,0,0) on her own cell (0x41e9a0 adds char+0x254/+0x258).
 func (g *Game) createObject(args []string) {
 	if len(args) < 4 {
 		return
@@ -155,7 +173,11 @@ func (g *Game) createObject(args []string) {
 	scene, obj := args[0], args[1]
 	var gx, gy int
 	if len(args) >= 5 { // char-relative
-		gx, gy = g.cell[0]+atoiArg(args[3]), g.cell[1]+atoiArg(args[4])
+		base := g.cell
+		if strings.EqualFold(args[2], "Frid") {
+			base = g.fridCell
+		}
+		gx, gy = base[0]+atoiArg(args[3]), base[1]+atoiArg(args[4])
 	} else {
 		gx, gy = atoiArg(args[2]), atoiArg(args[3])
 	}
@@ -166,13 +188,17 @@ func (g *Game) createObject(args []string) {
 	}
 }
 
-// spawnObject builds one live object at a cell and appends it to the scene,
-// loading its .OB from the container if not already parsed. It is idempotent:
-// an object already live is not duplicated.
+// spawnObject places an object at a cell the way the engine's CreateObject
+// does (0x41e9a0): the object keeps its slot in the scene, takes the new cell
+// and starts its FonScript over, so one already on stage moves instead of
+// being duplicated. An object the scene holds no slot for is appended, its .OB
+// loaded from the container if not already parsed.
 func (g *Game) spawnObject(obj string, gx, gy int) {
-	for _, s := range g.sceneObjs {
-		if strings.EqualFold(s.ref.Name, obj) && !s.removed {
-			return
+	slot := -1
+	for i, s := range g.sceneObjs {
+		if strings.EqualFold(s.ref.Name, obj) {
+			slot = i
+			break
 		}
 	}
 	ob := g.objects[strings.ToLower(obj)]
@@ -182,12 +208,24 @@ func (g *Game) spawnObject(obj string, gx, gy int) {
 			g.objects[strings.ToLower(ob.Name)] = ob
 		}
 	}
-	ref := types.ObjectRef{Name: obj, GX: gx, GY: gy}
-	if inst := buildSceneObj(g.res, g.pal, g.parseFS, g.fsByName, g.zper,
-		ref, ob); inst != nil {
-		g.sceneObjs = append(g.sceneObjs, inst)
-		g.setObjectBlocking(inst, false) // it brings its walls along
+	ref := types.ObjectRef{Name: obj}
+	if slot >= 0 {
+		ref = g.sceneObjs[slot].ref
 	}
+	ref.GX, ref.GY = gx, gy
+	inst := buildSceneObj(g.res, g.pal, g.parseFS, g.fsByName, g.zper, ref, ob)
+	if inst == nil {
+		return
+	}
+	if slot < 0 {
+		g.sceneObjs = append(g.sceneObjs, inst)
+	} else {
+		if old := g.sceneObjs[slot]; !old.removed {
+			g.setObjectBlocking(old, true) // its walls leave the old cell
+		}
+		g.sceneObjs[slot] = inst
+	}
+	g.setObjectBlocking(inst, false) // it brings its walls along
 }
 
 // delObject removes an object from a scene, persisting the removal. Form:

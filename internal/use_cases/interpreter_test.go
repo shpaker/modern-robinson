@@ -243,10 +243,14 @@ func TestSetActiveSplitsCharacterFromItem(t *testing.T) {
 	st.ActiveChar, st.Active = "Roby", "hand"
 	var in use_cases.Interpreter
 
+	rev := st.InvRev
 	execOut(in, []types.Command{cmd("SetActive", "Frid")}, st)
 	if st.ActiveChar != "Frid" || st.Active != "hand" {
 		t.Fatalf("character switch touched the hand: %q %q",
 			st.ActiveChar, st.Active)
+	}
+	if st.InvRev != rev+1 {
+		t.Fatal("handing over control rebuilds the bar (0x41be2a)")
 	}
 	execOut(in, []types.Command{cmd("SetActive", "confr")}, st)
 	if st.ActiveChar != "Frid" || st.Active != "confr" {
@@ -256,5 +260,23 @@ func TestSetActiveSplitsCharacterFromItem(t *testing.T) {
 	execOut(in, []types.Command{cmd("SetActive", "Roby")}, st)
 	if st.ActiveChar != "Roby" {
 		t.Fatalf("ActiveChar = %q, want Roby", st.ActiveChar)
+	}
+}
+
+// ROCRBPOO.FS releases the crab: DeleteItem crb; AddItem hat. The crab-hat was
+// in hand, so the hand takes its place and the empty hat is only listed.
+func TestDeleteItemInHandHandsBackHand(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("crb")
+	st.Active = "crb"
+	var in use_cases.Interpreter
+
+	execOut(in, []types.Command{
+		cmd("DeleteItem", "crb"), cmd("AddItem", "hat"),
+	}, st)
+	if st.Active != "hand" || st.HasItem("crb") || !st.HasItem("hat") {
+		t.Fatalf("Active=%q inventory=%v, want hand with hat, no crb",
+			st.Active, st.Inventory)
 	}
 }

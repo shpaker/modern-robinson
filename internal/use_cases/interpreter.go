@@ -114,6 +114,7 @@ func applyState(c types.Command, st *types.GameState) bool {
 			if strings.EqualFold(a[0], "Roby") ||
 				strings.EqualFold(a[0], "Frid") {
 				st.ActiveChar = a[0]
+				st.InvRev++ // the bar shows the new character's (0x41be2a)
 			} else {
 				st.Active = a[0]
 			}

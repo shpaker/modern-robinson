@@ -36,6 +36,24 @@ func TestInventoryDedupeAndRemove(t *testing.T) {
 	}
 }
 
+// Deleting the item in hand puts the hand back in it: the crab released into
+// the pool (DeleteItem crb) must not leave the empty hat acting as if full.
+func TestDelItemInHandSelectsHand(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("hat")
+	st.AddItem("crb")
+	st.Active = "crb"
+	st.DelItem("hat")
+	if st.Active != "crb" {
+		t.Fatalf("deleting another item moved the hand: %q", st.Active)
+	}
+	st.DelItem("CRB")
+	if st.Active != "hand" {
+		t.Fatalf("Active=%q after deleting it, want hand", st.Active)
+	}
+}
+
 func TestWorldGonePersistsPerScene(t *testing.T) {
 	st := types.NewGameState()
 	st.MarkGone("SCENA0", "axe")
@@ -65,6 +83,47 @@ func TestWorldSpawnAndCancelGone(t *testing.T) {
 	}
 }
 
+// A removal cancels the spawn the same way a spawn cancels a removal: the crab
+// created back on the beach and caught again must not come back on the next
+// visit while it sits in the hat.
+func TestWorldGoneCancelsSpawn(t *testing.T) {
+	st := types.NewGameState()
+	st.MarkSpawn("SCENA0", "crb", 4, 3)
+	st.MarkSpawn("SCENA0", "pool", 5, 2)
+	st.MarkGone("scena0", "CRB")
+	if _, ok := st.SpawnAt("SCENA0", "crb"); ok {
+		t.Fatal("a removed object must lose its spawn")
+	}
+	if sp, ok := st.SpawnAt("SCENA0", "pool"); !ok || sp.GX != 5 {
+		t.Fatalf("other spawns must stay: %v %v", sp, ok)
+	}
+	st.MarkSpawn("SCENA0", "crb", 4, 3)
+	if sp, ok := st.SpawnAt("scena0", "CRB"); !ok || sp.GY != 3 ||
+		st.IsGone("SCENA0", "crb") {
+		t.Fatalf("respawn: %v %v gone=%v", sp, ok,
+			st.IsGone("SCENA0", "crb"))
+	}
+}
+
+// Saves written before the fix may carry an object both removed and spawned;
+// the removal is the newer one (a spawn would have cleared it), so loading
+// drops the spawn.
+func TestRestoreDropsSpawnsOfGoneObjects(t *testing.T) {
+	sd := types.SaveData{
+		Gone: map[string][]string{"scena0": {"crb"}},
+		Spawned: map[string][]types.Spawn{
+			"scena0": {{Obj: "crb", GX: 4, GY: 3}, {Obj: "fire", GX: 1, GY: 3}},
+		},
+	}
+	st := types.Restore(sd)
+	if _, ok := st.SpawnAt("SCENA0", "crb"); ok || !st.IsGone("SCENA0", "crb") {
+		t.Fatal("a stale spawn of a removed object must be dropped")
+	}
+	if _, ok := st.SpawnAt("SCENA0", "fire"); !ok {
+		t.Fatal("a live spawn must survive the load")
+	}
+}
+
 // A save taken mid-script may carry the mouse switched off; the engine forces
 // it back on at the end of every load (0x4213cf), so a restored game can never
 // come back deaf to clicks.
@@ -79,5 +138,24 @@ func TestRestoreForcesTheMouseOn(t *testing.T) {
 	sd.UI = map[string]bool{"bar": true}
 	if got := types.Restore(sd); !got.UI["mouse"] {
 		t.Error("an old save without the key must not come back deaf")
+	}
+}
+
+// InvRev ticks on every real change to the bar's list, so the bar can scroll
+// back to its first slot the way the engine's rebuild does; a no-op leaves it.
+func TestInvRevCountsInventoryChanges(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("hat")
+	rev := st.InvRev
+	st.AddItem("HAT")   // already held
+	st.DelItem("stick") // not held
+	if st.InvRev != rev {
+		t.Fatalf("no-ops moved InvRev %d -> %d", rev, st.InvRev)
+	}
+	st.DelItem("hat")
+	st.AddItem("crb")
+	if st.InvRev != rev+2 {
+		t.Fatalf("InvRev = %d, want %d", st.InvRev, rev+2)
 	}
 }

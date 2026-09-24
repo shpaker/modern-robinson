@@ -24,6 +24,10 @@ type GameState struct {
 	// character has his own items (hand/handfr, condom/confr), so the two must
 	// be tracked apart or Friday can never hold anything.
 	ActiveChar string
+	// InvRev counts the bar rebuilds: an item added or removed, or control
+	// handed to the other character. The engine scrolls the rebuilt bar back to
+	// its first slot (0x4044e0), so the bar watches this. Never saved.
+	InvRev int
 
 	gone    map[string]map[string]bool // scene -> object -> removed (DelObject)
 	spawned map[string][]Spawn         // scene -> objects added (CreateObject)
@@ -100,27 +104,48 @@ func (g *GameState) AddItem(item string) {
 		return
 	}
 	g.Inventory = append(g.Inventory, item)
+	g.InvRev++
 }
 
-// DelItem removes an item if present.
+// DelItem removes an item if present. Removing the item in hand selects the
+// first slot (the hand), as ROBY.EXE does (DeleteItem 0x405190).
 func (g *GameState) DelItem(item string) {
 	item = strings.ToLower(item)
 	for i, it := range g.Inventory {
 		if strings.ToLower(it) == item {
 			g.Inventory = append(g.Inventory[:i], g.Inventory[i+1:]...)
+			g.InvRev++
+			if strings.ToLower(g.Active) == item {
+				g.Active = "hand"
+				if len(g.Inventory) > 0 {
+					g.Active = g.Inventory[0]
+				}
+			}
 			return
 		}
 	}
 }
 
 // MarkGone records that an object was removed from a scene, so it stays gone
-// across revisits.
+// across revisits. A removal cancels a prior spawn of the same object, or the
+// next visit would create it again (the crab caught a second time).
 func (g *GameState) MarkGone(scene, obj string) {
 	scene, obj = strings.ToLower(scene), strings.ToLower(obj)
 	if g.gone[scene] == nil {
 		g.gone[scene] = map[string]bool{}
 	}
 	g.gone[scene][obj] = true
+	kept := g.spawned[scene][:0]
+	for _, s := range g.spawned[scene] {
+		if !strings.EqualFold(s.Obj, obj) {
+			kept = append(kept, s)
+		}
+	}
+	if len(kept) == 0 {
+		delete(g.spawned, scene)
+	} else {
+		g.spawned[scene] = kept
+	}
 }
 
 // IsGone reports whether an object was removed from a scene.
@@ -147,6 +172,16 @@ func (g *GameState) MarkSpawn(scene, obj string, gx, gy int) {
 // Spawns returns the objects created in a scene.
 func (g *GameState) Spawns(scene string) []Spawn {
 	return g.spawned[strings.ToLower(scene)]
+}
+
+// SpawnAt returns where an object was last created in a scene, if it was.
+func (g *GameState) SpawnAt(scene, obj string) (Spawn, bool) {
+	for _, s := range g.spawned[strings.ToLower(scene)] {
+		if strings.EqualFold(s.Obj, obj) {
+			return s, true
+		}
+	}
+	return Spawn{}, false
 }
 
 // MarkVert records a SetVert so the reshaped walk grid survives revisits: the
@@ -243,6 +278,12 @@ func Restore(sd SaveData) *GameState {
 	// The engine forces the mouse back on at the end of every load (0x4213cf),
 	// so a save taken mid-script can never come back deaf.
 	g.UI["mouse"] = true
+	if sd.Spawned != nil {
+		g.spawned = sd.Spawned
+	}
+	// A spawn clears its object's removal, so a save carrying both was written
+	// by a build that let a later DelObject keep the spawn: the removal is the
+	// newer of the two, and replaying it drops the stale spawn.
 	for sc, objs := range sd.Gone {
 		for _, o := range objs {
 			g.MarkGone(sc, o)
@@ -252,9 +293,6 @@ func Restore(sd SaveData) *GameState {
 		g.verts = sd.Verts
 	} else {
 		g.verts = map[string][]Vert{}
-	}
-	if sd.Spawned != nil {
-		g.spawned = sd.Spawned
 	}
 	return g
 }
