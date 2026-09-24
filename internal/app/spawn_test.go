@@ -136,3 +136,23 @@ func TestSceneLoadHonoursSpawnsAndRemovals(t *testing.T) {
 		t.Fatal("the caught crab must stay off the beach")
 	}
 }
+
+// ROCON hides Friday and creates her double relative to her (Fraskcon,
+// Frid,0,0): the double stands where she stood, not on the hero.
+func TestCreateObjectRelativeToFridayUsesHerCell(t *testing.T) {
+	g := &Game{
+		gs:        types.NewGameState(),
+		sceneName: "SCENA1", // elsewhere, so only the record is written
+		cell:      [2]int{1, 1},
+		fridCell:  [2]int{5, 2},
+	}
+	g.createObject([]string{"SCENA0", "Fraskcon", "Frid", "0", "0"})
+	if sp, ok := g.gs.SpawnAt("SCENA0", "fraskcon"); !ok || sp.GX != 5 ||
+		sp.GY != 2 {
+		t.Fatalf("double at %v %v, want Friday's cell (5,2)", sp, ok)
+	}
+	g.createObject([]string{"SCENA0", "banana", "Roby", "2", "0"})
+	if sp, _ := g.gs.SpawnAt("SCENA0", "banana"); sp.GX != 3 || sp.GY != 1 {
+		t.Fatalf("banana at %v, want the hero's cell + (2,0)", sp)
+	}
+}

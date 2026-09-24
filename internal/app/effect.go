@@ -148,6 +148,9 @@ func (g *Game) setToggle(kw string, args []string) {
 //
 //	CreateObject scene,obj,gx,gy          absolute cell
 //	CreateObject scene,obj,char,dx,dy     cell relative to the character
+//
+// The character is the one named, not the hero: ROCON puts Friday's double
+// (Fraskcon, Frid,0,0) on her own cell (0x41e9a0 adds char+0x254/+0x258).
 func (g *Game) createObject(args []string) {
 	if len(args) < 4 {
 		return
@@ -155,7 +158,11 @@ func (g *Game) createObject(args []string) {
 	scene, obj := args[0], args[1]
 	var gx, gy int
 	if len(args) >= 5 { // char-relative
-		gx, gy = g.cell[0]+atoiArg(args[3]), g.cell[1]+atoiArg(args[4])
+		base := g.cell
+		if strings.EqualFold(args[2], "Frid") {
+			base = g.fridCell
+		}
+		gx, gy = base[0]+atoiArg(args[3]), base[1]+atoiArg(args[4])
 	} else {
 		gx, gy = atoiArg(args[2]), atoiArg(args[3])
 	}
