@@ -21,10 +21,12 @@ const (
 )
 
 // actionPlay is a character action triggered by clicking an object. The movie
-// starts at once; an Aproach among a frame's events pauses playback until the
-// addressed character has walked over, so a script routes its characters
-// mid-film as often as it likes (SHIP2's ROHANOUT walks Friday on frame 0 and
-// the hero on frame 2). A script with no Aproach plays where the character
+// starts at once; an Aproach among a frame's events sends the addressed
+// character walking, and when that is the movie's owner playback pauses until
+// he has walked over, so a script routes its characters mid-film as often as it
+// likes (SHIP2's ROHANOUT walks Friday on frame 0 and the hero on frame 2). The
+// other character walks alongside: ROBY.EXE ticks a movie only through its
+// owner, so it never waits for anyone else. A script with no Aproach plays where the character
 // stands: the engine has no implicit approach, and 1716 action scripts rely on
 // that — every Cannotdo/Fool/Idiot/Whynot refusal is authored without one.
 type actionPlay struct {
@@ -239,8 +241,8 @@ func (g *Game) enqueueAction(ap *actionPlay, cmds []types.Command, skip bool) {
 }
 
 // playActionQueue enacts the interpreted commands the movie still owes. An
-// Aproach starts the addressed character's walk and pauses the queue (and the
-// player) until he arrives; the engine runs a frame's commands in order, so a
+// Aproach starts the addressed character's walk; the owner's own walk pauses
+// the queue (and the player) until he arrives; the engine runs a frame's commands in order, so a
 // SetVert ahead of the Aproach has already reshaped the walk grid by the time
 // the route is computed — SCENA0's pool sits on a cell its own script opens.
 // With skip the walk resolves instantly and presentation commands are muted
@@ -252,7 +254,8 @@ func (g *Game) playActionQueue(ap *actionPlay, skip bool) {
 		kw := strings.ToLower(c.Kw)
 		if kw == "aproach" || kw == "approach" {
 			g.trace(c)
-			if w := g.startAproach(c.Args, ap.clicked, skip); w != waitNone {
+			w := g.startAproach(c.Args, ap.clicked, ap.frid, skip)
+			if w != waitNone {
 				ap.wait = w
 				return
 			}
@@ -266,29 +269,26 @@ func (g *Game) playActionQueue(ap *actionPlay, skip bool) {
 }
 
 // startAproach begins the walk an Aproach playback event asks for and reports
-// the walker the movie has to wait for (waitNone when there is nothing to wait
-// on). With skip the walk resolves instantly: the character lands where the
-// finished walk would have left him.
+// the walker the movie has to wait for: only its owner (Friday when frid),
+// waitNone for the other character or when there is nothing to wait on. With
+// skip the walk resolves instantly: the character lands where the finished
+// walk would have left him.
 func (g *Game) startAproach(
 	args []string,
 	clicked *[2]int,
-	skip bool,
+	frid, skip bool,
 ) aproachWait {
 	gx, gy, ok := aproachGoal(args, clicked, g.objCell)
 	if !ok {
 		return waitNone
 	}
 	if strings.EqualFold(args[0], "Frid") {
-		if skip {
-			// Mirror fridWalkTo's fallbacks, minus the walk: she always lands.
-			if tx, ty, free := g.grid.NearestFree(gx, gy); free {
-				gx, gy = tx, ty
-			}
-			g.placeFrid([2]int{gx, gy})
+		if skip || g.fridHidden {
+			g.landFrid(gx, gy)
 			return waitNone
 		}
 		g.fridWalkTo(gx, gy)
-		if len(g.fridPath) > 0 {
+		if frid && len(g.fridPath) > 0 {
 			return waitFrid
 		}
 		return waitNone
@@ -311,6 +311,9 @@ func (g *Game) startAproach(
 	if evs, walked := g.startWalk(&g.roby, g.cell, p[1:]); walked {
 		g.path = p[1:]
 		g.applyWalkEvents(evs)
+		if frid {
+			return waitNone // Friday's movie goes on while he walks
+		}
 		return waitRoby
 	}
 	// No cycle art (headless runs): land him on the goal rather than play the
@@ -326,6 +329,18 @@ func (g *Game) placeRoby(cell [2]int) {
 	g.pos = [2]float64{float64(px), float64(py)}
 	g.path = nil
 	g.roby.cur = nil
+}
+
+// landFrid puts Friday where a walk to a cell would end, without the walk:
+// fridWalkTo's fallbacks minus the route. A hidden Friday is always landed so.
+// ROBY.EXE walks her anyway, but unseen, unheard and waited for by no one, so
+// the cell she ends on is all of that walk anybody can tell — and before she
+// joins the party every island exit sends her across the whole scene.
+func (g *Game) landFrid(gx, gy int) {
+	if tx, ty, free := g.grid.NearestFree(gx, gy); free {
+		gx, gy = tx, ty
+	}
+	g.placeFrid([2]int{gx, gy})
 }
 
 // placeFrid lands Friday on a cell at once, cutting any walk short.

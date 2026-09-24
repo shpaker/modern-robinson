@@ -555,9 +555,9 @@ func TestActionAproachPausesPlayback(t *testing.T) {
 }
 
 // One frame routinely routes both characters — SCENA6's ROBT3STB sends Friday
-// to the stumbling block and the hero one cell to its right — and the commands
-// run in order: her walk holds the movie first, his follows from the paused
-// frame's queue.
+// to the stumbling block and the hero one cell to its right. Both set off on
+// the same tick, and the movie waits for its owner alone: ROBY.EXE ticks a
+// movie only through the character it belongs to.
 func TestActionQueueRoutesBothCharacters(t *testing.T) {
 	const src = "MovieName Test.mv;\nTotalFrames 2;\n" +
 		"Frame 0,1;\nDelay 90;\nAproach Frid, stb, 0,0;\nAproach Roby, stb, 1,0;\n" +
@@ -571,27 +571,113 @@ func TestActionQueueRoutesBothCharacters(t *testing.T) {
 		t.Fatal("startObjectAction = false, want the action armed")
 	}
 	g.updateAction(0)
-	if g.act == nil || g.act.wait != waitFrid {
-		t.Fatalf("act.wait = %v, want waitFrid first", g.act)
-	}
-	if g.cell != [2]int{0, 0} {
-		t.Fatal("the hero must not move before Friday has arrived")
-	}
-	for i := 0; i < 100 && g.aproachWalking(waitFrid); i++ {
-		g.updateFridWalk(0.09)
-	}
-	if g.fridCell != [2]int{2, 0} {
-		t.Fatalf("fridCell = %v, want the block's cell (2,0)", g.fridCell)
-	}
-	g.updateAction(0) // her walk is over: the paused frame routes the hero next
 	if g.act == nil || g.act.wait != waitRoby {
-		t.Fatalf("act.wait = %v, want waitRoby second", g.act)
+		t.Fatalf("act.wait = %v, want waitRoby: the hero owns the movie", g.act)
+	}
+	if !g.roby.walking() || len(g.fridPath) == 0 {
+		t.Fatal("both characters must be on their way from the same tick")
 	}
 	for i := 0; i < 100 && g.roby.walking(); i++ {
 		g.updateWalk(0.09)
+		g.updateFridWalk(0.09)
 	}
 	if g.cell != [2]int{3, 0} {
 		t.Errorf("cell = %v, want one right of the block (3,0)", g.cell)
+	}
+	if g.fridCell != [2]int{2, 0} {
+		t.Errorf("fridCell = %v, want the block's cell (2,0)", g.fridCell)
+	}
+}
+
+// Every island exit routes the hero on frame 0 and Friday on frame 1
+// (ROHANGOL). The movie must not stand waiting for her: before she joins the
+// party she started behind the far edge, and the exit hung for 14 seconds.
+func TestActionDoesNotWaitForTheOtherCharacter(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 3;\n" +
+		"Frame 0,1;\nDelay 90;\nAproach Roby, stb, 0,0;\n" +
+		"Frame 1,1;\nDelay 90;\nAproach Frid, stb, 0,0;\n" +
+		"Frame 2,1;\nDelay 90;\nSetVar probe,1;\nEnd;"
+	g, _ := actGame(scena0(), src, map[string][2]int{"stb": {2, 0}}, "Roby")
+	g.cell = [2]int{2, 0}
+	g.fridCell = [2]int{0, 0}
+	walkableCycles(g)
+
+	if !g.startObjectAction("stb") {
+		t.Fatal("startObjectAction = false, want the action armed")
+	}
+	for i := 0; i < 10 && g.act != nil; i++ {
+		g.updateAction(0.1)
+	}
+	if g.act != nil {
+		t.Fatalf("the movie is still running (wait %v)", g.act.wait)
+	}
+	if g.gs.Var("probe") != 1 {
+		t.Error("the frames after Friday's Aproach must have fired")
+	}
+	if len(g.fridPath) == 0 {
+		t.Error("Friday must still be on her way when the movie is done")
+	}
+}
+
+// soundRes has no sound bank; the fake audio only records the keys it is sent.
+type soundRes struct{ actRes }
+
+func (soundRes) Sound(string) []byte { return nil }
+
+// A hidden Friday — before she joins the party, or while a double stands in
+// for her — is not walked at all: she lands on the goal at once, silently.
+// ROBY.EXE walks her unseen and unheard, so the cell is all that shows.
+func TestHiddenFridLandsAtOnce(t *testing.T) {
+	const src = "MovieName Test.mv;\nTotalFrames 1;\n" +
+		"Frame 0,1;\nDelay 90;\nAproach Frid, stb, 0,0;\nEnd;"
+	for _, hidden := range []bool{true, false} {
+		g, _ := actGame(scena0(), src, map[string][2]int{"stb": {2, 0}}, "Roby")
+		g.fridCell = [2]int{0, 0}
+		g.fridHidden = hidden
+		walkableCycles(g)
+
+		if !g.startObjectAction("stb") {
+			t.Fatal("startObjectAction = false, want the action armed")
+		}
+		g.updateAction(0)
+		if hidden {
+			if g.fridCell != [2]int{2, 0} || len(g.fridPath) != 0 {
+				t.Errorf("hidden: fridCell %v path %v, want landed on (2,0)",
+					g.fridCell, g.fridPath)
+			}
+		} else if len(g.fridPath) == 0 {
+			t.Error("shown: Friday must walk over, not land")
+		}
+	}
+}
+
+// A HideChar can land while Friday is already walking (ROBT3STB hides her
+// mid-film). The rest of the walk still moves her, but without its sounds.
+func TestHiddenFridWalksSilently(t *testing.T) {
+	g, _ := actGame(scena0(), "", nil, "Roby")
+	g.res = soundRes{}
+	g.sc = scena0()
+	fa := &fakeAudio{}
+	g.audio = fa
+	step := types.Command{Kw: "Sound", Args: []string{"frstep", "6"}}
+	g.cycleCache["FG_56"] = fakeCycle(step)
+	g.cycleCache["FG_66"] = fakeCycle(stepX("Frid", 1), step)
+	g.cycleCache["FG_65"] = fakeCycle(stepX("Frid", 1), step)
+	g.fridCell = [2]int{0, 0}
+	g.fridWalkTo(2, 0)
+	if len(g.fridPath) == 0 {
+		t.Fatal("Friday must be walking")
+	}
+	fa.played = nil
+	g.fridHidden = true
+	for i := 0; i < 100 && len(g.fridPath) > 0; i++ {
+		g.updateFridWalk(0.09)
+	}
+	if g.fridCell != [2]int{2, 0} {
+		t.Errorf("fridCell = %v, want the goal (2,0)", g.fridCell)
+	}
+	if len(fa.played) != 0 {
+		t.Errorf("a hidden walker played %v, want silence", fa.played)
 	}
 }
 

@@ -111,13 +111,18 @@ func (g *Game) fridEffect(kw string, args []string) bool {
 		}
 	case "aproach", "approach":
 		// Friday walks to the target with his own four-direction cycles;
-		// scripts, not the player, decide where he goes.
+		// scripts, not the player, decide where he goes. Hidden, she lands
+		// there at once (see landFrid).
+		walk := g.fridWalkTo
+		if g.fridHidden {
+			walk = g.landFrid
+		}
 		switch len(args) {
 		case 3:
-			g.fridWalkTo(atoiArg(args[1]), atoiArg(args[2]))
+			walk(atoiArg(args[1]), atoiArg(args[2]))
 		case 4:
 			if cx, cy, ok := g.objCell(args[1]); ok {
-				g.fridWalkTo(cx+atoiArg(args[2]), cy+atoiArg(args[3]))
+				walk(cx+atoiArg(args[2]), cy+atoiArg(args[3]))
 			}
 		}
 	case "hidechar":

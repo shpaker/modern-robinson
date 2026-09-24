@@ -182,15 +182,31 @@ func (g *Game) updateFridWalk(dt float64) {
 	if !g.fridWalk.walking() {
 		return
 	}
-	g.applyWalkEvents(g.fridWalk.advance(dt))
+	g.applyWalkEvents(g.muteHidden(g.fridWalk.advance(dt)))
 	for g.fridWalk.done {
 		evs := g.nextCycle(&g.fridWalk)
 		if !g.fridWalk.walking() {
 			g.fridPath = nil
 			break
 		}
-		g.applyWalkEvents(evs)
+		g.applyWalkEvents(g.muteHidden(evs))
 	}
+}
+
+// muteHidden drops the Sound and Text of Friday's cycles while she is hidden —
+// a HideChar can land mid-walk (SCENA6's ROBT3STB) — and keeps the steps that
+// move her. ROBY.EXE filters a hidden character's frame events the same way.
+func (g *Game) muteHidden(evs []types.Command) []types.Command {
+	if !g.fridHidden {
+		return evs
+	}
+	out := evs[:0:0]
+	for _, ev := range evs {
+		if !presentational(strings.ToLower(ev.Kw)) {
+			out = append(out, ev)
+		}
+	}
+	return out
 }
 
 // fridWalkTo sends Friday walking to a cell (scripts move him, he has no
