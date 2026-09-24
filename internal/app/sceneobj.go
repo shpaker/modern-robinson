@@ -94,7 +94,9 @@ func endsScript(fs *types.FrameScript) bool {
 
 // loadSceneObjects builds the live objects for a scene's ObjectList, skipping
 // any the quest state records as taken plus any BEGIN.BGI marks as initially
-// hidden (they wait for a CreateObject).
+// hidden (they wait for a CreateObject). An object a CreateObject placed is
+// built at that cell, in its own ObjectList slot: the engine writes the cell
+// into the object's entry (0x41e9a0), so the move outlives the visit.
 func loadSceneObjects(
 	res interfaces.IResources,
 	pal types.Palette,
@@ -103,6 +105,7 @@ func loadSceneObjects(
 	objects map[string]*types.SceneObject,
 	fsByName map[string][]byte,
 	gone func(obj string) bool,
+	spawnAt func(obj string) (types.Spawn, bool),
 ) []*sceneObj {
 	zper := sc.ZPerGrid
 	if zper == 0 {
@@ -118,7 +121,9 @@ func loadSceneObjects(
 		if gone(ref.Name) {
 			continue
 		}
-		if v, ok := initial[strings.ToLower(ref.Name)]; ok && !v {
+		if sp, ok := spawnAt(ref.Name); ok {
+			ref.GX, ref.GY = sp.GX, sp.GY
+		} else if v, ok := initial[strings.ToLower(ref.Name)]; ok && !v {
 			continue // hidden at game start until a CreateObject
 		}
 		if inst := buildSceneObj(res, pal, parse, fsByName, zper,

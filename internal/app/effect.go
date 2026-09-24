@@ -166,13 +166,17 @@ func (g *Game) createObject(args []string) {
 	}
 }
 
-// spawnObject builds one live object at a cell and appends it to the scene,
-// loading its .OB from the container if not already parsed. It is idempotent:
-// an object already live is not duplicated.
+// spawnObject places an object at a cell the way the engine's CreateObject
+// does (0x41e9a0): the object keeps its slot in the scene, takes the new cell
+// and starts its FonScript over, so one already on stage moves instead of
+// being duplicated. An object the scene holds no slot for is appended, its .OB
+// loaded from the container if not already parsed.
 func (g *Game) spawnObject(obj string, gx, gy int) {
-	for _, s := range g.sceneObjs {
-		if strings.EqualFold(s.ref.Name, obj) && !s.removed {
-			return
+	slot := -1
+	for i, s := range g.sceneObjs {
+		if strings.EqualFold(s.ref.Name, obj) {
+			slot = i
+			break
 		}
 	}
 	ob := g.objects[strings.ToLower(obj)]
@@ -182,12 +186,24 @@ func (g *Game) spawnObject(obj string, gx, gy int) {
 			g.objects[strings.ToLower(ob.Name)] = ob
 		}
 	}
-	ref := types.ObjectRef{Name: obj, GX: gx, GY: gy}
-	if inst := buildSceneObj(g.res, g.pal, g.parseFS, g.fsByName, g.zper,
-		ref, ob); inst != nil {
-		g.sceneObjs = append(g.sceneObjs, inst)
-		g.setObjectBlocking(inst, false) // it brings its walls along
+	ref := types.ObjectRef{Name: obj}
+	if slot >= 0 {
+		ref = g.sceneObjs[slot].ref
 	}
+	ref.GX, ref.GY = gx, gy
+	inst := buildSceneObj(g.res, g.pal, g.parseFS, g.fsByName, g.zper, ref, ob)
+	if inst == nil {
+		return
+	}
+	if slot < 0 {
+		g.sceneObjs = append(g.sceneObjs, inst)
+	} else {
+		if old := g.sceneObjs[slot]; !old.removed {
+			g.setObjectBlocking(old, true) // its walls leave the old cell
+		}
+		g.sceneObjs[slot] = inst
+	}
+	g.setObjectBlocking(inst, false) // it brings its walls along
 }
 
 // delObject removes an object from a scene, persisting the removal. Form:

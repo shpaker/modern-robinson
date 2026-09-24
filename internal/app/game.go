@@ -320,9 +320,13 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	g.charHidden = isIntroScene(name)
 	g.fsByName = fonScripts(c)
 	g.sceneObjs = loadSceneObjects(g.res, g.pal, g.parseFS, g.sc, g.objects,
-		g.fsByName, func(obj string) bool { return g.gs.IsGone(name, obj) })
+		g.fsByName,
+		func(obj string) bool { return g.gs.IsGone(name, obj) },
+		func(obj string) (types.Spawn, bool) { return g.gs.SpawnAt(name, obj) })
 	for _, sp := range g.gs.Spawns(name) {
-		g.spawnObject(sp.Obj, sp.GX, sp.GY)
+		if !g.objPresent(sp.Obj) { // created, but not named by the ObjectList
+			g.spawnObject(sp.Obj, sp.GX, sp.GY)
+		}
 	}
 	g.applyObjectBlocking()
 	for _, v := range g.gs.Verts(name) {
@@ -800,18 +804,19 @@ func (g *Game) edgeExit(mx int) *types.Exit {
 	const margin = 40
 	maxCam := maxInt(0, g.w-ViewW)
 	if mx < margin && g.camX == 0 && g.exitL.OK &&
-		g.exitObjPresent(exitKey(true)) {
+		g.objPresent(exitKey(true)) {
 		return &g.exitL
 	}
 	if mx > ViewW-margin && g.camX >= maxCam && g.exitR.OK &&
-		g.exitObjPresent(exitKey(false)) {
+		g.objPresent(exitKey(false)) {
 		return &g.exitR
 	}
 	return nil
 }
 
-// exitObjPresent reports whether an exit arrow object is currently on stage.
-func (g *Game) exitObjPresent(name string) bool {
+// objPresent reports whether an object is currently on stage (an exit arrow,
+// an object a spawn record would otherwise build twice).
+func (g *Game) objPresent(name string) bool {
 	for _, s := range g.sceneObjs {
 		if strings.EqualFold(s.ref.Name, name) && !s.removed {
 			return true
