@@ -25,6 +25,22 @@ func TestStepDir(t *testing.T) {
 	}
 }
 
+// StepDelta undoes StepDir for every numpad code, and 5 stays put.
+func TestStepDeltaInvertsStepDir(t *testing.T) {
+	for d := 1; d <= 9; d++ {
+		got := StepDir(
+			[2]int{3, 3},
+			[2]int{3 + StepDelta(d)[0], 3 + StepDelta(d)[1]},
+		)
+		if got != d {
+			t.Errorf("StepDir(StepDelta(%d)) = %d", d, got)
+		}
+	}
+	if StepDelta(0) != ([2]int{}) {
+		t.Errorf("StepDelta(0) = %v, want no offset", StepDelta(0))
+	}
+}
+
 func TestWalkCyclesStraightLine(t *testing.T) {
 	// Three steps east: accelerate, two full steps, brake.
 	got := WalkCycles([2]int{0, 0}, [][2]int{{1, 0}, {2, 0}, {3, 0}}, false)

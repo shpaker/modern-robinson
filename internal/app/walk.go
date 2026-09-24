@@ -109,6 +109,60 @@ func (g *Game) nextCycle(w *walker) []types.Command {
 	return g.enter(w)
 }
 
+// rerouteWalk hands a walk in progress a new goal the way ROBY.EXE's WalkTo
+// does (0x40f7c7..0x40fbff): the cycle on screen is never cut, because its
+// frames carry the motion and restarting mid-step would snap the figure back to
+// the cell anchor. The cycle already commits to its second digit — the step
+// the next cycle takes at frame 0 — so the route is planned from that cell and
+// chained on through the turn cycle; a brake plays out first and the new route
+// starts from standing. A click on the hero's own cell only finishes the
+// committed step. It returns the cells still to be stepped onto and whether the
+// walk changed: the goal it already has, or no path at all, leaves it be.
+func (g *Game) rerouteWalk(
+	w *walker,
+	cell, goal [2]int,
+	route [][2]int,
+	plan func(from, to [2]int) [][2]int,
+) ([][2]int, bool) {
+	if n := len(route); n > 0 && route[n-1] == goal {
+		return route, false
+	}
+	arrows := w.prefix == "FG"
+	head := w.cycles[: w.idx+1 : w.idx+1]
+	next := int(w.cycles[w.idx][1] - '0')
+	if next == 5 { // braking: the new route starts once he stands
+		p := plan(cell, goal)
+		if len(p) < 2 {
+			return route, false
+		}
+		w.cycles = append(head, use_cases.WalkCycles(cell, p[1:], arrows)...)
+		return p[1:], true
+	}
+	d := use_cases.StepDelta(next)
+	committed := [2]int{cell[0] + d[0], cell[1] + d[1]}
+	var rest [][2]int
+	if goal != cell {
+		p := plan(committed, goal)
+		if p == nil {
+			return route, false
+		}
+		rest = p[1:]
+	}
+	r := append([][2]int{committed}, rest...)
+	// WalkCycles opens with the 5·next start the hero is already past.
+	w.cycles = append(head, use_cases.WalkCycles(cell, r, arrows)[1:]...)
+	return r, true
+}
+
+// rerouteRoby gives the walking hero a new goal (see rerouteWalk).
+func (g *Game) rerouteRoby(goal [2]int) {
+	if r, ok := g.rerouteWalk(
+		&g.roby, g.cell, goal, g.path, g.grid.Path,
+	); ok {
+		g.path = r
+	}
+}
+
 // walking reports whether a cycle is still playing.
 func (w *walker) walking() bool { return w.cur != nil && !w.done }
 
@@ -219,6 +273,15 @@ func (g *Game) fridWalkTo(gx, gy int) {
 		return
 	}
 	// Friday only has the four arrow cycles, so his route must avoid diagonals.
+	if g.fridWalk.walking() {
+		if r, ok := g.rerouteWalk(
+			&g.fridWalk, g.fridCell, [2]int{tx, ty}, g.fridPath,
+			g.grid.PathStraight,
+		); ok {
+			g.fridPath = r
+		}
+		return
+	}
 	p := g.grid.PathStraight(g.fridCell, [2]int{tx, ty})
 	if len(p) < 2 {
 		g.fridCell = [2]int{tx, ty}

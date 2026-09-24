@@ -36,6 +36,30 @@ func StepDir(from, to [2]int) int {
 	return 5
 }
 
+// StepDelta is the inverse of StepDir: the cell offset of one step in numpad
+// direction d, and no offset for 5 (standing) or anything else.
+func StepDelta(d int) [2]int {
+	switch d {
+	case 1:
+		return [2]int{-1, 1}
+	case 2:
+		return [2]int{0, 1}
+	case 3:
+		return [2]int{1, 1}
+	case 4:
+		return [2]int{-1, 0}
+	case 6:
+		return [2]int{1, 0}
+	case 7:
+		return [2]int{-1, -1}
+	case 8:
+		return [2]int{0, -1}
+	case 9:
+		return [2]int{1, -1}
+	}
+	return [2]int{}
+}
+
 func sign(v int) int {
 	switch {
 	case v > 0:

@@ -492,6 +492,10 @@ func (g *Game) click(mx, my int) {
 	}
 	cx, cy := g.grid.ToCell(wx, wy)
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
+		if g.roby.walking() {
+			g.rerouteRoby([2]int{tx, ty}) // under way: never cut the step
+			return
+		}
 		if p := g.grid.Path(g.cell, [2]int{tx, ty}); len(p) > 1 {
 			if evs, ok := g.startWalk(&g.roby, g.cell, p[1:]); ok {
 				g.path = p[1:]
