@@ -186,6 +186,7 @@ func (g *Game) spawnObject(obj string, gx, gy int) {
 	if inst := buildSceneObj(g.res, g.pal, g.parser, g.fsByName, g.zper,
 		ref, ob); inst != nil {
 		g.sceneObjs = append(g.sceneObjs, inst)
+		g.setObjectBlocking(inst, false) // it brings its walls along
 	}
 }
 

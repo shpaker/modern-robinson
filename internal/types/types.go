@@ -66,7 +66,12 @@ type Scene struct {
 	ScrollPar  [2]int
 	ScrollDesc [2]int
 	ClosedVert [][2]int
-	Objects    []ObjectRef
+	// ClosedDir forbids single walk steps without closing either cell: each
+	// entry is gx,gy,d — leaving cell (gx,gy) in numpad direction d. SCENA1
+	// fences the oak this way, so the walk into the back row goes round by
+	// the right edge instead of cutting diagonally across the trunk.
+	ClosedDir [][3]int
+	Objects   []ObjectRef
 	// SoundVars resolves a Sound event's name to its wav; on the duplicate names
 	// an ambient pool uses, the last entry wins (see Sounds for the full list).
 	SoundVars map[string][2]string // name -> {wav, channel}
@@ -113,6 +118,10 @@ type SceneObject struct {
 	// ClosedVert are the cells the object blocks, relative to its own cell:
 	// the crab, the bridge logs and the finished hut all stand in the way.
 	ClosedVert [][2]int
+	// ClosedDir are the steps the object fences, relative to its own cell:
+	// dx,dy,d triples like the scene's own ClosedDir. Barrels and stone piles
+	// close the diagonals across their corners this way.
+	ClosedDir [][3]int
 }
 
 // Command is one event line inside a frame (e.g. Sound, Text, Set, GoScene).

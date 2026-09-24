@@ -376,6 +376,9 @@ func (g *Game) hideObject(name string) {
 	name = strings.ToLower(name)
 	for _, s := range g.sceneObjs {
 		if strings.ToLower(s.ref.Name) == name {
+			if !s.removed {
+				g.setObjectBlocking(s, true)
+			}
 			s.visible = false
 			s.removed = true
 			s.player = nil

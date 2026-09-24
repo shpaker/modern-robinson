@@ -80,6 +80,8 @@ type IGrid interface {
 	Valid(gx, gy int) bool
 	Blocked(gx, gy int) bool
 	SetVert(gx, gy int, open bool)
+	// SetDir toggles a single step fence: leaving (gx,gy) in numpad direction d.
+	SetDir(gx, gy, d int, open bool)
 	NearestFree(gx, gy int) (int, int, bool)
 	Path(start, goal [2]int) [][2]int
 	// PathStraight avoids diagonals, for ArrowGoing characters.
