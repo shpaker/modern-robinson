@@ -19,31 +19,43 @@ func TestExitKeyNamesTheEdgeObjects(t *testing.T) {
 	}
 }
 
-// An edge only leads out while its arrow object is on stage: the quest opens
-// some paths later with a CreateObject (SCENA2's goleft appears after the
-// banana step), and jumping through a gated edge used to skip the departure
-// script and play the island-discovery cutscene on the third scene.
-func TestEdgeExitNeedsTheArrowObject(t *testing.T) {
-	g := &Game{w: ViewW} // no wider than the view: both edges qualify
+// Only an exit's own zone leads out, as in the original: the screen edge
+// beside it is ground like any other, walked to under the plain cursor. The
+// quest keeps some exits shut this way — SCENA2's goleft is not on stage until
+// the bananas in SCENA3 are eaten — and an edge that led out anyway skipped
+// the departure script and its Island bookkeeping.
+func TestOnlyTheExitZoneLeadsOut(t *testing.T) {
+	g, rec := actGame(scena0(), poolScript,
+		map[string][2]int{"goleft": {0, 1}}, "Roby")
+	g.sceneC.(*fsPack).files["ROHANGOL.FS"] = []byte(poolScript)
+	g.audio = &fakeAudio{}
+	g.cell = [2]int{2, 1}
 	g.exitL = types.Exit{Scene: "SCENA7", Entry: "Roin6", OK: true}
-	g.exitR = types.Exit{Scene: "SCENA1", Entry: "Roin4", OK: true}
+	cx, cy := g.grid.Corner(0, 1) // x=15: the zone starts inside the screen
+	g.hotspots = []hotspot{{
+		key:  "goleft",
+		rect: image.Rect(cx, 0, cx+51, PlayH),
+		ob:   &types.SceneObject{Name: "gototem", Cursor: 1},
+	}}
 
-	if e := g.edgeExit(0); e != nil {
-		t.Errorf("left edge with no goleft on stage = %+v, want nil", e)
+	edge := [2]int{cx - 10, cy + 10} // the screen edge, left of the zone
+	if c := g.cursorType(edge[0], edge[1]); c != cursorPointer {
+		t.Errorf("cursor at the edge = %d, want the plain pointer", c)
 	}
-	if e := g.edgeExit(ViewW - 1); e != nil {
-		t.Errorf("right edge with no gorght on stage = %+v, want nil", e)
+	g.click(edge[0], edge[1])
+	if g.act != nil || g.pending != nil {
+		t.Fatal("a click beside the exit zone left the scene")
+	}
+	if rec.paths == 0 {
+		t.Error("a click beside the exit zone must walk")
 	}
 
-	g.sceneObjs = []*sceneObj{
-		{ref: types.ObjectRef{Name: "goleft"}},
-		{ref: types.ObjectRef{Name: "gorght"}, removed: true},
+	if c := g.cursorType(cx+20, cy+10); c != 1 {
+		t.Errorf("cursor over the zone = %d, want the left arrow", c)
 	}
-	if e := g.edgeExit(0); e != &g.exitL {
-		t.Errorf("left edge with goleft on stage = %+v, want exitL", e)
-	}
-	if e := g.edgeExit(ViewW - 1); e != nil {
-		t.Errorf("right edge with gorght removed = %+v, want nil", e)
+	g.click(cx+20, cy+10)
+	if g.act == nil {
+		t.Error("a click on the exit zone must start its departure script")
 	}
 }
 

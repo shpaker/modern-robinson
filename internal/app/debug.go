@@ -298,9 +298,8 @@ type clickPreview struct {
 }
 
 // previewClick follows click()'s order: a movie takes any click as a skip, the
-// bar lives on its own, SetMouse OFF deafens the scene, then a zone, an edge
-// exit, the acting character's own cell, and last a walk to the nearest free
-// cell.
+// bar lives on its own, SetMouse OFF deafens the scene, then a zone, the
+// acting character's own cell, and last a walk to the nearest free cell.
 func (g *Game) previewClick(mx, my int) clickPreview {
 	switch {
 	case g.act != nil:
@@ -315,12 +314,6 @@ func (g *Game) previewClick(mx, my int) clickPreview {
 		what := fmt.Sprintf("%s z=%d -> %s", hs.key, hs.z,
 			g.previewScript(actionName(g.gs.ActiveChar, g.gs.Active, hs.key)))
 		return clickPreview{what: what, hot: hs}
-	}
-	if e := g.edgeExit(mx); e != nil {
-		key := exitKey(e == &g.exitL)
-		return clickPreview{what: fmt.Sprintf("edge %s -> %s (%s)", key,
-			g.previewScript(actionName(g.gs.ActiveChar, g.gs.Active, key)),
-			e.Scene)}
 	}
 	cx, cy := g.grid.ToCell(wx, wy)
 	p := clickPreview{cell: [2]int{cx, cy}}
