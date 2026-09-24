@@ -243,10 +243,14 @@ func TestSetActiveSplitsCharacterFromItem(t *testing.T) {
 	st.ActiveChar, st.Active = "Roby", "hand"
 	var in use_cases.Interpreter
 
+	rev := st.InvRev
 	execOut(in, []types.Command{cmd("SetActive", "Frid")}, st)
 	if st.ActiveChar != "Frid" || st.Active != "hand" {
 		t.Fatalf("character switch touched the hand: %q %q",
 			st.ActiveChar, st.Active)
+	}
+	if st.InvRev != rev+1 {
+		t.Fatal("handing over control rebuilds the bar (0x41be2a)")
 	}
 	execOut(in, []types.Command{cmd("SetActive", "confr")}, st)
 	if st.ActiveChar != "Frid" || st.Active != "confr" {

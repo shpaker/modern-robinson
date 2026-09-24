@@ -24,6 +24,10 @@ type GameState struct {
 	// character has his own items (hand/handfr, condom/confr), so the two must
 	// be tracked apart or Friday can never hold anything.
 	ActiveChar string
+	// InvRev counts the bar rebuilds: an item added or removed, or control
+	// handed to the other character. The engine scrolls the rebuilt bar back to
+	// its first slot (0x4044e0), so the bar watches this. Never saved.
+	InvRev int
 
 	gone    map[string]map[string]bool // scene -> object -> removed (DelObject)
 	spawned map[string][]Spawn         // scene -> objects added (CreateObject)
@@ -100,6 +104,7 @@ func (g *GameState) AddItem(item string) {
 		return
 	}
 	g.Inventory = append(g.Inventory, item)
+	g.InvRev++
 }
 
 // DelItem removes an item if present. Removing the item in hand selects the
@@ -109,6 +114,7 @@ func (g *GameState) DelItem(item string) {
 	for i, it := range g.Inventory {
 		if strings.ToLower(it) == item {
 			g.Inventory = append(g.Inventory[:i], g.Inventory[i+1:]...)
+			g.InvRev++
 			if strings.ToLower(g.Active) == item {
 				g.Active = "hand"
 				if len(g.Inventory) > 0 {

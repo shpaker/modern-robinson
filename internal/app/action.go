@@ -305,7 +305,7 @@ func (g *Game) enqueueAction(ap *actionPlay, cmds []types.Command, skip bool) {
 	if len(cmds) == 0 {
 		return
 	}
-	out, rest := g.interp.Exec(cmds, g.gs)
+	out, rest := g.exec(cmds)
 	g.mgResume = rest
 	ap.queue = append(ap.queue, out...)
 	g.playActionQueue(ap, skip)

@@ -202,3 +202,18 @@ func TestDiskButtonOpensTheMainMenu(t *testing.T) {
 		t.Fatalf("mode = %d, want modeOptions (%d)", g.mode, modeOptions)
 	}
 }
+
+// The engine rebuilds the bar after every AddItem/DeleteItem and scrolls it
+// back to the first slot (0x4044e0); a script that leaves the inventory alone
+// keeps the player's scroll.
+func TestScriptInventoryChangeScrollsTheBarHome(t *testing.T) {
+	g := &Game{gs: types.NewGameState(), invScroll: 2}
+	g.exec([]types.Command{{Kw: "SetVar", Args: []string{"CrabNeed", "1"}}})
+	if g.invScroll != 2 {
+		t.Fatalf("invScroll = %d, a SetVar must not move the bar", g.invScroll)
+	}
+	g.exec([]types.Command{{Kw: "AddItem", Args: []string{"hat"}}})
+	if g.invScroll != 0 {
+		t.Fatalf("invScroll = %d after AddItem, want 0", g.invScroll)
+	}
+}

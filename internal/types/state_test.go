@@ -140,3 +140,22 @@ func TestRestoreForcesTheMouseOn(t *testing.T) {
 		t.Error("an old save without the key must not come back deaf")
 	}
 }
+
+// InvRev ticks on every real change to the bar's list, so the bar can scroll
+// back to its first slot the way the engine's rebuild does; a no-op leaves it.
+func TestInvRevCountsInventoryChanges(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("hat")
+	rev := st.InvRev
+	st.AddItem("HAT")   // already held
+	st.DelItem("stick") // not held
+	if st.InvRev != rev {
+		t.Fatalf("no-ops moved InvRev %d -> %d", rev, st.InvRev)
+	}
+	st.DelItem("hat")
+	st.AddItem("crb")
+	if st.InvRev != rev+2 {
+		t.Fatalf("InvRev = %d, want %d", st.InvRev, rev+2)
+	}
+}

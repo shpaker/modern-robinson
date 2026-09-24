@@ -15,7 +15,7 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	if len(cmds) == 0 {
 		return
 	}
-	out, rest := g.interp.Exec(cmds, g.gs)
+	out, rest := g.exec(cmds)
 	// A StartGame in the batch suspends the script: the tail is re-judged once
 	// the minigame has written its result, so the success branch can actually be
 	// taken. Hand it over before enacting anything, because StartGame runs
@@ -25,6 +25,21 @@ func (g *Game) applyEvents(cmds []types.Command) {
 	for _, c := range out {
 		g.applyEffect(c)
 	}
+}
+
+// exec runs commands through the quest interpreter. When they rebuilt the bar
+// (an item came or went, control changed hands) the inventory window goes back
+// to its first slot, as the engine's rebuild does (0x4044e0 zeroes the
+// scroll): a delete made while scrolled no longer leaves a gap.
+func (g *Game) exec(
+	cmds []types.Command,
+) ([]types.Command, []types.Command) {
+	rev := g.gs.InvRev
+	out, rest := g.interp.Exec(cmds, g.gs)
+	if g.gs.InvRev != rev {
+		g.invScroll = 0
+	}
+	return out, rest
 }
 
 // presentational reports whether a command only speaks to the player, carrying
