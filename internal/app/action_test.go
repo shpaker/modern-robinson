@@ -91,28 +91,28 @@ func TestScriptTokTruncates(t *testing.T) {
 	}
 }
 
-// The candidate list is the item's own script first, then the bare-handed
-// default, so a tool the object does not answer to still gets the plain
-// reaction. An empty hand yields one candidate only — HAN *is* the default, and
-// asking for it twice would just waste a container lookup.
-func TestActionNames(t *testing.T) {
+// The engine composes exactly one script name per click (0x41e320): character
+// prefix + item token + object token. There is no bare-handed fallback — the
+// scenes author a script per item (SCENA0 alone ships RO<item>GOL for all of
+// them), and an item the object does not answer to gets silence, as in the
+// original.
+func TestActionName(t *testing.T) {
 	cases := []struct {
 		char, active, obj string
-		want              []string
+		want              string
 	}{
-		{"Roby", "hand", "goleft", []string{"ROHANGOL"}},
-		{"Roby", "axe", "wood", []string{"ROAXEWOO", "ROHANWOO"}},
-		{"Frid", "confr", "goleft", []string{"FRCONGOL", "FRHANGOL"}},
-		{"Frid", "handfr", "goleft", []string{"FRHANGOL"}},
+		{"Roby", "hand", "goleft", "ROHANGOL"},
+		{"Roby", "axe", "wood", "ROAXEWOO"},
+		{"Frid", "confr", "goleft", "FRCONGOL"},
+		{"Frid", "handfr", "goleft", "FRHANGOL"},
 		// Only Frid switches the prefix; anything else is the hero.
-		{"", "hand", "goleft", []string{"ROHANGOL"}},
-		{"frid", "hand", "goleft", []string{"FRHANGOL"}},
+		{"", "hand", "goleft", "ROHANGOL"},
+		{"frid", "hand", "goleft", "FRHANGOL"},
 	}
 	for _, c := range cases {
-		got := actionNames(c.char, c.active, c.obj)
-		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+		if got := actionName(c.char, c.active, c.obj); got != c.want {
 			t.Errorf(
-				"actionNames(%q,%q,%q) = %v, want %v",
+				"actionName(%q,%q,%q) = %q, want %q",
 				c.char,
 				c.active,
 				c.obj,
@@ -120,6 +120,17 @@ func TestActionNames(t *testing.T) {
 				c.want,
 			)
 		}
+	}
+}
+
+// A self action is the five-letter form: character prefix + item token, the
+// name a click on the character's own cell composes (engine 0x40f414).
+func TestSelfActionName(t *testing.T) {
+	if got := selfActionName("Roby", "hat"); got != "ROHAT" {
+		t.Errorf("selfActionName(Roby, hat) = %q, want ROHAT", got)
+	}
+	if got := selfActionName("Frid", "confr"); got != "FRCON" {
+		t.Errorf("selfActionName(Frid, confr) = %q, want FRCON", got)
 	}
 }
 
@@ -134,16 +145,17 @@ func TestActionScriptPicksTheItemScript(t *testing.T) {
 	}
 }
 
-// The bare-handed script is the fallback, not a second choice tried in
-// parallel: Friday holding his rope on an exit that only has FRHANGOL must
-// still leave the scene rather than do nothing.
-func TestActionScriptFallsBackToBareHand(t *testing.T) {
+// An item the object has no script for stays silent — the engine never falls
+// back to the bare-handed script (its release build even stubs out the "Can't
+// find script" log). Friday holding her rope on an exit that only ships
+// FRHANGOL goes nowhere until the player picks the hand.
+func TestActionScriptNeverFallsBackToBareHand(t *testing.T) {
 	pack := newPack("FRHANGOL.FS")
 	name, _, ok := gameWith(pack, "Frid", "confr").actionScript("goleft")
-	if !ok || name != "FRHANGOL" {
-		t.Fatalf("name = %q ok = %v, want FRHANGOL", name, ok)
+	if ok {
+		t.Fatalf("name = %q, want no script for the held item", name)
 	}
-	want := []string{"FRCONGOL.FS", "FRHANGOL.FS"}
+	want := []string{"FRCONGOL.FS"}
 	if strings.Join(pack.asked, ",") != strings.Join(want, ",") {
 		t.Fatalf("lookups = %v, want %v", pack.asked, want)
 	}

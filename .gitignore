@@ -1,4 +1,5 @@
-# proprietary game data (players supply their own disc)
+# proprietary game data: never in git. Players supply their own copy; the web
+# build downloads a set tools/packweb packs from it (see docs/11-web-build.md).
 /Noviy_Robinson_ISO.rar
 *.iso
 *.rar

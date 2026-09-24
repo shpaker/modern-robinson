@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Новый Робинзон</title>
+<!-- Иконка игры с оригинального диска (START.ICO), её достаёт tools/webicon. -->
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" type="image/png" href="icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="boot">
+  <div id="boot-card">
+    <h1>Новый Робинзон</h1>
+    <p id="boot-sub">Квест «Никиты», 1999 — переигранный на Go и Ebitengine</p>
+
+    <p id="boot-status">Загружаю движок…</p>
+    <div id="boot-track"><div id="boot-bar"></div></div>
+    <p id="boot-pct"></p>
+
+    <button id="boot-play" type="button">Играть</button>
+    <pre id="boot-error"></pre>
+
+    <p id="boot-hint">
+      Первый запуск скачивает ресурсы игры целиком — около 250 МБ.
+      Браузер оставит их в кеше, дальше игра стартует сразу.
+    </p>
+  </div>
+</div>
+
+<!-- Поверх игры, в углу. Контейнер кликов не ловит, ловят только сами ссылки:
+     это точка-и-клик, и перехваченный клик стоил бы игроку хода. -->
+<footer id="links">
+  <a href="https://github.com/shpaker/modern-robinson" target="_blank" rel="noopener">GitHub</a>
+  <span>·</span>
+  <a href="https://t.me/g33ks" target="_blank" rel="noopener">Telegram</a>
+</footer>
+
+<script src="wasm_exec.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var statusEl = document.getElementById("boot-status");
+  var errEl = document.getElementById("boot-error");
+
+  function fail(what, err) {
+    statusEl.textContent = what;
+    errEl.textContent = String(err && err.message ? err.message : err);
+    errEl.style.display = "block";
+    console.error(what, err);
+  }
+
+  // F5 and F1 are the game's quicksave and debug overlay. Ebitengine sees the
+  // key either way; this only stops the browser from reloading the page or
+  // opening its help. Capture phase so it lands before anything else.
+  addEventListener("keydown", function (e) {
+    if (e.key === "F1" || e.key === "F5" || e.key === "F9") e.preventDefault();
+  }, { capture: true });
+
+  if (!window.WebAssembly) {
+    fail("Браузер не поддерживает WebAssembly", "WebAssembly is unavailable");
+    return;
+  }
+
+  // Поднять service worker до старта игры. Он кеширует 250 МБ ресурсов в Cache
+  // Storage — обычный HTTP-кеш для этого не годится (см. sw.js). Дождаться
+  // нужно именно контроля над страницей: пока controller не назначен, запросы
+  // из wasm пройдут мимо worker-а и кеш останется пустым.
+  function readyServiceWorker() {
+    if (!("serviceWorker" in navigator)) return Promise.resolve();
+    return navigator.serviceWorker.register("sw.js")
+      .then(function () { return navigator.serviceWorker.ready; })
+      .then(function () {
+        if (navigator.serviceWorker.controller) return;
+        return new Promise(function (resolve) {
+          navigator.serviceWorker.addEventListener(
+            "controllerchange", resolve, { once: true });
+          // Ждать вечно нельзя: без worker-а игра просто будет качать ресурсы
+          // заново каждый раз — медленно, но рабочо.
+          setTimeout(resolve, 3000);
+        });
+      })
+      .then(function () {
+        // Постоянное хранилище: без него браузер вправе вычистить кеш при
+        // нехватке места. Отказ не страшен, кеш просто станет вытесняемым.
+        if (navigator.storage && navigator.storage.persist) {
+          return navigator.storage.persist().catch(function () {});
+        }
+      })
+      .catch(function (err) {
+        console.warn("service worker недоступен, кеша ресурсов не будет", err);
+      });
+  }
+
+  var go = new Go();
+
+  // instantiateStreaming needs the server to send application/wasm; fall back
+  // to buffering the module when it does not.
+  function instantiate() {
+    var resp = fetch("robinson.wasm");
+    if (WebAssembly.instantiateStreaming) {
+      return WebAssembly.instantiateStreaming(resp, go.importObject)
+        .catch(function () {
+          return resp.then(function (r) { return r.arrayBuffer(); })
+            .then(function (b) { return WebAssembly.instantiate(b, go.importObject); });
+        });
+    }
+    return resp.then(function (r) { return r.arrayBuffer(); })
+      .then(function (b) { return WebAssembly.instantiate(b, go.importObject); });
+  }
+
+  readyServiceWorker()
+    .then(instantiate)
+    .then(function (result) { return go.run(result.instance); })
+    .catch(function (err) { fail("Не удалось запустить движок", err); });
+})();
+</script>
+
+</body>
+</html>

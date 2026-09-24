@@ -229,6 +229,9 @@ func Restore(sd SaveData) *GameState {
 	if sd.UI != nil {
 		g.UI = sd.UI
 	}
+	// The engine forces the mouse back on at the end of every load (0x4213cf),
+	// so a save taken mid-script can never come back deaf.
+	g.UI["mouse"] = true
 	for sc, objs := range sd.Gone {
 		for _, o := range objs {
 			g.MarkGone(sc, o)

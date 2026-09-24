@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/binary"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -54,21 +52,12 @@ func TestLastEntryPastTheEndIsCutNotDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Only the sound bank is big enough to stream for real; the same container
-	// reading from a file on disk takes that path.
-	path := filepath.Join(t.TempDir(), "PACK.DAT")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	f, err := os.Open(path)
+	streamed, err := NewAt(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = f.Close() }()
-	streamed := *resident
-	streamed.data, streamed.f = nil, f
 	for name, c := range map[string]*Container{
-		"resident": resident, "streamed": &streamed,
+		"resident": resident, "streamed": streamed,
 	} {
 		got, err := c.ExtractName("PALETTE.COL")
 		if err != nil {

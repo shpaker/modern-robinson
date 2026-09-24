@@ -203,6 +203,40 @@ func TestStartEntryAppliesFirstFrame(t *testing.T) {
 	}
 }
 
+// voiceRes serves every sound as a wav whose length the engine's arithmetic
+// puts at exactly one second: 44140 bytes = the 40000-byte header allowance
+// plus 44100 (22050 Hz, 16-bit mono).
+type voiceRes struct{ interfaces.IResources }
+
+func (voiceRes) Sound(string) []byte { return make([]byte, 44140) }
+
+// parseFS retimes the frames under a voice line the way the engine does on
+// load: Sound int1b,5,2 respreads the wav's second over its two frames, and
+// the name resolves through the scene's SoundVariables.
+func TestParseFSRetimesVoicedFrames(t *testing.T) {
+	g := &Game{
+		res:    voiceRes{},
+		parser: repositories.SceneParser{},
+		sc: &types.Scene{SoundVars: map[string][2]string{
+			"int1b": {"int1b.wav", "5"},
+		}},
+	}
+	fs := g.parseFS([]byte(
+		"MovieName Int1.mv;\nTotalFrames 3;\n" +
+			"Frame 0,1;\nDelay 142;\nSound int1b,5,2;\n" +
+			"Frame 1,1;\nDelay 339;\n" +
+			"Frame 2,1;\nDelay 142;\nEnd;",
+	))
+	want := []int{500, 500, 142}
+	for i, w := range want {
+		if fs.Frames[i].Delay != w {
+			t.Fatalf(
+				"frame %d Delay = %d, want %d", i, fs.Frames[i].Delay, w,
+			)
+		}
+	}
+}
+
 // Keys that already do something else must not double as "skip", or F5 would
 // save and jump the screen at once, and Esc would open the menu over a cutscene
 // it just cut short.

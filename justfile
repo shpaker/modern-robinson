@@ -47,6 +47,70 @@ build-windows:
 
 build-all: build-macos build-linux build-windows
 
+# --- браузерная версия -------------------------------------------------------
+# Собрать оболочку в dist/web (wasm + wasm_exec.js + web/ + иконка игры)
+build-wasm dir="extracted/ROBINSON_ISO/ROBINSON":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VERSION="dev-$(date -u +%Y-%m-%dT%H:%M)"; out=dist/web; mkdir -p "$out"
+    GOOS=js GOARCH=wasm {{gocmd}} build -trimpath \
+        -ldflags "-s -w -X {{module}}/internal/app.Version=${VERSION}" \
+        -o "$out/robinson.wasm" ./cmd/wasm
+    cp "$({{gocmd}} env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
+    cp web/index.html web/style.css web/sw.js "$out/"
+    # Иконка — игровой ассет, в репозитории её нет: достаём из папки игры.
+    # Без неё сборка не падает, страница просто останется без фавикона.
+    if [ -f "{{dir}}/START.ICO" ]; then
+        {{gocmd}} run ./tools/webicon -out "$out" "{{dir}}"
+    else
+        echo "warning: нет {{dir}}/START.ICO — оболочка без фавикона" >&2
+    fi
+    # .gz рядом с файлом: хост данных отдаёт его готовым (Content-Encoding:
+    # gzip), и 24-МБ wasm уезжает семью. Жать на каждый запрос расточительно.
+    for f in "$out"/*.wasm "$out"/*.js "$out"/*.html "$out"/*.css; do
+        gzip -9 -c "$f" > "$f.gz"
+    done
+    raw=$(du -h "$out/robinson.wasm" | cut -f1)
+    gz=$(du -h "$out/robinson.wasm.gz" | cut -f1)
+    echo "Web shell -> $out (wasm $raw, по проводу $gz)"
+
+# Упаковать ресурсы игры для веба в dist/webdata/v1
+web-data dir="extracted/ROBINSON_ISO/ROBINSON" version="1":
+    {{gocmd}} run ./tools/packweb -out dist/webdata/v{{version}} \
+        -version {{version}} {{dir}}
+
+# Локальный прогон: оболочка и данные на одном порту, как в проде
+web-serve: build-wasm
+    {{gocmd}} run ./tools/webserve
+
+# Выложить всё: оболочку и ресурсы. Куда — аргументами или из окружения:
+# ROBINSON_HOST (user@host для rsync) и ROBINSON_PATH (каталог сайта).
+web-push host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_default("ROBINSON_PATH", ""): \
+    (web-push-shell host path) (web-push-data host path)
+
+# Выложить только оболочку — это делается на каждую сборку
+web-push-shell host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_default("ROBINSON_PATH", ""):
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test -n "{{host}}" -a -n "{{path}}" || { echo "задайте ROBINSON_HOST и ROBINSON_PATH"; exit 1; }
+    src="dist/web/"
+    test -f "$src/robinson.wasm" || { echo "нет $src — сначала just build-wasm"; exit 1; }
+    echo "Оболочка $(du -sh "$src" | cut -f1) -> {{host}}:{{path}}/"
+    # Без --delete: в {{path}} лежат ещё и каталоги ресурсов /vN/.
+    # Без --info=progress2: в macOS rsync — openrsync (совместимость с 2.6.9),
+    # он такой опции не знает и молча печатает usage.
+    rsync -a --partial -v "$src" "{{host}}:{{path}}/"
+
+# Выложить ресурсы игры — редкая операция, ~336 МБ
+web-push-data host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_default("ROBINSON_PATH", "") version="1":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test -n "{{host}}" -a -n "{{path}}" || { echo "задайте ROBINSON_HOST и ROBINSON_PATH"; exit 1; }
+    src="dist/webdata/v{{version}}/"
+    test -f "$src/manifest.json" || { echo "нет $src — сначала just web-data"; exit 1; }
+    echo "Ресурсы $(du -sh "$src" | cut -f1) -> {{host}}:{{path}}/v{{version}}/"
+    rsync -a --delete --partial -v "$src" "{{host}}:{{path}}/v{{version}}/"
+
 # Собрать архивы для раздачи: бинарник + README + образец настроек
 release version="dev":
     #!/usr/bin/env bash
@@ -144,7 +208,7 @@ deps:
 
 clean:
     {{gocmd}} clean
-    rm -rf {{binary_name}} _build coverage.out coverage.html
+    rm -rf {{binary_name}} _build dist coverage.out coverage.html
 
 # --- self-test через headless vmhost (без окна) ------------------------------
 # Снимок одного кадра игры (окно как в оригинале: 640x480)

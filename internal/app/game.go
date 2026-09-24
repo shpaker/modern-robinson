@@ -121,10 +121,14 @@ type Game struct {
 	optSprites map[string]*ebiten.Image
 	optHover   int
 	optDrag    int
+	btnDown    int         // slot-screen button held: 0 left, 1 right, -1 none
+	slotLit    color.Color // brightest tone of the save/load palette
+	slotShade  color.Color // and its darkest, the pair slot bevels use
 	slotHover  int
 	slotSel    int
 	slotCache  map[int]*ebiten.Image
 	slotInfo   map[int]string
+	saves      saveStore
 	thumb      *ebiten.Image
 	scratch    *ebiten.Image
 	volSound   float64
@@ -163,7 +167,7 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	}
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
 	g.optHover, g.optDrag = -1, -1
-	g.slotHover, g.slotSel = -1, -1
+	g.slotHover, g.slotSel, g.btnDown = -1, -1, -1
 	g.slotCache = map[int]*ebiten.Image{}
 	g.slotInfo = map[int]string{}
 	g.volSound, g.volMusic, g.speed = cfg.Sound, cfg.Music, cfg.Speed
@@ -315,7 +319,7 @@ func (g *Game) loadScene(name string, spawn *[2]int, entry, entryFrid string) {
 	// him. Every other scene shows him by default.
 	g.charHidden = isIntroScene(name)
 	g.fsByName = fonScripts(c)
-	g.sceneObjs = loadSceneObjects(g.res, g.pal, g.parser, g.sc, g.objects,
+	g.sceneObjs = loadSceneObjects(g.res, g.pal, g.parseFS, g.sc, g.objects,
 		g.fsByName, func(obj string) bool { return g.gs.IsGone(name, obj) })
 	for _, sp := range g.gs.Spawns(name) {
 		g.spawnObject(sp.Obj, sp.GX, sp.GY)
@@ -409,24 +413,54 @@ func (g *Game) hotspotAt(wx, wy int) *hotspot {
 	return nil
 }
 
-// playSound resolves a Sound event's name (scene SoundVar or file) and plays it.
+// soundFile resolves a Sound event's name to its wav: a scene SoundVariable
+// when one answers to it, the literal file otherwise.
+func (g *Game) soundFile(name string) string {
+	if g.sc != nil {
+		if sv, ok := g.sc.SoundVars[name]; ok {
+			return sv[0]
+		}
+	}
+	if !strings.Contains(name, ".") {
+		return name + ".wav"
+	}
+	return name
+}
+
+// playSound plays a Sound event. A third argument never trims the sound — it
+// retimes the animation under it (see parseFS), so only the name and channel
+// matter here, as in the engine (0x41B4D4).
 func (g *Game) playSound(args []string) {
 	if len(args) == 0 {
 		return
 	}
-	name, ch := args[0], 1
+	ch := 1
 	if len(args) > 1 {
 		if v, err := strconv.Atoi(args[1]); err == nil {
 			ch = v
 		}
 	}
-	file := name
-	if sv, ok := g.sc.SoundVars[name]; ok {
-		file = sv[0]
-	} else if !strings.Contains(file, ".") {
-		file += ".wav"
-	}
+	file := g.soundFile(args[0])
 	g.audio.Play(file, g.res.Sound(file), ch)
+}
+
+// soundDurationMS is a voice line's length by the engine's own arithmetic:
+// wav bytes minus its "40-byte header" (the engine's constant; real RIFF
+// headers are 44) over 22050 Hz 16-bit mono (0x416F60).
+func (g *Game) soundDurationMS(name string) (int, bool) {
+	b := g.res.Sound(g.soundFile(name))
+	if len(b) == 0 {
+		return 0, false
+	}
+	return (len(b)*1000 - 40000) / 44100, true
+}
+
+// parseFS parses a frame script and fits its delays to the voice lines it
+// carries, the way the engine retimes every script it loads.
+func (g *Game) parseFS(raw []byte) *types.FrameScript {
+	fs := g.parser.ParseFrameScript(string(raw))
+	use_cases.RetimeByVoice(fs, g.soundDurationMS)
+	return fs
 }
 
 func (g *Game) spawnCell(spawn *[2]int) [2]int {
@@ -441,17 +475,23 @@ func (g *Game) spawnCell(spawn *[2]int) [2]int {
 }
 
 func (g *Game) click(mx, my int) {
-	g.idleAct = nil // any click cuts the idle chatter short
-	if g.act != nil && g.skipCutscene() {
-		return // Interrupt ON: the click fast-forwards the cutscene
-	}
 	if g.act != nil {
-		return // ignore input while an action is walking/playing
-	}
-	if my >= PlayH {
-		g.clickBar(mx, my) // inventory-bar click
+		// A click during a movie can only mean "get on with it", and it works
+		// even under SetMouse OFF — the engine takes the skip before it looks
+		// at that flag (0x402e1c). skipCutscene itself checks Interrupt ON.
+		g.idleAct = nil
+		g.skipCutscene()
 		return
 	}
+	if my >= PlayH {
+		// The bar keeps living under SetMouse OFF: only LockBar gates it.
+		g.clickBar(mx, my)
+		return
+	}
+	if !g.gs.UI["mouse"] {
+		return // SetMouse OFF: the scene is deaf to the mouse (0x402e86)
+	}
+	g.idleAct = nil         // a click on the scene cuts the idle chatter short
 	wx, wy := mx+g.camX, my // viewport -> world
 	if hs := g.hotspotAt(wx, wy); hs != nil {
 		// Leaving is an action like any other: the hero walks to the edge, plays
@@ -472,12 +512,9 @@ func (g *Game) click(mx, my int) {
 				return
 			}
 		}
-		// No action script: examine — say the object's name. A hit is a hit
-		// either way: the engine only walks the hero when the click landed on
-		// no object at all.
-		if s := g.textLine(hs.ob.Text); s != "" {
-			g.msg, g.msgT = s, 2.5
-		}
+		// No action script: the engine eats the click whole — no walk, no
+		// reaction (its release build stubs out even the "Can't find script"
+		// log). The object's name already lives on the hover caption.
 		return
 	}
 	// The exit zones sit off the edge of the scene, so once the view has
@@ -491,6 +528,9 @@ func (g *Game) click(mx, my int) {
 		return
 	}
 	cx, cy := g.grid.ToCell(wx, wy)
+	if g.startSelfAction(cx, cy) {
+		return // the held item was aimed at the character himself
+	}
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
 		if g.roby.walking() {
 			g.rerouteRoby([2]int{tx, ty}) // under way: never cut the step
@@ -780,7 +820,14 @@ func (g *Game) exitObjPresent(name string) bool {
 	return false
 }
 
+// cursorBusy is the cursor of a mouse the engine switched off: the original
+// swaps in an hourglass everywhere, the bar included, without hiding it.
+const cursorBusy = 5
+
 func (g *Game) cursorType(mx, my int) int {
+	if !g.gs.UI["mouse"] {
+		return cursorBusy // SetMouse OFF: the waiting cursor (engine #247)
+	}
 	if my >= PlayH {
 		return cursorPointer // bar area
 	}
@@ -831,6 +878,11 @@ func drawCursorAs(screen *ebiten.Image, kind int) {
 		vector.FillCircle(screen, x, y, 6, white, true)
 		vector.StrokeCircle(screen, x, y, 6, 1.5, dark, true)
 		vector.FillCircle(screen, x, y, 2, dark, true)
+	case cursorBusy: // the engine's hourglass, drawn as a little clock face
+		vector.FillCircle(screen, x, y, 7, white, true)
+		vector.StrokeCircle(screen, x, y, 7, 1.5, dark, true)
+		vector.StrokeLine(screen, x, y, x, y-4.5, 1.5, dark, true)
+		vector.StrokeLine(screen, x, y, x+3.5, y+1.5, 1.5, dark, true)
 	default: // pointer
 		vector.StrokeCircle(screen, x, y, 5, 1.5, white, true)
 		vector.FillCircle(screen, x, y, 1.5, white, true)
@@ -897,9 +949,12 @@ func drawAnim(
 func (g *Game) drawDebug(screen *ebiten.Image) {
 	xoff := -g.camX
 	nx, ny := g.grid.Dims()
+	// The lattice is drawn at the cell corners, not at the sprite anchors: Corner
+	// is what ToCell inverts, so a dot sits exactly where clicking it lands, and
+	// it is the lattice the original GridDebug draws (docs/08-scene-objects.md).
 	for gy := 0; gy < ny; gy++ {
 		for gx := 0; gx < nx; gx++ {
-			x, y := g.grid.ToScreen(gx, gy)
+			x, y := g.grid.Corner(gx, gy)
 			x += xoff
 			var col color.Color
 			switch {
@@ -920,7 +975,7 @@ func (g *Game) drawDebug(screen *ebiten.Image) {
 		}
 	}
 	for _, c := range g.path {
-		x, y := g.grid.ToScreen(c[0], c[1])
+		x, y := g.grid.Corner(c[0], c[1])
 		vector.FillCircle(
 			screen,
 			float32(x+xoff),

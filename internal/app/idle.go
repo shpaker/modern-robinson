@@ -162,7 +162,7 @@ func (g *Game) playIdleSlot(slot int) {
 	if err != nil {
 		return
 	}
-	fs := g.parser.ParseFrameScript(string(raw))
+	fs := g.parseFS(raw)
 	if fs.MovieName == "" {
 		return
 	}
@@ -211,7 +211,8 @@ func (g *Game) skipCutscene() bool {
 		g.enqueueAction(g.act, g.act.player.Update(1), true)
 	}
 	g.act = nil
-	g.msg, g.msgT = "", 0 // the line on screen belonged to the skipped scene
-	g.audio.StopEffects() // and so does whatever it had already started
+	g.gs.UI["mouse"] = true // the movie is over; see updateAction
+	g.msg, g.msgT = "", 0   // the line on screen belonged to the skipped scene
+	g.audio.StopEffects()   // and so does whatever it had already started
 	return true
 }

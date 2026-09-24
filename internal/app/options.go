@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"sort"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/shpaker/modern-robinson/internal/types"
 )
 
 // The main menu (the manual's "Главное меню игры", doubling as the options
@@ -57,16 +60,47 @@ func slotRect(i int) image.Rectangle {
 	return image.Rect(x, y, x+slotW, y+slotH)
 }
 
+// slotScreenSprite reports whether an OPTIONS.DAT bitmap belongs to the
+// save/load screens rather than to the menu. Those screens ship their own
+// palette (SAVE.COL, byte for byte the same as LOAD.COL) and it shares not one
+// of its 256 entries with OPTIONS.COL, so a button painted with the menu's
+// palette comes out a grey and yellow mess.
+func slotScreenSprite(name string) bool {
+	return strings.HasPrefix(name, "BUT")
+}
+
 // loadOptions loads the options/save/load screens and their widgets.
 func (g *Game) loadOptions() {
-	sprites, pal := g.res.ScreenPack("OPTIONS")
+	// The save/load palette first: the buttons are painted with it, not with
+	// the pack's own.
+	var slotPal types.Palette
 	g.optSprites = map[string]*ebiten.Image{}
-	for name, n := range sprites {
+	for _, name := range []string{"SAVE", "LOAD"} {
+		n, p := g.res.Screen("OPTIONS", name)
 		if n == nil {
 			continue
 		}
+		slotPal = p
 		img := ebiten.NewImage(n.Width, n.Height)
-		rgba := n.RGBA(pal)
+		rgba := n.RGBA(p)
+		for i := 0; i < n.Width*n.Height; i++ {
+			rgba[i*4+3] = 255
+		}
+		img.WritePixels(rgba)
+		g.optSprites[name] = img
+	}
+	g.slotLit, g.slotShade = paletteEdges(slotPal)
+	sprites, pal := g.res.ScreenPack("OPTIONS")
+	for name, n := range sprites {
+		if n == nil || g.optSprites[name] != nil {
+			continue
+		}
+		p := pal
+		if slotScreenSprite(name) {
+			p = slotPal
+		}
+		img := ebiten.NewImage(n.Width, n.Height)
+		rgba := n.RGBA(p)
 		if n.Width == ViewW && n.Height == ViewH {
 			for i := 0; i < n.Width*n.Height; i++ {
 				rgba[i*4+3] = 255 // full-screen backdrops are opaque
@@ -74,18 +108,6 @@ func (g *Game) loadOptions() {
 		}
 		img.WritePixels(rgba)
 		g.optSprites[name] = img
-	}
-	// SAVE/LOAD ship their own palettes.
-	for _, name := range []string{"SAVE", "LOAD"} {
-		if n, p := g.res.Screen("OPTIONS", name); n != nil {
-			img := ebiten.NewImage(n.Width, n.Height)
-			rgba := n.RGBA(p)
-			for i := 0; i < n.Width*n.Height; i++ {
-				rgba[i*4+3] = 255
-			}
-			img.WritePixels(rgba)
-			g.optSprites[name] = img
-		}
 	}
 }
 
@@ -97,13 +119,12 @@ func (g *Game) updateOptions() bool {
 	default:
 		return false
 	}
-	mx, my := ebiten.CursorPosition()
-	click := clickedThisTick()
+	m := readMouse()
 	switch g.mode {
 	case modeOptions:
-		g.updateOptionsMenu(mx, my, click)
+		g.updateOptionsMenu(m.x, m.y, m.clicked)
 	case modeSave, modeLoad:
-		g.updateSlotScreen(mx, my, click)
+		g.updateSlotScreen(m)
 	}
 	return true
 }
@@ -146,12 +167,18 @@ func (g *Game) updateOptionsMenu(mx, my int, click bool) {
 	case 1: // продолжить игру
 		g.mode = modePlay
 	case 2: // восстановить игру
-		g.mode, g.slotHover = modeLoad, -1
+		g.openSlotScreen(modeLoad)
 	case 3: // сохранить игру
-		g.mode, g.slotHover = modeSave, -1
+		g.openSlotScreen(modeSave)
 	case 4: // выход
 		g.quit = true
 	}
+}
+
+// openSlotScreen raises the save or load screen with nothing hovered and no
+// button held over from whatever opened it.
+func (g *Game) openSlotScreen(mode int) {
+	g.mode, g.slotHover, g.btnDown = mode, -1, -1
 }
 
 // setSlider maps a cursor x inside a track to 0..1 and applies the setting.
@@ -172,31 +199,80 @@ func (g *Game) setSlider(i, mx int) {
 	}
 }
 
+// slotButtonRect is the on-screen rectangle of slot-screen button i: 0 acts
+// (save or restore), 1 cancels.
+func slotButtonRect(i int) image.Rectangle {
+	if i == 1 {
+		return cancelButton
+	}
+	return saveButton
+}
+
+// slotButtonAt returns the slot-screen button under (x, y), or -1.
+func slotButtonAt(x, y int) int {
+	for i := 0; i < 2; i++ {
+		if pointIn(slotButtonRect(i), x, y) {
+			return i
+		}
+	}
+	return -1
+}
+
+// slotButtons are the pressed-state bitmaps of the two buttons, per screen.
+// Each pack matches its own backdrop shifted a pixel down and right, which is
+// the button drawn pushed in: BUT20/BUT21 belong to the save screen,
+// BUT10/BUT11 to the load screen.
+func slotButtons(mode int) [2]string {
+	if mode == modeLoad {
+		return [2]string{"BUT10", "BUT11"}
+	}
+	return [2]string{"BUT20", "BUT21"}
+}
+
 // updateSlotScreen handles the twelve save/load thumbnails and the two buttons.
-func (g *Game) updateSlotScreen(mx, my int, click bool) {
+// A button acts on release over the button the press started on — the original
+// ships its pushed-in state as a bitmap, and it has to stay on screen for as
+// long as the player holds the mouse down.
+func (g *Game) updateSlotScreen(m mouseState) {
 	g.slotHover = -1
 	for i := 0; i < slotCount; i++ {
-		if pointIn(slotRect(i), mx, my) {
+		if pointIn(slotRect(i), m.x, m.y) {
 			g.slotHover = i
 		}
 	}
-	if !click {
-		return
+	switch {
+	case m.clicked:
+		g.btnDown = slotButtonAt(m.x, m.y)
+		if g.slotHover >= 0 {
+			g.slotSel = g.slotHover
+		}
+	case m.released:
+		btn := g.btnDown
+		g.btnDown = -1
+		if btn >= 0 && slotButtonAt(m.x, m.y) == btn {
+			g.pressSlotButton(btn)
+		}
+	case !m.pressed:
+		g.btnDown = -1 // the press ended somewhere we never saw it
 	}
-	if pointIn(cancelButton, mx, my) {
+}
+
+// pressSlotButton runs button i of the slot screen.
+func (g *Game) pressSlotButton(i int) {
+	if i == 1 {
 		g.mode = modeOptions
 		return
 	}
-	if g.slotHover >= 0 {
-		g.slotSel = g.slotHover
+	if g.slotSel < 0 {
+		return
 	}
-	if pointIn(saveButton, mx, my) && g.slotSel >= 0 {
-		if g.mode == modeSave {
-			g.saveSlot(g.slotSel)
-			g.mode = modePlay
-		} else if g.loadSlot(g.slotSel) {
-			g.mode = modePlay
-		}
+	if g.mode == modeSave {
+		g.saveSlot(g.slotSel)
+		g.mode = modePlay
+		return
+	}
+	if g.loadSlot(g.slotSel) {
+		g.mode = modePlay
 	}
 }
 
@@ -226,23 +302,13 @@ func (g *Game) drawOptions(screen *ebiten.Image) {
 		}
 		g.blitOpt(screen, name, 0, 0)
 		g.drawSlots(screen)
-		// Both buttons are painted into each backdrop already (the left one
-		// reads "Сохранить" on the save screen and "Загрузить" on the load
-		// screen). BUT2x are their pressed states — usable only where the
-		// label matches, so the load screen gets a highlight frame instead.
+		// Both buttons are painted into each backdrop in their raised state;
+		// the pack ships the pushed-in one as a bitmap per screen, so it only
+		// goes up while the player holds that button down.
 		cx, cy := ebiten.CursorPosition()
-		for _, b := range []struct {
-			r      image.Rectangle
-			sprite string
-		}{{saveButton, "BUT20"}, {cancelButton, "BUT21"}} {
-			if !pointIn(b.r, cx, cy) {
-				continue
-			}
-			if g.mode == modeSave || b.sprite == "BUT21" {
-				g.blitOpt(screen, b.sprite, b.r.Min.X, b.r.Min.Y)
-			} else {
-				strokeRect(screen, b.r, 2, rgba(255, 230, 80, 255))
-			}
+		if btn := g.btnDown; btn >= 0 && slotButtonAt(cx, cy) == btn {
+			r := slotButtonRect(btn)
+			g.blitOpt(screen, slotButtons(g.mode)[btn], r.Min.X, r.Min.Y)
 		}
 	}
 	g.drawCursor(screen)
@@ -262,22 +328,56 @@ func (g *Game) drawSlots(screen *ebiten.Image) {
 			adapters.DrawText(screen, meta, float64(r.Min.X+4),
 				float64(r.Max.Y-adapters.FontH-2), rgba(30, 24, 16, 255))
 		}
+		// The screens speak in bevels, so the slots do too: the hovered one
+		// stands out raised, the chosen one sits pushed in, and deeper, so the
+		// two never read alike.
 		switch i {
 		case g.slotSel:
-			strokeRect(screen, r, 3, rgba(200, 40, 30, 255))
+			g.bevelRect(screen, r, 3, true)
 		case g.slotHover:
-			strokeRect(screen, r, 2, rgba(255, 230, 80, 255))
+			g.bevelRect(screen, r, 2, false)
 		}
 	}
 }
 
-// strokeRect outlines a rectangle in the given colour.
-func strokeRect(
-	dst *ebiten.Image, r image.Rectangle, w float32, c color.Color,
+// bevelRect frames a rectangle the way the screens' own buttons are shaded:
+// t pixels of the palette's light tone along the top and left edges and its
+// dark one along the others, swapped when sunken.
+func (g *Game) bevelRect(
+	dst *ebiten.Image, r image.Rectangle, t float32, sunken bool,
 ) {
-	vector.StrokeRect(dst, float32(r.Min.X), float32(r.Min.Y),
-		float32(r.Dx()), float32(r.Dy()), w, c, false)
+	top, bottom := g.slotLit, g.slotShade
+	if sunken {
+		top, bottom = bottom, top
+	}
+	x, y := float32(r.Min.X), float32(r.Min.Y)
+	w, h := float32(r.Dx()), float32(r.Dy())
+	vector.FillRect(dst, x, y, w, t, top, false)
+	vector.FillRect(dst, x, y, t, h, top, false)
+	vector.FillRect(dst, x, y+h-t, w, t, bottom, false)
+	vector.FillRect(dst, x+w-t, y, t, h, bottom, false)
 }
+
+// paletteEdges picks the two tones a slot frame is drawn with, so a frame we
+// add ourselves stays inside the screen's own range: SAVE.COL (which LOAD.COL
+// repeats byte for byte) is all sepia and gold, with not one red entry and
+// four greys in 256. Not the very ends of that range, though — those are pure
+// white and pure black, and either reads as a scratch on the page.
+func paletteEdges(p types.Palette) (lit, shade color.Color) {
+	tones := make([][4]byte, len(p))
+	copy(tones, p[:])
+	sort.Slice(tones, func(i, j int) bool {
+		return luma(tones[i]) < luma(tones[j])
+	})
+	pick := func(percent int) color.Color {
+		c := tones[percent*(len(tones)-1)/100]
+		return rgba(c[0], c[1], c[2], 255)
+	}
+	return pick(90), pick(15)
+}
+
+// luma weighs a palette entry roughly the way the eye does.
+func luma(c [4]byte) int { return int(c[0])*3 + int(c[1])*6 + int(c[2]) }
 
 // blitOpt draws a named OPTIONS.DAT bitmap at (x, y).
 func (g *Game) blitOpt(screen *ebiten.Image, name string, x, y int) {

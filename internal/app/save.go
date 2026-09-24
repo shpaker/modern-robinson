@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -15,15 +13,28 @@ import (
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
-// Saves live next to the game data, one file per slot plus a thumbnail, mirroring
-// the original's twelve-slot screen with its little screenshots.
-func (g *Game) slotPath(i int) string {
-	return filepath.Join(g.res.Root(), fmt.Sprintf("robinson%02d.sav", i))
+// saveStore is where the twelve slots live. On the desktop that is a pair of
+// files per slot next to the game data, in the browser it is localStorage;
+// either way the game only ever asks for a name and gets bytes back.
+type saveStore interface {
+	Read(name string) ([]byte, error)
+	Write(name string, data []byte) error
 }
 
-func (g *Game) slotThumbPath(i int) string {
-	return filepath.Join(g.res.Root(), fmt.Sprintf("robinson%02d.png", i))
+// store is the save store, defaulted on first use so that a Game assembled
+// field by field (as the tests do) still saves wherever Root() points.
+func (g *Game) store() saveStore {
+	if g.saves == nil {
+		g.saves = defaultSaveStore(g.res.Root())
+	}
+	return g.saves
 }
+
+// Saves are one record per slot plus a thumbnail, mirroring the original's
+// twelve-slot screen with its little screenshots.
+func slotName(i int) string { return fmt.Sprintf("robinson%02d.sav", i) }
+
+func slotThumbName(i int) string { return fmt.Sprintf("robinson%02d.png", i) }
 
 // saveSlot writes the quest state and the current thumbnail into slot i.
 func (g *Game) saveSlot(i int) {
@@ -33,12 +44,12 @@ func (g *Game) saveSlot(i int) {
 	if err != nil {
 		return
 	}
-	if os.WriteFile(g.slotPath(i), b, 0o644) != nil {
+	if g.store().Write(slotName(i), b) != nil {
 		return
 	}
 	g.captureThumb()
 	if raw, err := encodePNG(g.thumb); err == nil {
-		_ = os.WriteFile(g.slotThumbPath(i), raw, 0o644)
+		_ = g.store().Write(slotThumbName(i), raw)
 	}
 	// Drop the entries so the slot is read again; a stored nil now means
 	// "checked, nothing there" and would stick.
@@ -49,7 +60,7 @@ func (g *Game) saveSlot(i int) {
 
 // loadSlot restores slot i; false when the slot is empty or unreadable.
 func (g *Game) loadSlot(i int) bool {
-	b, err := os.ReadFile(g.slotPath(i))
+	b, err := g.store().Read(slotName(i))
 	if err != nil {
 		return false
 	}
@@ -69,14 +80,15 @@ func (g *Game) loadSlot(i int) bool {
 func (g *Game) save() { g.saveSlot(0) }
 func (g *Game) load() { g.loadSlot(0) }
 
-// slotThumb returns slot i's thumbnail, reading it from disk once. A cached nil
-// is a remembered miss: the save screen redraws every frame, so re-reading all
-// twelve slots each time cost about 1400 failed syscalls a second.
+// slotThumb returns slot i's thumbnail, reading it from the store once. A
+// cached nil is a remembered miss: the save screen redraws every frame, so
+// re-reading all twelve slots each time cost about 1400 failed syscalls a
+// second.
 func (g *Game) slotThumb(i int) *ebiten.Image {
 	if img, ok := g.slotCache[i]; ok {
 		return img
 	}
-	raw, err := os.ReadFile(g.slotThumbPath(i))
+	raw, err := g.store().Read(slotThumbName(i))
 	if err != nil {
 		g.slotCache[i] = nil
 		return nil
@@ -96,7 +108,7 @@ func (g *Game) slotMeta(i int) string {
 	if s, ok := g.slotInfo[i]; ok {
 		return s
 	}
-	b, err := os.ReadFile(g.slotPath(i))
+	b, err := g.store().Read(slotName(i))
 	if err != nil {
 		g.slotInfo[i] = ""
 		return ""

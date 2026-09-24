@@ -52,7 +52,7 @@ func (g *Game) loadCycle(key, chr string) *walkCycle {
 	c := &walkCycle{anim: adapters.LoadAnimation(g.res, key+".mv", g.pal)}
 	if cc := g.res.SceneContainer(chr); cc != nil {
 		if raw, err := cc.ExtractName(key + ".FS"); err == nil {
-			c.frames = g.parser.ParseFrameScript(string(raw)).Frames
+			c.frames = g.parseFS(raw).Frames
 		}
 	}
 	if !c.anim.OK() {
