@@ -414,7 +414,7 @@ func (g *Game) drawHUD(dst *ebiten.Image, pv clickPreview) {
 		fmt.Sprintf("act %s  pending=%v", g.actDebug(), g.pending != nil),
 		fmt.Sprintf("item %s  char %s  ui %s", g.gs.Active, g.gs.ActiveChar,
 			uiDebug(g.gs.UI)),
-		fmt.Sprintf("exits L=%s R=%s", exitDebug(g.exitL), exitDebug(g.exitR)),
+		fmt.Sprintf("exits L=%s R=%s", g.exitDebug(true), g.exitDebug(false)),
 		fmt.Sprintf("> %d,%d cell %d,%d: %s", wx, my, cx, cy, pv.what),
 	}
 	if g.moving {
@@ -468,12 +468,22 @@ func uiDebug(ui map[string]bool) string {
 	return strings.Join(on, " ")
 }
 
-// exitDebug is one side's exit as the HUD shows it.
-func exitDebug(e types.Exit) string {
+// exitDebug is one side's exit as the HUD shows it. The exit is read from the
+// departure script, but it only leads out while its arrow object is on stage:
+// SCENA2 keeps its goleft hidden until the bananas in SCENA3 are eaten.
+func (g *Game) exitDebug(left bool) string {
+	e := g.exitR
+	if left {
+		e = g.exitL
+	}
 	if !e.OK {
 		return "-"
 	}
-	return fmt.Sprintf("%s(%d,%d)", e.Scene, e.GX, e.GY)
+	s := fmt.Sprintf("%s(%d,%d)", e.Scene, e.GX, e.GY)
+	if key := exitKey(left); !g.objPresent(key) {
+		s += " no " + key
+	}
+	return s
 }
 
 // logCommand keeps a command for the F2 command log. Sounds and the walk
