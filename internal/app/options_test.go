@@ -14,15 +14,12 @@ import (
 // clickRow presses the mouse at the centre of main-menu row i.
 func clickRow(g *Game, i int) {
 	r := menuRows[i]
-	g.updateOptionsMenu(mouseState{
-		x: (r.Min.X + r.Max.X) / 2, y: (r.Min.Y + r.Max.Y) / 2,
-		down: true, clicked: true, pressed: true,
-	})
+	g.updateOptionsMenu((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2, true)
 }
 
 // pressSlot presses and releases the mouse at (x, y) on a slot screen.
 func pressSlot(g *Game, x, y int) {
-	g.updateSlotScreen(mouseState{x: x, y: y, down: true, clicked: true, pressed: true})
+	g.updateSlotScreen(mouseState{x: x, y: y, clicked: true, pressed: true})
 	g.updateSlotScreen(mouseState{x: x, y: y, released: true})
 }
 
@@ -152,7 +149,7 @@ func TestLoadSlotMarksTheRunStarted(t *testing.T) {
 func TestSlotButtonRunsOnRelease(t *testing.T) {
 	g := slotScreen(modeSave)
 	x, y := cancelButton.Min.X+4, cancelButton.Min.Y+4
-	g.updateSlotScreen(mouseState{x: x, y: y, down: true, clicked: true, pressed: true})
+	g.updateSlotScreen(mouseState{x: x, y: y, clicked: true, pressed: true})
 	if g.btnDown != 1 {
 		t.Fatalf("btnDown = %d, want the cancel button held (1)", g.btnDown)
 	}
@@ -174,7 +171,7 @@ func TestSlotButtonCancelledBySlidingOff(t *testing.T) {
 	g := slotScreen(modeSave)
 	g.updateSlotScreen(mouseState{
 		x: cancelButton.Min.X + 4, y: cancelButton.Min.Y + 4,
-		down: true, clicked: true, pressed: true,
+		clicked: true, pressed: true,
 	})
 	g.updateSlotScreen(mouseState{x: 4, y: 4, released: true})
 	if g.mode != modeSave {
@@ -359,14 +356,14 @@ func TestRestoreButtonLoadsTheSelectedSlot(t *testing.T) {
 
 	slot := slotRect(2)
 	g.updateSlotScreen(mouseState{
-		x: slot.Min.X + 4, y: slot.Min.Y + 4, down: true, clicked: true, pressed: true,
+		x: slot.Min.X + 4, y: slot.Min.Y + 4, clicked: true, pressed: true,
 	})
 	if g.slotSel != 2 {
 		t.Fatalf("slotSel = %d, want the clicked slot 2", g.slotSel)
 	}
 	g.updateSlotScreen(mouseState{
 		x: saveButton.Min.X + 4, y: saveButton.Min.Y + 4,
-		down: true, clicked: true, pressed: true,
+		clicked: true, pressed: true,
 	})
 	if g.mode != modeLoad {
 		t.Fatalf("the press alone restored: mode = %d", g.mode)

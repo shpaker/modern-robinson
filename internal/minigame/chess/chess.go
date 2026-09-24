@@ -210,7 +210,7 @@ func (c *chessGame) Update(dt float64) (bool, int) {
 	if !minigame.Clicked() {
 		return false, 0
 	}
-	mx, my := minigame.Cursor()
+	mx, my := ebiten.CursorPosition()
 	if !minigame.In(chessBoard, mx, my) {
 		if minigame.In(chessExit, mx, my) {
 			return true, 0

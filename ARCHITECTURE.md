@@ -9,7 +9,7 @@ internal/
   interfaces/   контракты (только types)
   use_cases/    логика: изосетка, pathfinding (stateless)
   repositories/ доступ к файлам игры; codec/ — кодеки NGI; webfs/, webdata/ — веб
-  adapters/     Ebiten-образы из Domain (анимации, звук); pointer/ — мышь и тач
+  adapters/     Ebiten-образы из Domain (анимации, звук)
   minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
 cmd/main.go     игра

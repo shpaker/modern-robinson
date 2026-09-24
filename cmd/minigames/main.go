@@ -23,7 +23,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
-	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/app"
 	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/minigame/catalog"
@@ -54,7 +53,6 @@ type runner struct {
 }
 
 func (r *runner) Update() error {
-	pointer.Update()
 	if r.cur != nil {
 		done, result := r.cur.Update(1 / float64(ebiten.TPS()))
 		if done {
@@ -75,7 +73,7 @@ func (r *runner) Update() error {
 		}
 	}
 	if minigame.Clicked() {
-		x, y := minigame.Cursor()
+		x, y := ebiten.CursorPosition()
 		for id := range catalog.Games {
 			if minigame.In(rowRect(id), x, y) {
 				r.start(id)
@@ -108,7 +106,7 @@ func (r *runner) Draw(screen *ebiten.Image) {
 	}
 	screen.Fill(bg)
 	adapters.DrawText(screen, "Мини-игры «Нового Робинзона»", rowX, 56, ink)
-	x, y := minigame.Cursor()
+	x, y := ebiten.CursorPosition()
 	for id, e := range catalog.Games {
 		clr := ink
 		if minigame.In(rowRect(id), x, y) {

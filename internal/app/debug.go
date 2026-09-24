@@ -13,7 +13,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
-	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/types"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
@@ -92,7 +91,7 @@ func (g *Game) drawLattice(dst *ebiten.Image, col color.Color) {
 // never spills over the bar.
 func (g *Game) drawDebug(screen *ebiten.Image) {
 	world := screen.SubImage(image.Rect(0, 0, ViewW, PlayH)).(*ebiten.Image)
-	pv := g.previewClick(pointer.Pos())
+	pv := g.previewClick(ebiten.CursorPosition())
 	g.drawCells(world)
 	g.drawFences(world)
 	g.drawZones(world, pv.hot)
@@ -401,7 +400,7 @@ func (g *Game) drawPreview(dst *ebiten.Image, pv clickPreview) {
 // drawHUD writes the frame's numbers at the top of the play area, where the
 // scenes keep their scenery — every walk grid lies in the lower half.
 func (g *Game) drawHUD(dst *ebiten.Image, pv clickPreview) {
-	mx, my := pointer.Pos()
+	mx, my := ebiten.CursorPosition()
 	wx := mx + g.camX
 	cx, cy := g.grid.ToCell(wx, my)
 	lines := []string{

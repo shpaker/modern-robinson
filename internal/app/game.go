@@ -15,7 +15,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
-	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/repositories"
@@ -602,7 +601,6 @@ func (g *Game) click(mx, my int) {
 
 // Update advances one tick: input, movement, animation, scene transition.
 func (g *Game) Update() error {
-	pointer.Update()
 	if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
 		g.debug = !g.debug
 	}
@@ -653,7 +651,7 @@ func (g *Game) Update() error {
 		return nil // a scene transition is fading
 	}
 	if clickedThisTick() {
-		g.click(pointer.Pos())
+		g.click(ebiten.CursorPosition())
 	} else if g.act != nil && skipKeyPressed() {
 		// A key means only "skip" — it carries no cursor position, so it goes
 		// straight past click()'s hotspot logic. skipCutscene itself checks
@@ -661,16 +659,9 @@ func (g *Game) Update() error {
 		g.idleAct = nil
 		g.skipCutscene()
 	}
-	mx, my := pointer.Pos()
-	if pointer.Hover() {
-		g.updateHover(mx, my)
-	} else {
-		g.hover = "" // a lifted finger points at nothing
-	}
-	if pointer.Mouse() {
-		g.edgeScroll(mx, my, dt)
-	}
-	g.dragScroll()
+	mx, my := ebiten.CursorPosition()
+	g.updateHover(mx, my)
+	g.edgeScroll(mx, my, dt)
 
 	// Walking is the cycle chain playing out: the animation carries the motion
 	// and its frame events move the cell (see walk.go).
@@ -925,20 +916,16 @@ func (g *Game) cursorType(mx, my int) int {
 
 // drawCursor draws our own cursor (the game's are proprietary) by zone type.
 func (g *Game) drawCursor(screen *ebiten.Image) {
-	mx, my := pointer.Pos()
+	mx, my := ebiten.CursorPosition()
 	drawCursorAs(screen, g.cursorType(mx, my))
 }
 
 // cursorPointer is the plain pointer, for places with no zones to hint at.
 const cursorPointer = -1
 
-// drawCursorAs draws the cursor of the given zone type at the mouse. A finger
-// needs no cursor, so on a touch screen there is none.
+// drawCursorAs draws the cursor of the given zone type at the mouse.
 func drawCursorAs(screen *ebiten.Image, kind int) {
-	if pointer.Touch() {
-		return
-	}
-	mx, my := pointer.Pos()
+	mx, my := ebiten.CursorPosition()
 	x, y := float32(mx), float32(my)
 	white := rgba(255, 255, 255, 255)
 	dark := rgba(0, 0, 0, 200)
@@ -1152,28 +1139,6 @@ func (g *Game) panCamera(dx float64) {
 	}
 	g.camXf, g.camTarget = x, g.camTarget+dx
 	g.camX = int(math.Round(g.camXf))
-}
-
-// dragScroll is the touch screen's stand-in for the edge scroll: a finger
-// dragged across a scene wider than the screen carries the view with it and
-// leaves the camera where it lets go. Like the edge scroll it answers to the
-// scene's mouse switch, and only a drag that began over the scene counts —
-// not one on the bar. A drag it takes is no tap.
-func (g *Game) dragScroll() {
-	_, sy, ok := pointer.Dragging()
-	if !ok || !g.gs.UI["mouse"] || sy > g.h || g.scrollMax() == 0 {
-		return
-	}
-	dx, _ := pointer.TakeDrag()
-	g.dragCamera(dx)
-}
-
-// dragCamera moves the view against a finger's step and parks the camera
-// there, clamped to the scene.
-func (g *Game) dragCamera(dx int) {
-	x := g.clampScroll(g.camXf - float64(dx))
-	g.camXf, g.camTarget = x, x
-	g.camX = int(math.Round(x))
 }
 
 // followCamera eases the camera toward its target the way the engine does: each

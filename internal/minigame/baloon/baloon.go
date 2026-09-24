@@ -92,7 +92,7 @@ func (b *baloonGame) Update(dt float64) (bool, int) {
 		return true, 0
 	}
 	if minigame.Clicked() {
-		mx, my := minigame.Cursor()
+		mx, my := ebiten.CursorPosition()
 		switch {
 		case minigame.In(balExit, mx, my):
 			return true, 0
