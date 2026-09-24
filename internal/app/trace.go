@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/shpaker/modern-robinson/internal/types"
 )
@@ -15,7 +16,12 @@ import (
 //
 // ROBINSON_TRACE=1        every command
 // ROBINSON_TRACE=goscene,setvar   only these keywords
-var traceKw = parseTrace(os.Getenv("ROBINSON_TRACE"))
+//
+// The variable is read on first use, not at start-up: the browser build sets it
+// from the page's query string in main, after package initialisation.
+var traceKw = sync.OnceValue(func() map[string]bool {
+	return parseTrace(os.Getenv("ROBINSON_TRACE"))
+})
 
 // parseTrace turns the variable into a keyword filter: nil means tracing is off,
 // an empty (but non-nil) set means trace everything.
@@ -37,15 +43,16 @@ func parseTrace(v string) map[string]bool {
 }
 
 // tracing reports whether commands should be logged at all.
-func tracing() bool { return traceKw != nil }
+func tracing() bool { return traceKw() != nil }
 
 // trace logs one command with the scene it ran in.
 func (g *Game) trace(c types.Command) {
-	if traceKw == nil {
+	kws := traceKw()
+	if kws == nil {
 		return
 	}
 	kw := strings.ToLower(c.Kw)
-	if len(traceKw) > 0 && !traceKw[kw] {
+	if len(kws) > 0 && !kws[kw] {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "[%s] %s %s\n",
@@ -55,7 +62,7 @@ func (g *Game) trace(c types.Command) {
 // traceState logs a line of the game's own making (a scene change, a minigame
 // result) so the log reads as a sequence of quest steps.
 func (g *Game) traceState(format string, args ...any) {
-	if traceKw == nil {
+	if !tracing() {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "[%s] %s\n", g.sceneName,
