@@ -100,21 +100,26 @@ func applyState(c types.Command, st *types.GameState) bool {
 			st.SetCharVar(a[0], a[1])
 		}
 	case "additem":
-		// AddItem item | AddItem char,item
-		if len(a) >= 1 {
-			st.AddItem(a[len(a)-1])
+		// AddItem item | AddItem char,item: a bare item goes to the performer
+		switch len(a) {
+		case 1:
+			st.AddItem(a[0])
+		case 2:
+			st.AddItemTo(a[0], a[1])
 		}
 	case "deleteitem":
-		if len(a) >= 1 {
-			st.DelItem(a[len(a)-1])
+		switch len(a) {
+		case 1:
+			st.DelItem(a[0])
+		case 2:
+			st.DelItemFrom(a[0], a[1])
 		}
 	case "setactive":
 		if len(a) >= 1 {
 			// SetActive addresses a character or an item, never both.
 			if strings.EqualFold(a[0], "Roby") ||
 				strings.EqualFold(a[0], "Frid") {
-				st.ActiveChar = a[0]
-				st.InvRev++ // the bar shows the new character's (0x41be2a)
+				st.SetActiveChar(a[0]) // the bar shows his list (0x41be2a)
 			} else {
 				st.Active = a[0]
 			}
