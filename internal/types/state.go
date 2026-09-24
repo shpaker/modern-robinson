@@ -121,13 +121,25 @@ func (g *GameState) DelItem(item string) {
 }
 
 // MarkGone records that an object was removed from a scene, so it stays gone
-// across revisits.
+// across revisits. A removal cancels a prior spawn of the same object, or the
+// next visit would create it again (the crab caught a second time).
 func (g *GameState) MarkGone(scene, obj string) {
 	scene, obj = strings.ToLower(scene), strings.ToLower(obj)
 	if g.gone[scene] == nil {
 		g.gone[scene] = map[string]bool{}
 	}
 	g.gone[scene][obj] = true
+	kept := g.spawned[scene][:0]
+	for _, s := range g.spawned[scene] {
+		if !strings.EqualFold(s.Obj, obj) {
+			kept = append(kept, s)
+		}
+	}
+	if len(kept) == 0 {
+		delete(g.spawned, scene)
+	} else {
+		g.spawned[scene] = kept
+	}
 }
 
 // IsGone reports whether an object was removed from a scene.
@@ -154,6 +166,16 @@ func (g *GameState) MarkSpawn(scene, obj string, gx, gy int) {
 // Spawns returns the objects created in a scene.
 func (g *GameState) Spawns(scene string) []Spawn {
 	return g.spawned[strings.ToLower(scene)]
+}
+
+// SpawnAt returns where an object was last created in a scene, if it was.
+func (g *GameState) SpawnAt(scene, obj string) (Spawn, bool) {
+	for _, s := range g.spawned[strings.ToLower(scene)] {
+		if strings.EqualFold(s.Obj, obj) {
+			return s, true
+		}
+	}
+	return Spawn{}, false
 }
 
 // MarkVert records a SetVert so the reshaped walk grid survives revisits: the
@@ -239,6 +261,12 @@ func Restore(sd SaveData) *GameState {
 	// The engine forces the mouse back on at the end of every load (0x4213cf),
 	// so a save taken mid-script can never come back deaf.
 	g.UI["mouse"] = true
+	if sd.Spawned != nil {
+		g.spawned = sd.Spawned
+	}
+	// A spawn clears its object's removal, so a save carrying both was written
+	// by a build that let a later DelObject keep the spawn: the removal is the
+	// newer of the two, and replaying it drops the stale spawn.
 	for sc, objs := range sd.Gone {
 		for _, o := range objs {
 			g.MarkGone(sc, o)
@@ -248,9 +276,6 @@ func Restore(sd SaveData) *GameState {
 		g.verts = sd.Verts
 	} else {
 		g.verts = map[string][]Vert{}
-	}
-	if sd.Spawned != nil {
-		g.spawned = sd.Spawned
 	}
 	return g
 }
