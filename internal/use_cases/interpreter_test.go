@@ -258,3 +258,21 @@ func TestSetActiveSplitsCharacterFromItem(t *testing.T) {
 		t.Fatalf("ActiveChar = %q, want Roby", st.ActiveChar)
 	}
 }
+
+// ROCRBPOO.FS releases the crab: DeleteItem crb; AddItem hat. The crab-hat was
+// in hand, so the hand takes its place and the empty hat is only listed.
+func TestDeleteItemInHandHandsBackHand(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("crb")
+	st.Active = "crb"
+	var in use_cases.Interpreter
+
+	execOut(in, []types.Command{
+		cmd("DeleteItem", "crb"), cmd("AddItem", "hat"),
+	}, st)
+	if st.Active != "hand" || st.HasItem("crb") || !st.HasItem("hat") {
+		t.Fatalf("Active=%q inventory=%v, want hand with hat, no crb",
+			st.Active, st.Inventory)
+	}
+}

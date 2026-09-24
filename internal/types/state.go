@@ -102,12 +102,19 @@ func (g *GameState) AddItem(item string) {
 	g.Inventory = append(g.Inventory, item)
 }
 
-// DelItem removes an item if present.
+// DelItem removes an item if present. Removing the item in hand selects the
+// first slot (the hand), as ROBY.EXE does (DeleteItem 0x405190).
 func (g *GameState) DelItem(item string) {
 	item = strings.ToLower(item)
 	for i, it := range g.Inventory {
 		if strings.ToLower(it) == item {
 			g.Inventory = append(g.Inventory[:i], g.Inventory[i+1:]...)
+			if strings.ToLower(g.Active) == item {
+				g.Active = "hand"
+				if len(g.Inventory) > 0 {
+					g.Active = g.Inventory[0]
+				}
+			}
 			return
 		}
 	}

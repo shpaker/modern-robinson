@@ -36,6 +36,24 @@ func TestInventoryDedupeAndRemove(t *testing.T) {
 	}
 }
 
+// Deleting the item in hand puts the hand back in it: the crab released into
+// the pool (DeleteItem crb) must not leave the empty hat acting as if full.
+func TestDelItemInHandSelectsHand(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItem("hand")
+	st.AddItem("hat")
+	st.AddItem("crb")
+	st.Active = "crb"
+	st.DelItem("hat")
+	if st.Active != "crb" {
+		t.Fatalf("deleting another item moved the hand: %q", st.Active)
+	}
+	st.DelItem("CRB")
+	if st.Active != "hand" {
+		t.Fatalf("Active=%q after deleting it, want hand", st.Active)
+	}
+}
+
 func TestWorldGonePersistsPerScene(t *testing.T) {
 	st := types.NewGameState()
 	st.MarkGone("SCENA0", "axe")
