@@ -5,6 +5,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
+	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -26,29 +27,31 @@ const (
 // fadeStepTime is how long one .FAD step lasts; sixteen steps make ~0.3 s.
 const fadeStepTime = 0.019
 
-// clickedThisTick reports a fresh left-button press.
-func clickedThisTick() bool {
-	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-}
+// clickedThisTick reports a click: the left button going down, or a tap.
+func clickedThisTick() bool { return pointer.Clicked() }
 
-// mouseState is one frame's cursor and left-button state. The screens take it
-// as a value so their logic stays testable without a live input device.
+// mouseState is one frame's pointer state. The screens take it as a value so
+// their logic stays testable without a live input device.
 type mouseState struct {
 	x, y     int
-	clicked  bool // went down this frame
+	down     bool // a press began this frame (button or finger)
+	clicked  bool // a click: the button went down, or a finger lifted from a tap
 	released bool // came up this frame
 	pressed  bool // held down
+	lifted   bool // a finger is off the screen: the pointer rests nowhere
 }
 
-// readMouse samples the cursor and the left button for this frame.
+// readMouse samples the pointer for this frame.
 func readMouse() mouseState {
-	x, y := ebiten.CursorPosition()
+	x, y := pointer.Pos()
 	return mouseState{
 		x:        x,
 		y:        y,
-		clicked:  clickedThisTick(),
-		released: inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft),
-		pressed:  ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft),
+		down:     pointer.Down(),
+		clicked:  pointer.Clicked(),
+		released: pointer.Up(),
+		pressed:  pointer.Pressed(),
+		lifted:   !pointer.Hover(),
 	}
 }
 
