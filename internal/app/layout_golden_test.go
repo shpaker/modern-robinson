@@ -119,6 +119,16 @@ func writeSceneLayout(
 	}
 	fmt.Fprintf(b, "  walkable %d: %s\n", len(walk), strings.Join(walk, " "))
 
+	// The step fences: moves ClosedDir forbids between cells that stay open.
+	if len(sc.ClosedDir) > 0 {
+		fences := make([]string, 0, len(sc.ClosedDir))
+		for _, d := range sc.ClosedDir {
+			fences = append(fences, fmt.Sprintf("%d,%d>%d", d[0], d[1], d[2]))
+		}
+		fmt.Fprintf(b, "  fences %d: %s\n",
+			len(fences), strings.Join(fences, " "))
+	}
+
 	rows := make([]string, 0, len(sc.Objects))
 	for _, ref := range sc.Objects {
 		ob := objectFor(parser, c, ref.Name)
@@ -137,11 +147,11 @@ func writeSceneLayout(
 		}
 		rows = append(rows, fmt.Sprintf(
 			"  obj %-10s cell=%d,%d star=%v z=%d cur=%d text=%d "+
-				"shift=%d,%d origin=%d,%d zones=[%s] block=%v",
+				"shift=%d,%d origin=%d,%d zones=[%s] block=%v fences=%v",
 			strings.ToLower(ref.Name), ref.GX, ref.GY, ref.Flag,
 			ref.GY*zper+ob.Z, ob.Cursor, ob.Text,
 			shift[0], shift[1], ax-shift[0], ay-shift[1],
-			strings.Join(zones, " "), ob.ClosedVert,
+			strings.Join(zones, " "), ob.ClosedVert, ob.ClosedDir,
 		))
 	}
 	sort.Strings(rows)

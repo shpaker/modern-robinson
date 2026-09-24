@@ -157,6 +157,12 @@ func (SceneParser) ParseScene(text string) *types.Scene {
 			for i := 0; i+1 < len(v); i += 2 {
 				sc.ClosedVert = append(sc.ClosedVert, [2]int{v[i], v[i+1]})
 			}
+		case "closeddir":
+			for i := 0; i+2 < len(v); i += 3 {
+				sc.ClosedDir = append(
+					sc.ClosedDir, [3]int{v[i], v[i+1], v[i+2]},
+				)
+			}
 		case "objectlist":
 			// Read the row by fields, never by scanning it for numbers: half
 			// the objects are named with a digit (br0, bt3, map1, iva0), and a
@@ -203,6 +209,20 @@ func (SceneParser) ParseObject(text string) *types.SceneObject {
 		case "zcoord":
 			if len(v) > 0 {
 				ob.Z = v[0]
+			}
+		case "closedvert":
+			// Cells the object blocks, relative to its own cell (the crocodile
+			// walls off eleven of them). Bare "ClosedVert" rows with no values
+			// are common and fall through harmlessly.
+			for i := 0; i+1 < len(v); i += 2 {
+				ob.ClosedVert = append(ob.ClosedVert, [2]int{v[i], v[i+1]})
+			}
+		case "closeddir":
+			// Steps the object fences, dx,dy,d relative to its cell.
+			for i := 0; i+2 < len(v); i += 3 {
+				ob.ClosedDir = append(
+					ob.ClosedDir, [3]int{v[i], v[i+1], v[i+2]},
+				)
 			}
 		case "activezone":
 			// An object may declare several hit rectangles, one per row: the

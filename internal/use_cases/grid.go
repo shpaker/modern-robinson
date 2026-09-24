@@ -21,7 +21,11 @@ import (
 type Grid struct {
 	lx, ly, sx, sy, hx, hy, nx, ny int
 	blocked                        map[[2]int]bool
-	boundsW, boundsH               int
+	// closedDir holds the ClosedDir triples: leaving cell (gx,gy) in numpad
+	// direction d is forbidden while both cells stay walkable. One-way by
+	// itself; the authored data spells out both sides of a fence.
+	closedDir        map[[3]int]bool
+	boundsW, boundsH int
 }
 
 var _ interfaces.IGrid = (*Grid)(nil)
@@ -37,8 +41,9 @@ func NewGrid(sc *types.Scene, boundsW, boundsH int) *Grid {
 		sx: sc.GridSize[0], sy: sc.GridSize[1],
 		hx: sc.GridShift[0], hy: sc.GridShift[1],
 		nx: sc.GridLength[0], ny: sc.GridLength[1],
-		blocked: map[[2]int]bool{},
-		boundsW: boundsW, boundsH: boundsH,
+		blocked:   map[[2]int]bool{},
+		closedDir: map[[3]int]bool{},
+		boundsW:   boundsW, boundsH: boundsH,
 	}
 	if g.sx == 0 {
 		g.sx = 1
@@ -48,6 +53,9 @@ func NewGrid(sc *types.Scene, boundsW, boundsH int) *Grid {
 	}
 	for _, c := range sc.ClosedVert {
 		g.blocked[c] = true
+	}
+	for _, d := range sc.ClosedDir {
+		g.closedDir[d] = true
 	}
 	return g
 }
@@ -77,6 +85,17 @@ func (g *Grid) SetVert(gx, gy int, open bool) {
 		delete(g.blocked, [2]int{gx, gy})
 	} else {
 		g.blocked[[2]int{gx, gy}] = true
+	}
+}
+
+// SetDir toggles one step fence at runtime: leaving (gx,gy) in numpad
+// direction d. Objects carry such fences into the scene and take them along
+// when they go.
+func (g *Grid) SetDir(gx, gy, d int, open bool) {
+	if open {
+		delete(g.closedDir, [3]int{gx, gy, d})
+	} else {
+		g.closedDir[[3]int{gx, gy, d}] = true
 	}
 }
 
@@ -179,6 +198,14 @@ var dirs8 = [8][2]int{
 // carries only one axis of the step and he lands in the wrong cell.
 var dirs4 = [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 
+// stepClosed reports whether a ClosedDir fence forbids the step from one cell
+// to its neighbour. As in ROBY.EXE's TryStep (0x410d00), a step is refused only
+// by the target's ClosedVert or the source's ClosedDir for that direction —
+// there are no corner rules, so the data fences diagonals past obstacles itself.
+func (g *Grid) stepClosed(from, to [2]int) bool {
+	return g.closedDir[[3]int{from[0], from[1], StepDir(from, to)}]
+}
+
 // Path returns cells from start to goal (inclusive) via BFS over all eight
 // directions, or nil if none.
 func (g *Grid) Path(start, goal [2]int) [][2]int {
@@ -208,6 +235,9 @@ func (g *Grid) path(start, goal [2]int, dirs [][2]int) [][2]int {
 		}
 		for _, d := range dirs {
 			nb := [2]int{cur[0] + d[0], cur[1] + d[1]}
+			if g.stepClosed(cur, nb) {
+				continue
+			}
 			if _, seen := prev[nb]; !seen && g.Valid(nb[0], nb[1]) {
 				prev[nb] = cur
 				queue = append(queue, nb)

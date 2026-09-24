@@ -183,12 +183,19 @@ func (g *Game) startObjectAction(objName string) bool {
 	if ap == nil {
 		return false
 	}
-	// A new action is a new intent: a click-walk still in progress stops on
-	// the cell it reached, and the script routes the hero from there.
-	g.roby.cur = nil
-	g.path = nil
+	// A click-walk still in progress goes on: ROBY.EXE loads the script and
+	// runs its frame 0 at once (0x4101d0), so its Aproach reroutes the walk
+	// without cutting the step, and the movie holds until the hero stands.
 	g.act = ap
 	return true
+}
+
+// owner is the walker whose walk holds the movie: Friday for her own actions.
+func (ap *actionPlay) owner() aproachWait {
+	if ap.frid {
+		return waitFrid
+	}
+	return waitRoby
 }
 
 // aproachWalking reports whether the walker the movie waits for is still going.
@@ -222,6 +229,12 @@ func (g *Game) updateAction(dt float64) {
 		}
 	}
 	g.enqueueAction(ap, ap.player.Update(dt), false)
+	// The engine ticks a script through its owner only while he stands
+	// (+0x590), so a movie whose owner is still walking — a click-walk its
+	// frame 0 did not reroute — waits for him like after its own Aproach.
+	if g.act == ap && ap.wait == waitNone && g.aproachWalking(ap.owner()) {
+		ap.wait = ap.owner()
+	}
 	if g.act == ap && ap.wait == waitNone && ap.player.Done() {
 		g.act = nil
 	}
@@ -300,6 +313,17 @@ func (g *Game) startAproach(
 	if !free {
 		return waitNone
 	}
+	if g.roby.walking() {
+		g.rerouteRoby([2]int{tx, ty}) // under way: never cut the step
+		switch {
+		case skip:
+			g.cutAproachShort(waitRoby) // land where that walk ends
+			return waitNone
+		case frid:
+			return waitNone
+		}
+		return waitRoby
+	}
 	p := g.grid.Path(g.cell, [2]int{tx, ty})
 	if len(p) < 2 {
 		return waitNone // already there, or unreachable: play in place
@@ -376,6 +400,9 @@ func (g *Game) hideObject(name string) {
 	name = strings.ToLower(name)
 	for _, s := range g.sceneObjs {
 		if strings.ToLower(s.ref.Name) == name {
+			if !s.removed {
+				g.setObjectBlocking(s, true)
+			}
 			s.visible = false
 			s.removed = true
 			s.player = nil

@@ -492,6 +492,10 @@ func (g *Game) click(mx, my int) {
 	}
 	cx, cy := g.grid.ToCell(wx, wy)
 	if tx, ty, ok := g.grid.NearestFree(cx, cy); ok {
+		if g.roby.walking() {
+			g.rerouteRoby([2]int{tx, ty}) // under way: never cut the step
+			return
+		}
 		if p := g.grid.Path(g.cell, [2]int{tx, ty}); len(p) > 1 {
 			if evs, ok := g.startWalk(&g.roby, g.cell, p[1:]); ok {
 				g.path = p[1:]
@@ -861,7 +865,8 @@ func (g *Game) drawCharacter(screen *ebiten.Image) {
 
 // drawAnim blits animation frame fi so the movie canvas origin sits at
 // (ox, oy) - Shift, the engine's placement (see use_cases.Grid). ox,oy is the
-// cell anchor in screen space. A soft shadow is laid under the figure's feet.
+// cell anchor in screen space. The frames carry their own shadow; nothing is
+// laid under the feet.
 func drawAnim(
 	screen *ebiten.Image,
 	a *adapters.Animation,
@@ -875,15 +880,6 @@ func drawAnim(
 	bb := a.BBox[fi]
 	fx := ox - float64(a.Shift[0]) + float64(bb[0])
 	fy := oy - float64(a.Shift[1]) + float64(bb[1])
-	fw, fh := frame.Bounds().Dx(), frame.Bounds().Dy()
-	vector.FillCircle(
-		screen,
-		float32(fx)+float32(fw)/2,
-		float32(fy)+float32(fh)-4,
-		16,
-		rgba(0, 0, 0, 70),
-		true,
-	)
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(fx, fy)
 	screen.DrawImage(frame, op)
@@ -1124,16 +1120,33 @@ func (g *Game) actDebug() string {
 	)
 }
 
-// applyObjectBlocking closes the cells the objects on stage stand in. An .OB
-// carries its ClosedVert relative to its own cell, which is how the crab, the
-// bridge logs and the finished hut keep the hero from walking through them.
+// applyObjectBlocking closes the cells and step fences the objects on stage
+// bring along. An .OB carries both relative to its own cell: ClosedVert is how
+// the crab, the crocodile and the finished hut stand in the way, ClosedDir is
+// how the barrels and stone piles close the diagonals across their corners.
 func (g *Game) applyObjectBlocking() {
 	for _, s := range g.sceneObjs {
-		if s.removed || s.ob == nil {
+		if s.removed {
 			continue
 		}
-		for _, c := range s.ob.ClosedVert {
-			g.grid.SetVert(s.ref.GX+c[0], s.ref.GY+c[1], false)
-		}
+		g.setObjectBlocking(s, false)
+	}
+}
+
+// setObjectBlocking applies (or lifts) one object's ClosedVert cells and
+// ClosedDir fences. Lifting mirrors the engine's Object::UnClose: the entries
+// are cleared outright, not restored to the scene's own state, so a removed
+// crocodile opens the ford it was lying on. The lift edits the live grid only —
+// on re-entry the scene rebuilds from its .SCN and the object, marked gone,
+// never applies itself.
+func (g *Game) setObjectBlocking(s *sceneObj, open bool) {
+	if s.ob == nil {
+		return
+	}
+	for _, c := range s.ob.ClosedVert {
+		g.grid.SetVert(s.ref.GX+c[0], s.ref.GY+c[1], open)
+	}
+	for _, d := range s.ob.ClosedDir {
+		g.grid.SetDir(s.ref.GX+d[0], s.ref.GY+d[1], d[2], open)
 	}
 }

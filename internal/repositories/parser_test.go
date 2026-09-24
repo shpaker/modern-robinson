@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -59,6 +60,12 @@ func TestParseSceneAndExits(t *testing.T) {
 	if sc.GridShift != [2]int{46, -99} {
 		t.Errorf("GridShift = %v, want [46 -99]", sc.GridShift)
 	}
+	// The palm's step fences: two authored symmetric diagonal pairs across the
+	// cell corner it stands on.
+	wantDirs := [][3]int{{2, 3, 3}, {3, 4, 7}, {2, 4, 9}, {3, 3, 1}}
+	if !reflect.DeepEqual(sc.ClosedDir, wantDirs) {
+		t.Errorf("ClosedDir = %v, want %v", sc.ClosedDir, wantDirs)
+	}
 	// All seventeen rows of SCENA0's ObjectList, including the ambient driver
 	// named "sound" — a name that collides with a script keyword.
 	if len(sc.Objects) != 17 {
@@ -104,6 +111,36 @@ func TestParseSceneAndExits(t *testing.T) {
 // A SoundVariables block mixes plain entries, addressed by name, with the
 // starred rows of the ambient pool, which share one name and are addressed by
 // position — so the list has to keep the duplicates the name map folds away.
+// An object's walls and fences sit relative to its own cell. The liana hangs
+// in SCENA1 at (5,1) and walls off the cell west of it; a stone pile fences the
+// diagonal across its corner; a bare ClosedVert row carries nothing.
+func TestParseObjectFences(t *testing.T) {
+	p := SceneParser{}
+	liana := p.ParseObject("ObjectName\t\tliana;\nFonScript\t\tliana;\n" +
+		"ZCoord\t\t\t5;\nClosedVert\t\t-1,0;\nClosedDir\nActiveZone\t\t" +
+		"0,0,10,10;\nCursor\t\t\t0;\nText\t\t\t0;\nEnd;\n")
+	if !reflect.DeepEqual(liana.ClosedVert, [][2]int{{-1, 0}}) {
+		t.Errorf("liana ClosedVert = %v, want [[-1 0]]", liana.ClosedVert)
+	}
+	if len(liana.ClosedDir) != 0 {
+		t.Errorf("liana ClosedDir = %v, want none", liana.ClosedDir)
+	}
+	stone := p.ParseObject("ObjectName\t\tbgstone;\nZCoord\t\t\t5;\n" +
+		"ClosedVert\nClosedDir\t\t0,0,3;1,1,7;\nActiveZone\t\t0,0,1,1;\nEnd;\n")
+	if len(stone.ClosedVert) != 0 {
+		t.Errorf("stone ClosedVert = %v, want none", stone.ClosedVert)
+	}
+	if want := [][3]int{{0, 0, 3}, {1, 1, 7}}; !reflect.DeepEqual(
+		stone.ClosedDir, want,
+	) {
+		t.Errorf("stone ClosedDir = %v, want %v", stone.ClosedDir, want)
+	}
+	if stone.Z != 5 || len(stone.ActiveZones) != 1 {
+		t.Errorf("stone Z=%d zones=%v: the fences swallowed a neighbour row",
+			stone.Z, stone.ActiveZones)
+	}
+}
+
 func TestParseSceneSoundVariables(t *testing.T) {
 	scn := "SceneName\tTEST;\nSoundVariables\tstep,\"step.wav\",1;\n" +
 		"\t\t\tfon1,\"s11.wav\",5,*;\n\t\t\tfon1,\"s12.wav\",5,*;\nEnd;"
