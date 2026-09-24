@@ -131,9 +131,10 @@ func (g *Game) setCharCoord(args []string) {
 	default:
 		return
 	}
+	// The view stays where it is: Set moves no scroll (0x41a4f6), GoScene
+	// has already put the screen where the arrival wants it.
 	px, py := g.grid.ToScreen(g.cell[0], g.cell[1])
 	g.pos = [2]float64{float64(px), float64(py)}
-	g.clampCamera()
 }
 
 // setToggle records an ON/OFF UI switch (map access, mouse lock, bar lock...).

@@ -295,6 +295,9 @@ type SaveData struct {
 	// character's cell, z and hidden flag into the save (0x41fba0: +0x254,
 	// +0x258, +0x25c, +0x73c); saves made before the remake kept it have none.
 	Frid *CharSave `json:"frid,omitempty"`
+	// Scroll is where the view stood. The engine saves every scene's scroll
+	// (0x41fba0, scene +0x50) and a load resumes it; older saves have none.
+	Scroll *int `json:"scroll,omitempty"`
 }
 
 // CharSave is a character's place and visibility as a save records them.

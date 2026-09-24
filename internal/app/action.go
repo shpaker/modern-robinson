@@ -362,7 +362,12 @@ func (g *Game) startAproach(
 		return waitNone
 	}
 	if strings.EqualFold(args[0], "Frid") {
-		if skip || g.fridHidden {
+		if g.fridHidden {
+			g.landFrid(gx, gy)
+			return waitNone
+		}
+		g.aimAtCell(gx, gy)
+		if skip {
 			g.landFrid(gx, gy)
 			return waitNone
 		}
@@ -375,6 +380,7 @@ func (g *Game) startAproach(
 	if !strings.EqualFold(args[0], "Roby") {
 		return waitNone
 	}
+	g.aimAtCell(gx, gy)
 	tx, ty, free := g.grid.NearestFree(gx, gy)
 	if !free {
 		return waitNone
@@ -410,6 +416,14 @@ func (g *Game) startAproach(
 	// movie astray.
 	g.placeRoby([2]int{tx, ty})
 	return waitNone
+}
+
+// aimAtCell aims the camera at a cell's corner: an Aproach hands WalkTo the
+// goal cell's corner as the point to walk to (0x41a9df), and WalkTo centres the
+// view on it before it plans the route.
+func (g *Game) aimAtCell(gx, gy int) {
+	x, _ := g.grid.Corner(gx, gy)
+	g.aimCamera(x)
 }
 
 // placeRoby lands the hero on a cell at once, cutting any walk short.
