@@ -77,7 +77,7 @@ func TestBarOverlaysPerState(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			gs := types.NewGameState()
-			gs.Inventory = c.items
+			gs.Items = map[string][]string{"roby": c.items}
 			gs.UI["map"] = c.mapOpen
 			g := &Game{bar: bar, gs: gs, invScroll: c.scroll}
 			got := names(g.barOverlays())
@@ -99,7 +99,9 @@ func TestBarOverlaysPerState(t *testing.T) {
 func TestBarOverlayPlacement(t *testing.T) {
 	bar := shippedBar(t)
 	gs := types.NewGameState()
-	gs.Inventory = []string{"hand", "hat", "axe", "rope", "net"}
+	gs.Items = map[string][]string{
+		"roby": {"hand", "hat", "axe", "rope", "net"},
+	}
 	gs.UI["map"] = true
 	g := &Game{bar: bar, gs: gs, invScroll: 1}
 	at := map[string][2]int{}
@@ -215,5 +217,38 @@ func TestScriptInventoryChangeScrollsTheBarHome(t *testing.T) {
 	g.exec([]types.Command{{Kw: "AddItem", Args: []string{"hat"}}})
 	if g.invScroll != 0 {
 		t.Fatalf("invScroll = %d after AddItem, want 0", g.invScroll)
+	}
+}
+
+// The portrait hands control over the way the engine's toggle does
+// (0x404df0): never to a hidden character, and with the bar rebuilt from the
+// new one's list — scrolled to its start, the selected slot kept.
+func TestPortraitSwitchesToAVisibleCharacter(t *testing.T) {
+	bar := shippedBar(t)
+	gs := types.NewGameState()
+	gs.SetVar("FridIs", 1)
+	gs.Items = map[string][]string{
+		"roby": {"hand", "hat", "axe", "rope"},
+		"frid": {"handfr", "confr"},
+	}
+	gs.Active = "hat"
+	g := &Game{bar: bar, gs: gs, invScroll: 1, fridHidden: true}
+	cx := (bar.CharBox[0] + bar.CharBox[2]) / 2
+	cy := (bar.CharBox[1] + bar.CharBox[3]) / 2
+
+	g.clickBar(cx, cy)
+	if gs.ActiveChar != "Roby" || g.invScroll != 1 {
+		t.Fatalf("a hidden Friday took control: %s", gs.ActiveChar)
+	}
+	g.fridHidden = false
+	g.clickBar(cx, cy)
+	if gs.ActiveChar != "Frid" || gs.Active != "confr" || g.invScroll != 0 {
+		t.Fatalf("%s holds %q, scroll %d; want Frid with confr, scroll 0",
+			gs.ActiveChar, gs.Active, g.invScroll)
+	}
+	g.clickBar(cx, cy)
+	if gs.ActiveChar != "Roby" || gs.Active != "hat" {
+		t.Fatalf("back to %s holding %q, want Roby with the hat",
+			gs.ActiveChar, gs.Active)
 	}
 }

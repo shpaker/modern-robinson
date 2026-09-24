@@ -15,10 +15,14 @@ type Spawn struct {
 // are case-insensitive (the NGI scripts are), so keys are folded to lower case.
 // It carries no engine or resource dependencies.
 type GameState struct {
-	Vars      map[string]int    // SetVar/AddVar quest flags and counters
-	CharVars  map[string]string // SetCharVar dialogue-variant selectors
-	Inventory []string          // AddItem/DeleteItem, ordered for the bar
-	Active    string            // SetActive: the item in hand (never a character)
+	Vars     map[string]int    // SetVar/AddVar quest flags and counters
+	CharVars map[string]string // SetCharVar dialogue-variant selectors
+	// Items is each character's inventory, keyed by lower-case name, in bar
+	// order. The engine keeps one list per character (char+0x5a8, count
+	// +0x738) and the bar shows the controlled one's: Friday's condom (AddItem
+	// Frid, confr) is not the hero's to pick up.
+	Items  map[string][]string
+	Active string // SetActive: the item in hand (never a character)
 	// ActiveChar is who the player controls. SetActive addresses either kind:
 	// a character name switches control, anything else is picked up, and each
 	// character has his own items (hand/handfr, condom/confr), so the two must
@@ -41,12 +45,14 @@ type GameState struct {
 // (SetMap ON).
 func NewGameState() *GameState {
 	return &GameState{
-		Vars:     map[string]int{},
-		CharVars: map[string]string{},
-		gone:     map[string]map[string]bool{},
-		spawned:  map[string][]Spawn{},
-		verts:    map[string][]Vert{},
-		UI:       map[string]bool{"mouse": true, "bar": true, "cursor": true},
+		Vars:       map[string]int{},
+		CharVars:   map[string]string{},
+		Items:      map[string][]string{},
+		ActiveChar: "Roby",
+		gone:       map[string]map[string]bool{},
+		spawned:    map[string][]Spawn{},
+		verts:      map[string][]Vert{},
+		UI:         map[string]bool{"mouse": true, "bar": true, "cursor": true},
 	}
 }
 
@@ -87,43 +93,102 @@ func (g *GameState) SetCharVar(
 	g.CharVars[strings.ToLower(name)] = v
 }
 
-// HasItem reports whether the item is in the inventory.
-func (g *GameState) HasItem(item string) bool {
-	item = strings.ToLower(item)
-	for _, it := range g.Inventory {
-		if strings.ToLower(it) == item {
-			return true
+// indexFold is the position of an item in a list, or -1.
+func indexFold(list []string, item string) int {
+	for i, it := range list {
+		if strings.EqualFold(it, item) {
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
-// AddItem appends an item, ignoring duplicates.
+// Inventory returns the controlled character's items, in bar order.
+func (g *GameState) Inventory() []string {
+	return g.InventoryOf(g.ActiveChar)
+}
+
+// InventoryOf returns a character's items, in bar order.
+func (g *GameState) InventoryOf(char string) []string {
+	return g.Items[strings.ToLower(char)]
+}
+
+// HasItem reports whether the controlled character carries the item.
+func (g *GameState) HasItem(item string) bool {
+	return indexFold(g.Inventory(), item) >= 0
+}
+
+// AddItem gives the controlled character an item (AddItem item): the script's
+// performer, and every performer in the data is the one in control.
 func (g *GameState) AddItem(item string) {
-	if item == "" || g.HasItem(item) {
+	g.AddItemTo(g.ActiveChar, item)
+}
+
+// AddItemTo appends an item to a character's list (AddItem char,item),
+// ignoring duplicates. It never moves the hand: the new item lands after it.
+func (g *GameState) AddItemTo(char, item string) {
+	k := strings.ToLower(char)
+	if item == "" || indexFold(g.Items[k], item) >= 0 {
 		return
 	}
-	g.Inventory = append(g.Inventory, item)
+	if g.Items == nil {
+		g.Items = map[string][]string{}
+	}
+	g.Items[k] = append(g.Items[k], item)
 	g.InvRev++
 }
 
-// DelItem removes an item if present. Removing the item in hand selects the
-// first slot (the hand), as ROBY.EXE does (DeleteItem 0x405190).
+// DelItem takes an item from the controlled character (DeleteItem item).
 func (g *GameState) DelItem(item string) {
-	item = strings.ToLower(item)
-	for i, it := range g.Inventory {
-		if strings.ToLower(it) == item {
-			g.Inventory = append(g.Inventory[:i], g.Inventory[i+1:]...)
-			g.InvRev++
-			if strings.ToLower(g.Active) == item {
-				g.Active = "hand"
-				if len(g.Inventory) > 0 {
-					g.Active = g.Inventory[0]
-				}
-			}
-			return
-		}
+	g.DelItemFrom(g.ActiveChar, item)
+}
+
+// DelItemFrom removes an item from a character's list. The hand is a slot of
+// the bar, not an item (DeleteItem 0x405190): taking the item it points at
+// sends it back to the first slot, the hand itself; taking one to its left
+// leaves the slot alone, so the next item slides into the hand, and a slot
+// past the end falls back to the first (the rebuild, 0x404877).
+func (g *GameState) DelItemFrom(char, item string) {
+	k := strings.ToLower(char)
+	list := g.Items[k]
+	i := indexFold(list, item)
+	if i < 0 {
+		return
 	}
+	sel := -1
+	if strings.EqualFold(char, g.ActiveChar) {
+		sel = indexFold(list, g.Active)
+	}
+	list = append(list[:i], list[i+1:]...)
+	g.Items[k] = list
+	g.InvRev++
+	if sel < i {
+		return // another character's list, or an item right of the hand
+	}
+	if sel == i || sel >= len(list) {
+		sel = 0
+	}
+	g.Active = "hand"
+	if len(list) > 0 {
+		g.Active = list[sel]
+	}
+}
+
+// SetActiveChar hands control to a character (SetActive Roby|Frid, the
+// portrait). The bar is rebuilt from his list and keeps its selected slot, so
+// the hand holds whatever sits there, or the first item when his list is
+// shorter (0x404877).
+func (g *GameState) SetActiveChar(char string) {
+	sel := indexFold(g.Inventory(), g.Active)
+	g.ActiveChar = char
+	list := g.Inventory()
+	if sel < 0 || sel >= len(list) {
+		sel = 0
+	}
+	if len(list) > 0 {
+		g.Active = list[sel]
+	}
+	g.InvRev++
 }
 
 // MarkGone records that an object was removed from a scene, so it stays gone
@@ -218,7 +283,8 @@ type SaveData struct {
 	Cell       [2]int              `json:"cell"`
 	Vars       map[string]int      `json:"vars"`
 	CharVars   map[string]string   `json:"charVars"`
-	Inventory  []string            `json:"inventory"`
+	Items      map[string][]string `json:"items,omitempty"`
+	Inventory  []string            `json:"inventory,omitempty"` // pre-split
 	Active     string              `json:"active"`
 	ActiveChar string              `json:"active_char,omitempty"`
 	UI         map[string]bool     `json:"ui"`
@@ -243,7 +309,7 @@ func (g *GameState) Snapshot(scene string, cell [2]int) SaveData {
 	sd := SaveData{
 		Scene: scene, Cell: cell,
 		Vars: g.Vars, CharVars: g.CharVars,
-		Inventory: g.Inventory, Active: g.Active, ActiveChar: g.ActiveChar,
+		Items: g.Items, Active: g.Active, ActiveChar: g.ActiveChar,
 		UI:   g.UI,
 		Gone: map[string][]string{}, Spawned: g.spawned, Verts: g.verts,
 	}
@@ -266,7 +332,12 @@ func Restore(sd SaveData) *GameState {
 	if sd.CharVars != nil {
 		g.CharVars = sd.CharVars
 	}
-	g.Inventory = sd.Inventory
+	switch {
+	case sd.Items != nil:
+		g.Items = sd.Items
+	case sd.Inventory != nil:
+		g.Items = splitShared(sd.Inventory)
+	}
 	g.Active = sd.Active
 	g.ActiveChar = sd.ActiveChar
 	if g.ActiveChar == "" {
@@ -295,4 +366,27 @@ func Restore(sd SaveData) *GameState {
 		g.verts = map[string][]Vert{}
 	}
 	return g
+}
+
+// fridOwn are the items that are Friday's in a save from before the split,
+// when both characters shared one list: FRID.CHR starts her with handfr, and
+// the only item a script hands her is her condom (AddItem Frid, confr).
+var fridOwn = []string{"handfr", "confr"}
+
+// splitShared rebuilds the per-character lists from a pre-split save's shared
+// one: Friday's own items go to her, behind her bare hand, the rest stay the
+// hero's.
+func splitShared(shared []string) map[string][]string {
+	roby := []string{}
+	frid := []string{fridOwn[0]}
+	for _, it := range shared {
+		switch i := indexFold(fridOwn, it); {
+		case i == 0: // her hand is already first
+		case i > 0:
+			frid = append(frid, it)
+		default:
+			roby = append(roby, it)
+		}
+	}
+	return map[string][]string{"roby": roby, "frid": frid}
 }

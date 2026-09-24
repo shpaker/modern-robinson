@@ -24,8 +24,8 @@ func TestInventoryDedupeAndRemove(t *testing.T) {
 	st.AddItem("axe")
 	st.AddItem("Axe") // duplicate (case-insensitive)
 	st.AddItem("rope")
-	if len(st.Inventory) != 2 {
-		t.Fatalf("inventory=%v, want 2 unique", st.Inventory)
+	if len(st.Inventory()) != 2 {
+		t.Fatalf("inventory=%v, want 2 unique", st.Inventory())
 	}
 	st.DelItem("AXE")
 	if st.HasItem("axe") {
@@ -36,21 +36,89 @@ func TestInventoryDedupeAndRemove(t *testing.T) {
 	}
 }
 
-// Deleting the item in hand puts the hand back in it: the crab released into
-// the pool (DeleteItem crb) must not leave the empty hat acting as if full.
-func TestDelItemInHandSelectsHand(t *testing.T) {
+// The hand is a slot of the bar (DeleteItem 0x405190). Deleting the item in
+// it goes back to the first slot: the crab released into the pool must not
+// leave the empty hat acting as if full. Deleting one to the right leaves the
+// hand alone; one to the left keeps the slot, so the next item slides in, and
+// a slot left past the end falls back to the first.
+func TestDelItemKeepsTheSelectedSlot(t *testing.T) {
 	st := types.NewGameState()
-	st.AddItem("hand")
-	st.AddItem("hat")
-	st.AddItem("crb")
+	for _, it := range []string{"hand", "hat", "crb", "axe", "rope"} {
+		st.AddItem(it)
+	}
 	st.Active = "crb"
-	st.DelItem("hat")
+	st.DelItem("rope")
 	if st.Active != "crb" {
-		t.Fatalf("deleting another item moved the hand: %q", st.Active)
+		t.Fatalf("deleting to the right moved the hand: %q", st.Active)
+	}
+	st.DelItem("hat")
+	if st.Active != "axe" {
+		t.Fatalf("Active=%q, want axe slid into the slot", st.Active)
 	}
 	st.DelItem("CRB")
 	if st.Active != "hand" {
+		t.Fatalf("Active=%q past the end, want the first slot", st.Active)
+	}
+	st.Active = "axe"
+	st.DelItem("axe")
+	if st.Active != "hand" {
 		t.Fatalf("Active=%q after deleting it, want hand", st.Active)
+	}
+}
+
+// Each character has his own list and the bar shows the controlled one's.
+// Handing over control keeps the bar's selected slot (0x404877): the hero's
+// second slot becomes Friday's second, her first when she has fewer.
+func TestItemsArePerCharacter(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItemTo("Roby", "hand")
+	st.AddItemTo("Roby", "hat")
+	st.AddItemTo("Roby", "axe")
+	st.AddItemTo("Frid", "handfr")
+	st.Active = "hat"
+	st.AddItemTo("frid", "confr") // AddItem Frid, confr
+	if st.HasItem("confr") || st.Active != "hat" {
+		t.Fatal("Friday's condom must not reach the hero's bar")
+	}
+	st.SetActiveChar("Frid")
+	if st.Active != "confr" || len(st.Inventory()) != 2 {
+		t.Fatalf("Friday holds %q of %v, want slot 1 = confr",
+			st.Active, st.Inventory())
+	}
+	st.DelItem("confr") // FRCONFIR: her own script, her own list
+	if st.Active != "handfr" || len(st.InventoryOf("Roby")) != 3 {
+		t.Fatalf("Active=%q, Roby=%v", st.Active, st.InventoryOf("Roby"))
+	}
+	st.Active = "handfr"
+	st.SetActiveChar("Roby")
+	if st.Active != "hand" {
+		t.Fatalf("back to the hero with %q, want hand", st.Active)
+	}
+	st.Active = "axe"
+	st.SetActiveChar("Frid")
+	if st.Active != "handfr" {
+		t.Fatalf("slot 2 past Friday's list gave %q, want handfr", st.Active)
+	}
+}
+
+// A save from before the split holds one shared list: Friday's own items go
+// back to her, behind her bare hand.
+func TestRestoreSplitsASharedInventory(t *testing.T) {
+	st := types.Restore(types.SaveData{
+		Inventory: []string{"hand", "hat", "confr", "axe"},
+		Active:    "axe",
+	})
+	roby, frid := st.InventoryOf("Roby"), st.InventoryOf("Frid")
+	if len(roby) != 3 || roby[2] != "axe" || len(frid) != 2 ||
+		frid[0] != "handfr" || frid[1] != "confr" {
+		t.Fatalf("roby=%v frid=%v", roby, frid)
+	}
+	if st.ActiveChar != "Roby" || st.Active != "axe" {
+		t.Fatalf("%s holds %q", st.ActiveChar, st.Active)
+	}
+	back := types.Restore(st.Snapshot("SCENA0", [2]int{}))
+	if len(back.InventoryOf("Frid")) != 2 {
+		t.Fatalf("round trip lost Friday's list: %v", back.Items)
 	}
 }
 

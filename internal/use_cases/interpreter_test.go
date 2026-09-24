@@ -62,7 +62,7 @@ func TestExecStateMutations(t *testing.T) {
 		t.Fatalf("coins=%d", st.Var("coins"))
 	}
 	if !st.HasItem("axe") || !st.HasItem("rope") {
-		t.Fatalf("inventory=%v", st.Inventory)
+		t.Fatalf("inventory=%v", st.Inventory())
 	}
 	if st.Active != "hand" {
 		t.Fatalf("active=%q", st.Active)
@@ -277,6 +277,31 @@ func TestDeleteItemInHandHandsBackHand(t *testing.T) {
 	}, st)
 	if st.Active != "hand" || st.HasItem("crb") || !st.HasItem("hat") {
 		t.Fatalf("Active=%q inventory=%v, want hand with hat, no crb",
-			st.Active, st.Inventory)
+			st.Active, st.Inventory())
+	}
+}
+
+// AddItem Frid, confr (SCENA6 ROBT3STB, one of the hero's scripts) fills
+// Friday's list, not the bar in front of the player; a bare item command
+// addresses the performer, who in the data is always the one in control.
+func TestItemCommandsAddressTheirCharacter(t *testing.T) {
+	st := types.NewGameState()
+	st.AddItemTo("Roby", "hand")
+	st.AddItemTo("Frid", "handfr")
+	var in use_cases.Interpreter
+
+	execOut(in, []types.Command{
+		cmd("AddItem", "bt0"), cmd("AddItem", "Frid", "confr"),
+	}, st)
+	if r, f := st.InventoryOf("Roby"), st.InventoryOf("Frid"); len(r) != 2 ||
+		len(f) != 2 || f[1] != "confr" {
+		t.Fatalf("roby=%v frid=%v", r, f)
+	}
+	// FRCONFIR: Friday, in control, burns her own condom.
+	execOut(in, []types.Command{
+		cmd("SetActive", "Frid"), cmd("DeleteItem", "confr"),
+	}, st)
+	if f := st.InventoryOf("Frid"); len(f) != 1 || st.ActiveChar != "Frid" {
+		t.Fatalf("frid=%v active=%s", f, st.ActiveChar)
 	}
 }

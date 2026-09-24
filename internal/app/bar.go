@@ -160,10 +160,10 @@ func (g *Game) drawItems(screen *ebiten.Image) {
 	iw, ih := g.itemCell()
 	for i := 0; i < g.bar.ItemsShown; i++ {
 		idx := g.invScroll + i
-		if idx >= len(g.gs.Inventory) {
+		if idx >= len(g.gs.Inventory()) {
 			break
 		}
-		item := g.gs.Inventory[idx]
+		item := g.gs.Inventory()[idx]
 		sel := strings.EqualFold(g.gs.Active, item)
 		x := float64(ix + i*iw)
 		icon, authored := g.itemIcon(item, sel)
@@ -207,7 +207,7 @@ func (g *Game) barOverlays() []barOverlay {
 			"BAR78", g.bar.LeftArrow[0], g.bar.LeftArrow[1],
 		})
 	}
-	if g.invScroll+g.bar.ItemsShown < len(g.gs.Inventory) {
+	if g.invScroll+g.bar.ItemsShown < len(g.gs.Inventory()) {
 		// The right arrow hugs the far edge of its box, as its print does.
 		out = append(out, barOverlay{
 			"BAR81",
@@ -278,11 +278,16 @@ func (g *Game) clickBar(mx, my int) {
 	switch {
 	case inBox(g.bar.CharBox, mx, my):
 		// The portrait toggles the controlled character once Friday joined.
+		// The engine's toggle (0x404df0) passes over a hidden character and
+		// rebuilds the bar from the new one's list, scrolled to its start.
 		if g.gs.Var("FridIs") == 1 {
+			next, hidden := "Frid", g.fridHidden
 			if strings.EqualFold(g.gs.ActiveChar, "Frid") {
-				g.gs.ActiveChar = "Roby"
-			} else {
-				g.gs.ActiveChar = "Frid"
+				next, hidden = "Roby", g.charHidden
+			}
+			if !hidden {
+				g.gs.SetActiveChar(next)
+				g.invScroll = 0
 			}
 		}
 		return
@@ -292,7 +297,7 @@ func (g *Game) clickBar(mx, my int) {
 		}
 		return
 	case inBox(g.bar.RightArrow, mx, my):
-		if g.invScroll+g.bar.ItemsShown < len(g.gs.Inventory) {
+		if g.invScroll+g.bar.ItemsShown < len(g.gs.Inventory()) {
 			g.invScroll++
 		}
 		return
@@ -318,11 +323,11 @@ func (g *Game) clickBar(mx, my int) {
 	iw, ih := g.itemCell()
 	for i := 0; i < g.bar.ItemsShown; i++ {
 		idx := g.invScroll + i
-		if idx >= len(g.gs.Inventory) {
+		if idx >= len(g.gs.Inventory()) {
 			break
 		}
 		if pointIn(image.Rect(ix+i*iw, iy, ix+i*iw+iw, iy+ih), mx, my) {
-			g.gs.Active = g.gs.Inventory[idx]
+			g.gs.Active = g.gs.Inventory()[idx]
 			return
 		}
 	}

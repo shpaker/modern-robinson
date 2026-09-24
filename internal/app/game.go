@@ -179,10 +179,7 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	g.loadBar()
 	g.loadOptions()
 	g.loadCharacter()
-	// Starting inventory per ROBY.CHR (Items hand, hat).
-	g.gs.AddItem("hand")
-	g.gs.AddItem("hat")
-	g.gs.Active, g.gs.ActiveChar = "hand", "Roby"
+	g.seedItems()
 	// STARTUP.INF marks INT0 as the start scene (the home-room cutscene that
 	// chains into the island); ROBINSON_SCENE overrides for direct entry.
 	start := "INT0"
@@ -240,6 +237,36 @@ func (g *Game) seedStartup() {
 	}
 	for k, v := range charVars {
 		g.gs.SetCharVar(k, v)
+	}
+}
+
+// startItems is what each character carries when his .CHR cannot be read.
+var startItems = map[string][]string{
+	"Roby": {"hand", "hat"},
+	"Frid": {"handfr"},
+}
+
+// seedItems hands each character the Items his .CHR starts him with
+// (ROBY.CHR: hand, hat; FRID.CHR: handfr) and puts the hero in control with
+// his bare hand.
+func (g *Game) seedItems() {
+	for _, char := range []string{"Roby", "Frid"} {
+		items := startItems[char]
+		if c := g.res.SceneContainer(strings.ToUpper(char)); c != nil {
+			d, err := c.ExtractName(strings.ToUpper(char) + ".CHR")
+			if ch := g.parser.ParseChar(string(d)); err == nil &&
+				len(ch.Items) > 0 {
+				items = ch.Items
+			}
+		}
+		for _, it := range items {
+			g.gs.AddItemTo(char, it)
+		}
+	}
+	g.gs.ActiveChar = "Roby"
+	g.gs.Active = "hand"
+	if inv := g.gs.Inventory(); len(inv) > 0 {
+		g.gs.Active = inv[0]
 	}
 }
 
@@ -708,9 +735,7 @@ func (g *Game) resetRun() {
 func (g *Game) restart() {
 	g.gs = types.NewGameState()
 	g.seedStartup()
-	g.gs.AddItem("hand")
-	g.gs.AddItem("hat")
-	g.gs.Active, g.gs.ActiveChar = "hand", "Roby"
+	g.seedItems()
 	g.resetRun()
 	g.loadScene("INT0", nil, "", "")
 	g.enterLoading()
