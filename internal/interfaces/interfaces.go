@@ -47,6 +47,10 @@ type IResources interface {
 	// (from BEGIN.BGI), keyed by lower-case object name; objects absent from
 	// the map default to visible.
 	InitialVisibility(objectNames []string) map[string]bool
+	// Cursors is the game's mouse cursors (resources of ROBY.EXE), keyed by
+	// name in upper case — an item's ("HAND", "HAT"), the exit arrows
+	// ADV1..ADV4 and the waiting clock "247"; empty without the executable.
+	Cursors() map[string]types.Cursor
 }
 
 // IAudio plays the game's sounds: numbered effect channels, a looping music

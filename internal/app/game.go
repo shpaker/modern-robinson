@@ -12,7 +12,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
@@ -53,6 +52,10 @@ type Game struct {
 	hotspots  []hotspot
 	exitL     types.Exit
 	exitR     types.Exit
+
+	cursors      map[string]cursorSprite // the game's own, from ROBY.EXE
+	cursorName   string                  // this tick's pick (see cursor.go)
+	cursorSystem bool                    // the system arrow is showing instead
 
 	gs         *types.GameState
 	interp     use_cases.Interpreter
@@ -170,7 +173,8 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	}
 	// State commands never reach applyEffect; the trace hears them from here.
 	g.interp.Observe = g.trace
-	ebiten.SetCursorMode(ebiten.CursorModeHidden) // we draw our own cursor
+	ebiten.SetCursorMode(ebiten.CursorModeHidden) // the game draws its own
+	g.loadCursors()
 	g.optHover, g.optDrag = -1, -1
 	g.slotHover, g.slotSel, g.btnDown = -1, -1, -1
 	g.slotCache = map[int]*ebiten.Image{}
@@ -613,6 +617,7 @@ func (g *Game) Update() error {
 	if g.quit {
 		return ebiten.Termination
 	}
+	g.updateCursor() // every tick, whoever owns the frame, as OnIdle does
 	dt := 1.0 / float64(ebiten.TPS())
 	if g.updateScreens(dt) {
 		return nil // boot screens own the frame
@@ -754,21 +759,18 @@ const charZCoord = 7
 // bar over the bottom 80px, then HUD/debug/cursor. Everything in world space is
 // shifted left by camX; the bar and cursor are in viewport space.
 func (g *Game) Draw(screen *ebiten.Image) {
-	switch g.mode {
-	case modeLogo, modeTitle, modeLoading:
+	switch {
+	case g.mode == modeLogo || g.mode == modeTitle || g.mode == modeLoading:
 		g.drawScreens(screen)
-		return
-	case modeOptions, modeSave, modeLoad:
+	case g.mode == modeOptions || g.mode == modeSave || g.mode == modeLoad:
 		g.drawOptions(screen)
-		return
-	}
-	if g.mg != nil {
+	case g.mg != nil:
 		g.drawMinigame(screen)
-		return
+	default:
+		g.drawPlay(screen, true)
+		g.drawFade(screen)
 	}
-	g.drawPlay(screen, true)
-	g.drawFade(screen)
-	g.drawCursor(screen)
+	g.drawCursor(screen) // whichever mode picked it (cursor.go)
 }
 
 // drawPlay paints the world (and, with hud, the bar and debug overlay) into any
@@ -848,86 +850,6 @@ func (g *Game) objPresent(name string) bool {
 		}
 	}
 	return false
-}
-
-// cursorBusy is the cursor of a mouse the engine switched off: the original
-// swaps in an hourglass everywhere, the bar included, without hiding it.
-const cursorBusy = 5
-
-// cursorType returns the cursor for the hovered zone: 1..4 = arrows
-// (left/right/up/down), 0 = hand (object action), -1 = default pointer. Only a
-// zone shows an arrow: the original has no exit off its zones, so the edge of
-// the screen is just scenery unless an exit object lies there.
-func (g *Game) cursorType(mx, my int) int {
-	if !g.gs.UI["mouse"] {
-		return cursorBusy // SetMouse OFF: the waiting cursor (engine #247)
-	}
-	if my >= PlayH {
-		return cursorPointer // bar area
-	}
-	wx, wy := mx+g.camX, my
-	if hs := g.hotspotAt(wx, wy); hs != nil {
-		switch strings.ToLower(hs.key) {
-		case "goleft":
-			return 1
-		case "gorght":
-			return 2
-		}
-		return hs.ob.Cursor
-	}
-	return cursorPointer
-}
-
-// drawCursor draws our own cursor (the game's are proprietary) by zone type.
-func (g *Game) drawCursor(screen *ebiten.Image) {
-	mx, my := ebiten.CursorPosition()
-	drawCursorAs(screen, g.cursorType(mx, my))
-}
-
-// cursorPointer is the plain pointer, for places with no zones to hint at.
-const cursorPointer = -1
-
-// drawCursorAs draws the cursor of the given zone type at the mouse.
-func drawCursorAs(screen *ebiten.Image, kind int) {
-	mx, my := ebiten.CursorPosition()
-	x, y := float32(mx), float32(my)
-	white := rgba(255, 255, 255, 255)
-	dark := rgba(0, 0, 0, 200)
-	switch kind {
-	case 1: // ◄
-		drawTriangle(screen, x-10, y, x+4, y-8, x+4, y+8, white, dark)
-	case 2: // ►
-		drawTriangle(screen, x+10, y, x-4, y-8, x-4, y+8, white, dark)
-	case 3: // ▲
-		drawTriangle(screen, x, y-10, x-8, y+4, x+8, y+4, white, dark)
-	case 4: // ▼
-		drawTriangle(screen, x, y+10, x-8, y-4, x+8, y-4, white, dark)
-	case 0: // hand / action
-		vector.FillCircle(screen, x, y, 6, white, true)
-		vector.StrokeCircle(screen, x, y, 6, 1.5, dark, true)
-		vector.FillCircle(screen, x, y, 2, dark, true)
-	case cursorBusy: // the engine's hourglass, drawn as a little clock face
-		vector.FillCircle(screen, x, y, 7, white, true)
-		vector.StrokeCircle(screen, x, y, 7, 1.5, dark, true)
-		vector.StrokeLine(screen, x, y, x, y-4.5, 1.5, dark, true)
-		vector.StrokeLine(screen, x, y, x+3.5, y+1.5, 1.5, dark, true)
-	default: // pointer
-		vector.StrokeCircle(screen, x, y, 5, 1.5, white, true)
-		vector.FillCircle(screen, x, y, 1.5, white, true)
-	}
-}
-
-func drawTriangle(
-	dst *ebiten.Image,
-	ax, ay, bx, by, cx, cy float32,
-	fill, outline color.Color,
-) {
-	vector.StrokeLine(dst, ax, ay, bx, by, 3, outline, true)
-	vector.StrokeLine(dst, bx, by, cx, cy, 3, outline, true)
-	vector.StrokeLine(dst, cx, cy, ax, ay, 3, outline, true)
-	vector.StrokeLine(dst, ax, ay, bx, by, 1.5, fill, true)
-	vector.StrokeLine(dst, bx, by, cx, cy, 1.5, fill, true)
-	vector.StrokeLine(dst, cx, cy, ax, ay, 1.5, fill, true)
 }
 
 func (g *Game) drawCharacter(screen *ebiten.Image) {

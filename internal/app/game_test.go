@@ -20,7 +20,7 @@ func TestExitKeyNamesTheEdgeObjects(t *testing.T) {
 }
 
 // Only an exit's own zone leads out, as in the original: the screen edge
-// beside it is ground like any other, walked to under the plain cursor. The
+// beside it is ground like any other, walked to under the item's cursor. The
 // quest keeps some exits shut this way — SCENA2's goleft is not on stage until
 // the bananas in SCENA3 are eaten — and an edge that led out anyway skipped
 // the departure script and its Island bookkeeping.
@@ -30,6 +30,7 @@ func TestOnlyTheExitZoneLeadsOut(t *testing.T) {
 	g.sceneC.(*fsPack).files["ROHANGOL.FS"] = []byte(poolScript)
 	g.audio = &fakeAudio{}
 	g.cell = [2]int{2, 1}
+	g.w, g.h = 1024, 400
 	g.exitL = types.Exit{Scene: "SCENA7", Entry: "Roin6", OK: true}
 	cx, cy := g.grid.Corner(0, 1) // x=15: the zone starts inside the screen
 	g.hotspots = []hotspot{{
@@ -39,8 +40,8 @@ func TestOnlyTheExitZoneLeadsOut(t *testing.T) {
 	}}
 
 	edge := [2]int{cx - 10, cy + 10} // the screen edge, left of the zone
-	if c := g.cursorType(edge[0], edge[1]); c != cursorPointer {
-		t.Errorf("cursor at the edge = %d, want the plain pointer", c)
+	if c := g.playCursor(edge[0], edge[1]); c != cursorHand {
+		t.Errorf("cursor at the edge = %s, want the hand in hand", c)
 	}
 	g.click(edge[0], edge[1])
 	if g.act != nil || g.pending != nil {
@@ -50,8 +51,8 @@ func TestOnlyTheExitZoneLeadsOut(t *testing.T) {
 		t.Error("a click beside the exit zone must walk")
 	}
 
-	if c := g.cursorType(cx+20, cy+10); c != 1 {
-		t.Errorf("cursor over the zone = %d, want the left arrow", c)
+	if c := g.playCursor(cx+20, cy+10); c != "ADV1" {
+		t.Errorf("cursor over the zone = %s, want the left arrow ADV1", c)
 	}
 	g.click(cx+20, cy+10)
 	if g.act == nil {
