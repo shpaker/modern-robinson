@@ -130,6 +130,29 @@ func TestPreviewClick(t *testing.T) {
 	}
 }
 
+// The HUD names an exit even while its arrow is off stage, and says so: SCENA2
+// holds its goleft back until the bananas in SCENA3 are eaten, and a bare
+// "L=SCENA7" there reads as a broken exit.
+func TestExitDebugNamesTheMissingArrow(t *testing.T) {
+	g := &Game{}
+	if got := g.exitDebug(true); got != "-" {
+		t.Errorf("no exit: %q", got)
+	}
+	g.exitL = types.Exit{Scene: "SCENA7", GX: 6, OK: true}
+	g.exitR = types.Exit{Scene: "SCENA1", GX: 0, OK: true}
+	g.sceneObjs = []*sceneObj{{ref: types.ObjectRef{Name: "gorght"}}}
+	if got := g.exitDebug(true); got != "SCENA7(6,0) no goleft" {
+		t.Errorf("left without its arrow: %q", got)
+	}
+	if got := g.exitDebug(false); got != "SCENA1(0,0)" {
+		t.Errorf("right with its arrow: %q", got)
+	}
+	g.sceneObjs[0].removed = true
+	if got := g.exitDebug(false); got != "SCENA1(0,0) no gorght" {
+		t.Errorf("right after DelObject: %q", got)
+	}
+}
+
 // A route keeps every planned cell; what is left of it starts past the cell
 // the walker stands on, and before the first step lands that is all of it.
 func TestRemainingRoute(t *testing.T) {
