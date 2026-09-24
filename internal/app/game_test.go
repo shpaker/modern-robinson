@@ -4,8 +4,6 @@ import (
 	"image"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -190,23 +188,6 @@ func TestRobyTarget(t *testing.T) {
 	for _, c := range cases {
 		if got := robyTarget(c.args); got != c.want {
 			t.Errorf("robyTarget(%v) = %v, want %v", c.args, got, c.want)
-		}
-	}
-}
-
-// The minigames pick pieces by their pixels, but never outside the bitmap: the
-// bounds test has to come first, or a click next to a piece reads a neighbour's
-// memory. Reading an actual pixel needs a running graphics context, so only the
-// guards are exercised here.
-func TestOpaqueAtGuardsBounds(t *testing.T) {
-	if opaqueAt(nil, 0, 0) {
-		t.Error("a missing sprite must never answer a click")
-	}
-	img := ebiten.NewImage(4, 4)
-	outside := [][2]int{{-1, 0}, {0, -1}, {4, 0}, {0, 4}, {4, 4}}
-	for _, p := range outside {
-		if opaqueAt(img, p[0], p[1]) {
-			t.Errorf("opaqueAt(%d,%d) is outside a 4x4 sprite", p[0], p[1])
 		}
 	}
 }

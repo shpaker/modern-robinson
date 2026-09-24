@@ -46,6 +46,15 @@ linters:
             - pkg: github.com/shpaker/modern-robinson/internal/adapters
             - pkg: github.com/shpaker/modern-robinson/internal/repositories
             - pkg: github.com/shpaker/modern-robinson/internal/app
+        # Minigames: the engine, but the game's files only through their Host.
+        minigames:
+          files:
+            - "**/internal/minigame/**"
+          deny:
+            - pkg: github.com/shpaker/modern-robinson/internal/repositories
+              desc: minigames reach resources only through minigame.Host
+            - pkg: github.com/shpaker/modern-robinson/internal/app
+            - pkg: github.com/shpaker/modern-robinson/internal/use_cases
         # Presentation may use the engine but not infrastructure/root.
         presentation:
           files:

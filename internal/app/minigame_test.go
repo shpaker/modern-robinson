@@ -1,11 +1,13 @@
 package app
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/minigame/catalog"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
@@ -20,6 +22,8 @@ func (emptyPacks) ScreenPack(string) (map[string]*types.NGB, types.Palette) {
 }
 
 func (emptyPacks) ScreenPalettes(string) []types.Palette { return nil }
+
+func (emptyPacks) ScreenText(string, string) string { return "" }
 
 // The launcher scripts put StartGame and the branches that test its result on
 // one frame, so the frame has to be suspended and finished later. This drives
@@ -106,9 +110,30 @@ func TestMinigameResultChoosesTheBranch(t *testing.T) {
 	}
 }
 
+// Every game of the catalog, missing its pack, has to say so with a plain nil:
+// a nil pointer in the interface would pass for a running game, and the quest
+// would wait on a minigame that never draws.
+func TestEveryMinigameWithoutAssetsLetsTheQuestThrough(t *testing.T) {
+	for id := range catalog.Games {
+		g := &Game{
+			res:    emptyPacks{},
+			parser: repositories.SceneParser{},
+			gs:     types.NewGameState(),
+		}
+		g.startMinigame([]string{strconv.Itoa(id), "Result", "Param"})
+		if g.mg != nil {
+			t.Errorf("game %d: running without its assets", id)
+		}
+		if g.gs.Var("Result") != 1 {
+			t.Errorf("game %d: Result = %d, want the quest let through", id,
+				g.gs.Var("Result"))
+		}
+	}
+}
+
 // stubGame finishes on its first update with a fixed result.
 type stubGame struct{ result int }
 
-func (s stubGame) update(*Game, float64) (bool, int) { return true, s.result }
+func (s stubGame) Update(float64) (bool, int) { return true, s.result }
 
-func (stubGame) draw(*Game, *ebiten.Image) {}
+func (stubGame) Draw(*ebiten.Image) {}

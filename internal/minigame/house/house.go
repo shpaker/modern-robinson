@@ -1,4 +1,6 @@
-package app
+// Package house is the hut jigsaw: StartGame 1, HOUSE.DAT, the result goes
+// into House.
+package house
 
 import (
 	"image"
@@ -8,6 +10,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/shpaker/modern-robinson/internal/minigame"
 )
 
 // The hut jigsaw (StartGame 1 -> House). Seventeen logs and two leaf bundles
@@ -15,6 +19,7 @@ import (
 // silhouette in a fixed order, each at its authored spot, upright only.
 // H<i+1>1..4 are the four authored rotations of piece i.
 type houseGame struct {
+	host    minigame.Host
 	sprites map[string]*ebiten.Image
 	pos     [17][2]int // piece centre
 	rot     [17]int
@@ -71,10 +76,10 @@ var housePrereq = [17][]int{
 
 var houseExit = image.Rect(565, 406, 633, 472)
 
-// newHouseGame loads HOUSE.DAT and scatters the pieces over the right strip.
-func newHouseGame(g *Game) minigame {
-	h := &houseGame{held: -1, fallTo: -1, fallPc: -1}
-	h.sprites = g.packImages("HOUSE")
+// New loads HOUSE.DAT and scatters the pieces over the right strip.
+func New(host minigame.Host, _ int) minigame.Game {
+	h := &houseGame{host: host, held: -1, fallTo: -1, fallPc: -1}
+	h.sprites = host.Images("HOUSE", nil)
 	if h.sprites["BACK"] == nil {
 		return nil
 	}
@@ -138,10 +143,10 @@ func (h *houseGame) prereqsPlaced(i int) bool {
 }
 
 // update drives pick, carry, rotate, snap and the drop fall.
-func (h *houseGame) update(g *Game, dt float64) (bool, int) {
+func (h *houseGame) Update(dt float64) (bool, int) {
 	if h.won {
 		h.finishT += dt
-		return h.finishT > 3 || clickedThisTick(), 1
+		return h.finishT > 3 || minigame.Clicked(), 1
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
@@ -153,13 +158,13 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 		if h.pos[h.fallPc][1] >= h.fallTo {
 			h.pos[h.fallPc][1] = h.fallTo
 			if h.placed[h.fallPc] {
-				g.playSound([]string{"h_good.wav", "1"})
+				h.host.PlaySound("h_good.wav", 1)
 				if h.placed[15] && h.placed[16] {
 					h.won = true
-					g.playSound([]string{"final1.wav", "1"})
+					h.host.PlaySound("final1.wav", 1)
 				}
 			} else {
-				g.playSound([]string{"h_error.wav", "1"})
+				h.host.PlaySound("h_error.wav", 1)
 			}
 			h.fallPc = -1
 		}
@@ -170,16 +175,16 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 			// Rotate about the cursor.
 			h.rot[h.held] = (h.rot[h.held] + 1) & 3
-			g.playSound([]string{"h_turn.wav", "1"})
+			h.host.PlaySound("h_turn.wav", 1)
 		}
-		if !clickedThisTick() {
+		if !minigame.Clicked() {
 			return false, 0
 		}
 		i := h.held
 		h.held = -1
 		if mx >= 324 { // back to the tray
 			h.placed[i] = false
-			g.playSound([]string{"h_back.wav", "1"})
+			h.host.PlaySound("h_back.wav", 1)
 			return false, 0
 		}
 		w, hh := h.size(i)
@@ -197,10 +202,10 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 		}
 		return false, 0
 	}
-	if !clickedThisTick() {
+	if !minigame.Clicked() {
 		return false, 0
 	}
-	if pointIn(houseExit, mx, my) {
+	if minigame.In(houseExit, mx, my) {
 		return true, 0
 	}
 	// Pick the front-most piece whose pixel is under the cursor.
@@ -210,14 +215,14 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 			continue
 		}
 		x, y := h.topLeft(i)
-		if opaqueAt(h.sprite(i), mx-x, my-y) {
+		if minigame.Opaque(h.sprite(i), mx-x, my-y) {
 			best, bestZ = i, h.z[i]
 		}
 	}
 	if best >= 0 {
 		h.held = best
 		h.bringToFront(best)
-		g.playSound([]string{"h_take.wav", "1"})
+		h.host.PlaySound("h_take.wav", 1)
 	}
 	return false, 0
 }
@@ -225,8 +230,8 @@ func (h *houseGame) update(g *Game, dt float64) (bool, int) {
 // draw paints the silhouette and the pieces back-to-front. bringToFront leaves
 // z unbounded, so the order is sorted rather than scanned over a fixed range —
 // scanning made every piece whose z had grown past the range disappear.
-func (h *houseGame) draw(_ *Game, screen *ebiten.Image) {
-	blitAt(screen, h.sprites["BACK"], 0, 0)
+func (h *houseGame) Draw(screen *ebiten.Image) {
+	minigame.Blit(screen, h.sprites["BACK"], 0, 0)
 	order := make([]int, len(h.z))
 	for i := range order {
 		order[i] = i
@@ -237,7 +242,7 @@ func (h *houseGame) draw(_ *Game, screen *ebiten.Image) {
 	)
 	for _, i := range order {
 		x, y := h.topLeft(i)
-		blitAt(screen, h.sprite(i), x, y)
+		minigame.Blit(screen, h.sprite(i), x, y)
 	}
 }
 

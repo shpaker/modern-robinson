@@ -85,3 +85,17 @@ func TestMinigamePacksDecodeWhole(t *testing.T) {
 		}
 	}
 }
+
+// The translator's whole game is one CP1251 text: its first line is the
+// 30-letter lowercase alphabet the pictograms stand for.
+func TestScreenTextDecodesCP1251(t *testing.T) {
+	r := NewResources(testutil.GameRoot(t))
+	txt := r.ScreenText("CRYPT", "CRYPT.TXT")
+	first, _, _ := strings.Cut(txt, "\n")
+	if got := []rune(strings.TrimSpace(first)); len(got) != 30 || got[0] != 'а' {
+		t.Errorf("alphabet line = %q, want 30 letters from «а»", first)
+	}
+	if r.ScreenText("CRYPT", "NO.TXT") != "" || r.ScreenText("NO", "X") != "" {
+		t.Error("a missing pack or entry must read as empty text")
+	}
+}

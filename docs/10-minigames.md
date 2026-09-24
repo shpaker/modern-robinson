@@ -25,6 +25,9 @@
 восемь указателей (`Init`, `Done`, `OnPaint`, `OnIdle`, `OnKeyDown`,
 `OnLButtonDown`, `OnRButtonDown`, `OnMouseMove`).
 
+В ремейке — `internal/minigame`: по пакету на игру, таблица `catalog` по
+`gameId`, ресурсы и звук — только через `minigame.Host`.
+
 **Результат всегда 0 или 1**: возвращается `g_state == 4` (успех); `g_state = 3`
 ставят ESC и кнопка выхода. Других кодов нет. `paramVar` — только вход, обратно
 никогда не пишется, и три игры (хижина, шашки, шар) его вообще не читают.

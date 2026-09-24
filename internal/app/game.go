@@ -18,6 +18,7 @@ import (
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/types"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
@@ -130,9 +131,8 @@ type Game struct {
 	volMusic   float64
 	speed      float64 // 0..1 game speed slider (0.5 = original pace)
 
-	mg       minigame        // the minigame currently taking over the screen
+	mg       minigame.Game   // the minigame currently taking over the screen
 	mgVar    string          // quest variable its result goes into
-	mgParam  int             // paramVar value the script passed in
 	mgResume []types.Command // frame tail waiting on the minigame's result
 
 	// scene transition fade driven by the scene's .FAD table
@@ -637,7 +637,7 @@ func (g *Game) toggleOptions() {
 func (g *Game) resetRun() {
 	g.fadeCurve, g.fadeTo, g.fadeOut, g.fadeStep = nil, nil, false, 0
 	g.pending = nil
-	g.mg, g.mgVar, g.mgParam, g.mgResume = nil, "", 0, nil
+	g.mg, g.mgVar, g.mgResume = nil, "", nil
 	g.idleAct, g.idleT = nil, 0
 	g.robyZ = charZCoord
 	g.camShift = 0

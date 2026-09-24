@@ -36,6 +36,9 @@ type IResources interface {
 	ScreenPalettes(pack string) []types.Palette
 	// ScreenFile is a raw entry of a top-level pack (CRYPT.TXT, ...).
 	ScreenFile(pack, name string) []byte
+	// ScreenText is a text entry of a top-level pack, decoded from CP1251;
+	// empty when the pack or the entry is missing.
+	ScreenText(pack, name string) string
 	// SceneFade is the scene's per-step fade brightness curve (1 -> 0).
 	SceneFade(name string) []float64
 	// Texts is the global string table (TEXT.DAT); Text ids are 0-based lines.

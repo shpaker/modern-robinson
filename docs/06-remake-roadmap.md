@@ -65,6 +65,7 @@ WASM снят с целей: ресурсы игры весят 338 МБ (150 М
 cmd/main.go                      точка входа: найти папку игры, запустить окно
 internal/app                     композиционный корень: игровой цикл, сцены, UI
 internal/adapters                Ebiten: изображения, анимации, звук, шрифт
+internal/minigame (+catalog)     шесть мини-игр, по пакету на игру
 internal/use_cases               логика: сетка, пути, интерпретатор, циклы ходьбы
 internal/repositories (+codec)   единственная дверь к файлам игры
 internal/interfaces, types       контракты и доменные данные
