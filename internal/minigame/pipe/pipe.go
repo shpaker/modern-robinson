@@ -157,7 +157,7 @@ func (p *pipeGame) Update(dt float64) (bool, int) {
 	if !minigame.Clicked() {
 		return false, 0
 	}
-	mx, my := minigame.Cursor()
+	mx, my := ebiten.CursorPosition()
 	if p.held < 0 {
 		if minigame.In(pipeListen, mx, my) {
 			p.playing, p.noteIdx, p.noteT = true, 0, 0.4
@@ -204,7 +204,7 @@ func (p *pipeGame) Draw(screen *ebiten.Image) {
 	}
 	minigame.Blit(screen, p.sprites["PIPE112"], 6, 443) // the rail over seated tubes
 	if p.held >= 0 {
-		mx, my := minigame.Cursor()
+		mx, my := ebiten.CursorPosition()
 		minigame.Blit(screen, p.sprites["PIPE1"+strconv.Itoa(p.held)],
 			mx-pipeCell/2, my-pipeCell/2)
 	}

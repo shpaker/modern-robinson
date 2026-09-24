@@ -11,7 +11,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
-	"github.com/shpaker/modern-robinson/internal/adapters/pointer"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -123,7 +122,7 @@ func (g *Game) updateOptions() bool {
 	m := readMouse()
 	switch g.mode {
 	case modeOptions:
-		g.updateOptionsMenu(m)
+		g.updateOptionsMenu(m.x, m.y, m.clicked)
 	case modeSave, modeLoad:
 		g.updateSlotScreen(m)
 	}
@@ -131,9 +130,8 @@ func (g *Game) updateOptions() bool {
 }
 
 // updateOptionsMenu handles the five menu rows and the three sliders.
-func (g *Game) updateOptionsMenu(m mouseState) {
-	mx, my := m.x, m.y
-	row := -1
+func (g *Game) updateOptionsMenu(mx, my int, click bool) {
+	g.optHover = -1
 	for i, r := range menuRows {
 		// Until the first run starts, "continue" (1) and "save" (3) are dead,
 		// as in the original (ROBY.PDF p.24): no highlight and no click.
@@ -141,37 +139,29 @@ func (g *Game) updateOptionsMenu(m mouseState) {
 			continue
 		}
 		if pointIn(r, mx, my) {
-			row = i
+			g.optHover = i
 		}
 	}
-	// A lifted finger lights nothing, though its tap still lands on the row.
-	g.optHover = row
-	if m.lifted {
-		g.optHover = -1
-	}
-	// Dragging a slider keeps following the pointer until it is up. The grab
-	// comes with the press, not the click: a finger clicks only when lifted.
+	// Dragging a slider keeps following the cursor until the button is up.
 	if g.optDrag >= 0 {
-		if !m.pressed {
+		if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 			g.optDrag = -1
 		} else {
 			g.setSlider(g.optDrag, mx)
 		}
 		return
 	}
-	if m.down {
-		for i, t := range sliderTracks {
-			if pointIn(t, mx, my) {
-				g.optDrag = i
-				g.setSlider(i, mx)
-				return
-			}
-		}
-	}
-	if !m.clicked {
+	if !click {
 		return
 	}
-	switch row {
+	for i, t := range sliderTracks {
+		if pointIn(t, mx, my) {
+			g.optDrag = i
+			g.setSlider(i, mx)
+			return
+		}
+	}
+	switch g.optHover {
 	case 0: // начать новую игру
 		g.restart()
 	case 1: // продолжить игру
@@ -246,12 +236,12 @@ func slotButtons(mode int) [2]string {
 func (g *Game) updateSlotScreen(m mouseState) {
 	g.slotHover = -1
 	for i := 0; i < slotCount; i++ {
-		if !m.lifted && pointIn(slotRect(i), m.x, m.y) {
+		if pointIn(slotRect(i), m.x, m.y) {
 			g.slotHover = i
 		}
 	}
 	switch {
-	case m.down:
+	case m.clicked:
 		g.btnDown = slotButtonAt(m.x, m.y)
 		if g.slotHover >= 0 {
 			g.slotSel = g.slotHover
@@ -315,7 +305,7 @@ func (g *Game) drawOptions(screen *ebiten.Image) {
 		// Both buttons are painted into each backdrop in their raised state;
 		// the pack ships the pushed-in one as a bitmap per screen, so it only
 		// goes up while the player holds that button down.
-		cx, cy := pointer.Pos()
+		cx, cy := ebiten.CursorPosition()
 		if btn := g.btnDown; btn >= 0 && slotButtonAt(cx, cy) == btn {
 			r := slotButtonRect(btn)
 			g.blitOpt(screen, slotButtons(g.mode)[btn], r.Min.X, r.Min.Y)

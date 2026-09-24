@@ -155,7 +155,7 @@ func (c *cryptGame) Update(dt float64) (bool, int) {
 	if !minigame.Clicked() {
 		return false, 0
 	}
-	mx, my := minigame.Cursor()
+	mx, my := ebiten.CursorPosition()
 	switch {
 	case minigame.In(cryptExitBtn, mx, my):
 		return true, 0
@@ -281,7 +281,7 @@ func (c *cryptGame) Draw(screen *ebiten.Image) {
 		}
 	}
 	if c.sel >= 0 {
-		mx, my := minigame.Cursor()
+		mx, my := ebiten.CursorPosition()
 		minigame.Blit(screen, c.sprites["R"+strconv.Itoa(c.sel+1)], mx-10, my-9)
 	}
 }
