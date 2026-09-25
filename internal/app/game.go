@@ -135,6 +135,7 @@ type Game struct {
 	saves      saveStore
 	thumb      *ebiten.Image
 	scratch    *ebiten.Image
+	cfg        Config // the settings it started with; keepLevels writes back
 	volSound   float64
 	volMusic   float64
 	speed      float64 // 0..1 game speed slider (0.5 = original pace)
@@ -190,6 +191,7 @@ func newGame(res interfaces.IResources, cfg Config, audio interfaces.IAudio) *Ga
 	g.optHover, g.optDrag = -1, -1
 	g.slotHover, g.slotSel, g.btnDown = -1, 0, -1
 	g.slotCache = map[int]*ebiten.Image{}
+	g.cfg = cfg
 	g.volSound, g.volMusic, g.speed = cfg.Sound, cfg.Music, cfg.Speed
 	g.audio.SetVolume(g.volSound) // the sliders show them; the sounds obey too
 	g.audio.SetMusicVolume(g.volMusic)

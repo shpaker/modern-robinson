@@ -2,7 +2,9 @@ package app
 
 import (
 	"bufio"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,6 +32,9 @@ type Config struct {
 	Speed      float64
 	Debug      bool
 	Fullscreen bool
+	// Path is the file the settings live in, where SaveLevels writes the
+	// sliders back; "" keeps them for this run only (the browser build).
+	Path string
 }
 
 // DefaultConfig is what the game uses when config.yml says nothing.
@@ -48,12 +53,14 @@ const ConfigName = "config.yml"
 // applied on top.
 func LoadConfig(root string) Config {
 	cfg := DefaultConfig()
-	cands := []string{filepath.Join(root, ConfigName)}
+	cfg.Path = filepath.Join(root, ConfigName) // beside the saves, when none yet
+	cands := []string{cfg.Path}
 	if exe, err := os.Executable(); err == nil {
 		cands = append(cands, filepath.Join(filepath.Dir(exe), ConfigName))
 	}
 	for _, p := range cands {
 		if f, err := os.Open(p); err == nil {
+			cfg.Path = p
 			cfg.apply(f)
 			_ = f.Close()
 			break
@@ -127,6 +134,59 @@ func (c *Config) clamp() {
 	c.Music = clampF(c.Music, 0, 1)
 	c.Speed = clampF(c.Speed, 0, 1)
 }
+
+// levelKeys are the settings the options screen changes, in the order a file
+// that lacks them gets them appended.
+var levelKeys = []string{"sound", "music", "speed"}
+
+// SaveLevels writes the sliders into the settings file, so the next start
+// begins where the player left them. Only the sound, music and speed lines
+// change — every one of them, should a key repeat — and the rest of the file,
+// comments included, stays as written; a key the file lacks goes at the end.
+func (c Config) SaveLevels(sound, music, speed float64) error {
+	if c.Path == "" {
+		return nil
+	}
+	vals := map[string]string{
+		"sound": level(sound), "music": level(music), "speed": level(speed),
+	}
+	raw, err := os.ReadFile(c.Path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	var lines []string
+	if s := strings.TrimRight(string(raw), "\n"); s != "" {
+		lines = strings.Split(s, "\n")
+	}
+	seen := map[string]bool{}
+	for i, line := range lines {
+		body, note := line, ""
+		if j := strings.IndexByte(line, '#'); j >= 0 {
+			body, note = line[:j], "  "+line[j:]
+		}
+		key, _, ok := strings.Cut(body, ":")
+		k := strings.ToLower(strings.TrimSpace(key))
+		if v, known := vals[k]; ok && known {
+			lines[i] = strings.TrimSpace(key) + ": " + v + note
+			seen[k] = true
+		}
+	}
+	for _, k := range levelKeys {
+		if !seen[k] {
+			lines = append(lines, k+": "+vals[k])
+		}
+	}
+	tmp := c.Path + ".tmp"
+	body := []byte(strings.Join(lines, "\n") + "\n")
+	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, c.Path)
+}
+
+// level is a slider's value as the file keeps it: two decimals are finer
+// than a pixel of the track.
+func level(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }
 
 func truthy(v string) bool {
 	switch strings.ToLower(v) {
