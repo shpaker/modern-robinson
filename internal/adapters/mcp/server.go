@@ -8,6 +8,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 
@@ -30,6 +31,8 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 	`чувствуешь, что задумал. Готовых фраз нет — говори сам, по тому, что ` +
 	`происходит. Какой Роби, узнавай из того, что он сам говорит в игре ` +
 	`(said, hearing).
+
+` + thinkFirst + `
 
 Что приходит от игры (JSON):
 - where — где ты: остров, карта острова, головоломка, заставка, пауза; ` +
@@ -69,6 +72,14 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 Проект: ` + projectURL + `. Перед первым ходом поприветствуй игрока ` +
 	`своими словами, дай ему эту ссылку и пожелай хорошего выживания.`
 
+// thinkFirst is how the client plays: a thought before every action, as the
+// user put it.
+const thinkFirst = "Перед каждым действием модель пишет в чат мысль от лица " +
+	"Роби: что вижу, что знаю, чего хочу и почему именно это. После ответа — " +
+	"короткая реакция. Не перебирать вещи на всём подряд, а связывать " +
+	"услышанное с увиденным. Если ничего не выходит, остановиться и " +
+	"подумать, что упускаешь."
+
 type lookIn struct {
 	Image bool `json:"image,omitempty" jsonschema:"приложить картинку того, что сейчас в окне"`
 }
@@ -76,15 +87,23 @@ type lookIn struct {
 type useIn struct {
 	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — к себе"`
 	Item   string `json:"item,omitempty" jsonschema:"какую вещь взять в руки перед этим; пусто — ту, что уже в руках"`
+	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
 type goIn struct {
-	To string `json:"to" jsonschema:"куда: имя из exits, а на карте острова — место из around"`
+	To  string `json:"to"  jsonschema:"куда: имя из exits, а на карте острова — место из around"`
+	Why string `json:"why" jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
 type askIn struct {
 	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница к себе"`
 	Item   string `json:"item,omitempty" jsonschema:"какую свою вещь ей взять; пусто — ту, что у неё в руках"`
+	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+}
+
+// whyIn is an action that takes nothing but its reason.
+type whyIn struct {
+	Why string `json:"why" jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
 type waitIn struct {
@@ -95,6 +114,7 @@ type clickIn struct {
 	X      int    `json:"x"                jsonschema:"x на экране головоломки, 0..639"`
 	Y      int    `json:"y"                jsonschema:"y на экране головоломки, 0..479"`
 	Button string `json:"button,omitempty" jsonschema:"left (по умолчанию) или right"`
+	Why    string `json:"why"              jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
 type slotIn struct {
@@ -198,24 +218,36 @@ func (s *server) look(
 func (s *server) use(
 	ctx context.Context, _ *sdk.CallToolRequest, in useIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	return s.answer(ctx)(s.c.Use(ctx, in.Target, in.Item))
 }
 
 func (s *server) goTo(
 	ctx context.Context, _ *sdk.CallToolRequest, in goIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	return s.answer(ctx)(s.c.Go(ctx, in.To))
 }
 
 func (s *server) openMap(
-	ctx context.Context, _ *sdk.CallToolRequest, _ struct{},
+	ctx context.Context, _ *sdk.CallToolRequest, in whyIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	return s.answer(ctx)(s.c.OpenMap(ctx))
 }
 
 func (s *server) askFriday(
 	ctx context.Context, _ *sdk.CallToolRequest, in askIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	return s.answer(ctx)(s.c.AskFriday(ctx, in.Target, in.Item))
 }
 
@@ -228,13 +260,19 @@ func (s *server) wait(
 func (s *server) puzzleClick(
 	ctx context.Context, _ *sdk.CallToolRequest, in clickIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	right := strings.EqualFold(in.Button, "right")
 	return s.answer(ctx)(s.c.PuzzleClick(ctx, in.X, in.Y, right))
 }
 
 func (s *server) puzzleGiveUp(
-	ctx context.Context, _ *sdk.CallToolRequest, _ struct{},
+	ctx context.Context, _ *sdk.CallToolRequest, in whyIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
 	return s.answer(ctx)(s.c.PuzzleGiveUp(ctx))
 }
 
@@ -251,6 +289,19 @@ func (s *server) load(
 	ctx context.Context, _ *sdk.CallToolRequest, in slotIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
 	return s.answer(ctx)(s.c.Load(ctx, in.Slot))
+}
+
+// errNoWhy refuses an action taken without a reason.
+var errNoWhy = errors.New("why пуст: сначала напиши, зачем это действие")
+
+// reasoned refuses an action whose reason is blank: every action is meant to
+// come after a thought (thinkFirst). The reason stays with the client; the
+// game never sees it.
+func reasoned(why string) error {
+	if strings.TrimSpace(why) == "" {
+		return errNoWhy
+	}
+	return nil
 }
 
 // answer turns an outcome into the tool's reply: the outcome as data, with

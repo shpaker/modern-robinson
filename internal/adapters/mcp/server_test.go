@@ -238,23 +238,27 @@ func TestActionsReachTheHero(t *testing.T) {
 	}}
 	cs := connect(t, h)
 	o := decode[types.Outcome](t,
-		call(t, cs, "use", map[string]any{"target": "Краб"}))
+		call(t, cs, "use", map[string]any{"target": "Краб", "why": "поймать"}))
 	if len(o.Said) != 1 || o.Said[0] != "Попался, который кусался" ||
 		o.Changes.Gained[0] != "Краб в шляпе" {
 		t.Errorf("outcome = %+v", o)
 	}
-	call(t, cs, "use", map[string]any{"target": "себя", "item": "Панама"})
-	call(t, cs, "go", map[string]any{"to": "налево"})
-	call(t, cs, "map", nil)
-	call(t, cs, "ask_friday", map[string]any{"target": "Пальма"})
+	call(t, cs, "use", map[string]any{
+		"target": "себя", "item": "Панама", "why": "от солнца",
+	})
+	call(t, cs, "go", map[string]any{"to": "налево", "why": "осмотреться"})
+	call(t, cs, "map", map[string]any{"why": "куда дальше"})
+	call(t, cs, "ask_friday", map[string]any{
+		"target": "Пальма", "why": "она выше",
+	})
 	call(t, cs, "wait", map[string]any{"seconds": 2})
 	call(
 		t,
 		cs,
 		"puzzle_click",
-		map[string]any{"x": 10, "y": 20, "button": "right"},
+		map[string]any{"x": 10, "y": 20, "button": "right", "why": "повернуть"},
 	)
-	call(t, cs, "puzzle_give_up", nil)
+	call(t, cs, "puzzle_give_up", map[string]any{"why": "не выходит"})
 	if s := decode[savedOut](t,
 		call(t, cs, "save", map[string]any{"slot": 3})); s.Slot != 3 {
 		t.Errorf("saved = %+v", s)
@@ -273,7 +277,7 @@ func TestActionsReachTheHero(t *testing.T) {
 // A refusal reaches the client as a tool error, as the game gave it.
 func TestRefusalIsAToolError(t *testing.T) {
 	cs := connect(t, &hero{err: errors.New("занято: сцена — wait")})
-	res := call(t, cs, "use", map[string]any{"target": "Краб"})
+	res := call(t, cs, "use", map[string]any{"target": "Краб", "why": "так"})
 	if !res.IsError || text(res) != "занято: сцена — wait" {
 		t.Errorf("error = %v %q", res.IsError, text(res))
 	}
@@ -290,7 +294,50 @@ func TestPuzzleRepliesCarryThePicture(t *testing.T) {
 		types.WherePuzzle {
 		t.Errorf("look under a puzzle: %q image=%v", text(res), hasImage(res))
 	}
-	if !hasImage(call(t, cs, "puzzle_click", map[string]any{"x": 1, "y": 2})) {
+	if !hasImage(call(t, cs, "puzzle_click",
+		map[string]any{"x": 1, "y": 2, "why": "пробую"})) {
 		t.Error("a puzzle click answers with the picture")
+	}
+}
+
+// Every action asks for its reason, and a blank one is turned away before
+// the game hears of it; looking and waiting need none.
+func TestActionsNeedAReason(t *testing.T) {
+	h := &hero{look: beach, out: types.Outcome{Look: beach}}
+	cs := connect(t, h)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acts := map[string]bool{
+		"use": true, "go": true, "map": true, "ask_friday": true,
+		"puzzle_click": true, "puzzle_give_up": true,
+	}
+	for _, tool := range res.Tools {
+		raw, _ := json.Marshal(tool.InputSchema)
+		var schema struct {
+			Required []string `json:"required"`
+		}
+		_ = json.Unmarshal(raw, &schema)
+		has := strings.Contains(","+strings.Join(schema.Required, ",")+",",
+			",why,")
+		if has != acts[tool.Name] {
+			t.Errorf("%s: why required = %v", tool.Name, has)
+		}
+	}
+	for _, args := range []map[string]any{
+		{"target": "Краб"}, {"target": "Краб", "why": "  "},
+	} {
+		r := call(t, cs, "use", args)
+		if !r.IsError || !strings.Contains(text(r), "why") {
+			t.Errorf("use %v: %v %q", args, r.IsError, text(r))
+		}
+	}
+	if len(h.calls) > 0 {
+		t.Errorf("an action without a reason reached the game: %q", h.calls)
+	}
+	if !strings.Contains(connect(t, h).InitializeResult().Instructions,
+		thinkFirst) {
+		t.Error("the instructions lack the thought before every action")
 	}
 }
