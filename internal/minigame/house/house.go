@@ -30,6 +30,7 @@ type houseGame struct {
 	fallPc  int
 	won     bool
 	finishT float64
+	takes   int // pieces taken up so far
 }
 
 // houseTargets are the pieces' authored top-left positions on the silhouette.
@@ -75,6 +76,8 @@ var housePrereq = [17][]int{
 }
 
 var houseExit = image.Rect(565, 406, 633, 472)
+
+var _ minigame.Carrier = (*houseGame)(nil)
 
 // New loads HOUSE.DAT and scatters the pieces over the right strip.
 func New(host minigame.Host, _ int) minigame.Game {
@@ -141,6 +144,9 @@ func (h *houseGame) prereqsPlaced(i int) bool {
 	}
 	return true
 }
+
+// Takes counts the pieces taken up, each to follow the pointer.
+func (h *houseGame) Takes() int { return h.takes }
 
 // update drives pick, carry, rotate, snap and the drop fall.
 func (h *houseGame) Update(dt float64) (bool, int) {
@@ -221,6 +227,7 @@ func (h *houseGame) Update(dt float64) (bool, int) {
 	}
 	if best >= 0 {
 		h.held = best
+		h.takes++
 		h.bringToFront(best)
 		h.host.PlaySound("h_take.wav", 1)
 	}

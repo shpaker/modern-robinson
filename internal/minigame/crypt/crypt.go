@@ -35,6 +35,7 @@ type cryptGame struct {
 
 	solved  bool
 	solvedT float64
+	takes   int // letters taken from the strip so far
 }
 
 // The grid and strip geometry, verbatim from the engine: a 26x10 glyph grid
@@ -55,6 +56,8 @@ var (
 	cryptEraseBtn = image.Rect(6, 406, 76, 465)
 	cryptExitBtn  = image.Rect(550, 406, 633, 465)
 )
+
+var _ minigame.Carrier = (*cryptGame)(nil)
 
 // New loads CRYPT.DAT, scrambles the alphabet and typesets the text. The
 // alphabet comes from the text itself, so param (Find6, its size) is not read.
@@ -140,6 +143,9 @@ func (c *cryptGame) stripX() int {
 	return (minigame.ScreenW - cryptPitchX*c.n) / 2
 }
 
+// Takes counts the letters taken from the strip.
+func (c *cryptGame) Takes() int { return c.takes }
+
 // update implements the engine's click logic.
 func (c *cryptGame) Update(dt float64) (bool, int) {
 	if c.solved {
@@ -176,6 +182,7 @@ func (c *cryptGame) Update(dt float64) (bool, int) {
 			if mx >= c.stripX() && i >= 0 && i < c.n && !c.used[i] {
 				c.sel = i
 				c.used[i] = true
+				c.takes++
 				c.host.PlaySound("r_take.wav", 1)
 				return false, 0
 			}

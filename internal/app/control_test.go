@@ -4,12 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"image"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/shpaker/modern-robinson/internal/adapters/mouse"
+	"github.com/shpaker/modern-robinson/internal/minigame"
+	"github.com/shpaker/modern-robinson/internal/minigame/catalog"
 	"github.com/shpaker/modern-robinson/internal/repositories"
 	"github.com/shpaker/modern-robinson/internal/testutil"
 	"github.com/shpaker/modern-robinson/internal/types"
@@ -363,6 +370,232 @@ func TestPuzzleClickHearsItsSounds(t *testing.T) {
 	}
 	if !sameList(played, []string{"r_take.wav", "r_error.wav"}) {
 		t.Errorf("played = %q, want both sounds still played", played)
+	}
+}
+
+// padGame stands for any puzzle played by carrying: a click takes a piece
+// up (when there is one to take) and the next puts it down. It notes every
+// press it sees and where the pointer was; with quits, a click ends it, as
+// the floppy button does, and with grab, a hand on the real mouse takes the
+// pointer back as the right button goes.
+type padGame struct {
+	offers, quits bool
+	held          bool
+	taken         int
+	grab          func()
+	presses       []string
+}
+
+func (p *padGame) Update(float64) (bool, int) {
+	x, y := minigame.Cursor()
+	if minigame.RightClicked() {
+		p.presses = append(p.presses, fmt.Sprintf("right %d,%d", x, y))
+		if p.grab != nil {
+			p.grab()
+		}
+	}
+	if !minigame.Clicked() {
+		return false, 0
+	}
+	p.presses = append(p.presses, fmt.Sprintf("left %d,%d", x, y))
+	switch {
+	case p.held:
+		p.held = false
+	case p.offers:
+		p.held = true
+		p.taken++
+	}
+	return p.quits, 0
+}
+
+func (*padGame) Draw(*ebiten.Image) {}
+
+func (p *padGame) Takes() int { return p.taken }
+
+// move runs one puzzle move against the live loop.
+func move(
+	t *testing.T, g *Game, from, to image.Point, turns int,
+) (types.Outcome, error) {
+	t.Helper()
+	return drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleMove(ctx, from.X, from.Y, to.X, to.Y, turns)
+	})
+}
+
+// A move is the player's clicks made in one call: the piece is taken at
+// from, the pointer carries it to to, the right button turns it there as
+// many times as asked and a click puts it down, each press seen by the
+// puzzle on its own. A first click that takes nothing up — on nothing, or
+// putting down what was in hand — ends the move where it was made, and a
+// press on the real mouse ends it where the player took over; a move that
+// is out of reach is refused before any click.
+func TestPuzzleMoveClicksLikeThePlayer(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	pad := &padGame{offers: true}
+	g.mg = pad
+	from, to := image.Pt(10, 20), image.Pt(300, 400)
+	out, err := move(t, g, from, to, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"left 10,20", "right 300,400", "right 300,400", "right 300,400",
+		"left 300,400",
+	}
+	if !sameList(pad.presses, want) || pad.held {
+		t.Errorf("presses = %q held = %v, want %q", pad.presses, pad.held,
+			want)
+	}
+	if !out.Reacted || out.Look.Where != types.WherePuzzle {
+		t.Errorf("reacted = %v where = %q", out.Reacted, out.Look.Where)
+	}
+	for _, tc := range []struct {
+		name         string
+		offers, held bool
+	}{
+		{"nothing to take", false, false},
+		{"a piece in hand", true, true},
+	} {
+		pad.presses, pad.offers, pad.held = nil, tc.offers, tc.held
+		if _, err := move(t, g, from, to, 3); err != nil {
+			t.Fatal(err)
+		}
+		if !sameList(pad.presses, []string{"left 10,20"}) || pad.held {
+			t.Errorf("%s: pressed %q held = %v, want the first click only",
+				tc.name, pad.presses, pad.held)
+		}
+		if x, y := mouse.Position(); x != from.X || y != from.Y {
+			t.Errorf("%s: pointer at %d,%d, want it left at the first "+
+				"click", tc.name, x, y)
+		}
+	}
+	pad.presses, pad.offers = nil, true
+	pad.grab = func() {
+		g.ctl.hold = nil // what a real press does (drivePointer)
+		mouse.Release()
+	}
+	if _, err := move(t, g, from, to, 3); err != nil {
+		t.Fatal(err)
+	}
+	if !sameList(pad.presses, []string{"left 10,20", "right 300,400"}) ||
+		!pad.held || mouse.Held() {
+		t.Errorf("taken over: pressed %q held = %v pointer held = %v",
+			pad.presses, pad.held, mouse.Held())
+	}
+	pad.presses, pad.held, pad.grab = nil, false, nil
+	for _, bad := range []struct {
+		from, to image.Point
+		turns    int
+	}{
+		{from, to, 4},
+		{from, to, -1},
+		{from, image.Pt(640, 10), 0},
+		{image.Pt(-1, 5), to, 0},
+	} {
+		if _, err := move(t, g, bad.from, bad.to, bad.turns); err == nil {
+			t.Errorf("%v -> %v turns %d: not refused", bad.from, bad.to,
+				bad.turns)
+		}
+	}
+	if len(pad.presses) > 0 {
+		t.Errorf("a refused move pressed %q", pad.presses)
+	}
+	// The floppy under the first click ends the puzzle: the answer is where
+	// the hero is back, as after giving up.
+	pad.quits = true
+	out, err = move(t, g, from, to, 1)
+	if err != nil || g.mg != nil || out.Look.Where != types.WhereIsland {
+		t.Errorf("quit by the move: %v mg = %v where = %q", err, g.mg != nil,
+			out.Look.Where)
+	}
+	if _, err := move(t, g, from, to, 0); err == nil {
+		t.Error("no puzzle, yet the move went")
+	}
+}
+
+// openPuzzle is a game with puzzle id open, as the quest opens it.
+func openPuzzle(t *testing.T, id int) *Game {
+	t.Helper()
+	g := heroGame(t, "SCENA0", nil)
+	g.gs.SetVar("Param", catalog.Games[id].Param)
+	g.startMinigame([]string{strconv.Itoa(id), "Res", "Param"})
+	if g.mg == nil {
+		t.Skip("no puzzle assets")
+	}
+	return g
+}
+
+// Every puzzle played by carrying takes a piece across in one call — the
+// organ's tube and the checker are picked up without a sound, and a turn
+// asked of what does not turn changes nothing — and the call hears how it
+// ended, the sailor's answer too; a click on nothing moves nothing. The hut
+// and the chart pick their pieces by pixel, which a test cannot read before
+// the game loop runs: just puzzle-move checks them headless.
+func TestPuzzleMoveCarriesAPiece(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		game     int
+		from, to image.Point
+		heard    []string
+	}{
+		{
+			"letter onto a sign", 5, image.Pt(15, 36), image.Pt(58, 99),
+			[]string{"взял", "поставил"},
+		},
+		{"nothing to take", 5, image.Pt(320, 60), image.Pt(58, 99), nil},
+		{
+			"tube into a mouth", 4, image.Pt(39, 44), image.Pt(35, 435),
+			[]string{"нота"},
+		},
+		{
+			"a man a step up", 2, image.Pt(428, 264), image.Pt(471, 221),
+			[]string{"ход", "ход"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := openPuzzle(t, tc.game)
+			defer mouse.Release()
+			out, err := move(t, g, tc.from, tc.to, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sameList(out.Heard, tc.heard) {
+				t.Errorf("heard = %q, want %q", out.Heard, tc.heard)
+			}
+			end := tc.to
+			if tc.heard == nil {
+				end = tc.from
+			}
+			if x, y := mouse.Position(); x != end.X || y != end.Y {
+				t.Errorf("pointer at %d,%d, want %v", x, y, end)
+			}
+		})
+	}
+}
+
+// A checker stays framed after the call that picked it out. A move whose
+// first click frames nothing of its own — here an empty square — leaves the
+// board alone rather than moving that man for it; the man is still there to
+// move, framed again.
+func TestPuzzleMoveTakesAtItsFrom(t *testing.T) {
+	g := openPuzzle(t, 2)
+	defer mouse.Release()
+	man, empty, up := image.Pt(428, 264), image.Pt(471, 264), image.Pt(471, 221)
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, man.X, man.Y, false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := move(t, g, empty, up, 0)
+	if err != nil || len(out.Heard) > 0 {
+		t.Errorf("from an empty square: heard = %q (%v), want no move",
+			out.Heard, err)
+	}
+	out, err = move(t, g, man, up, 0)
+	if err != nil || !sameList(out.Heard, []string{"ход", "ход"}) {
+		t.Errorf("from the man: heard = %q (%v), want his move and the "+
+			"answer", out.Heard, err)
 	}
 }
 

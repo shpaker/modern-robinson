@@ -28,6 +28,7 @@ type chessGame struct {
 	won     bool
 	lost    float64 // restart countdown after a loss
 	finishT float64
+	takes   int // men picked out so far
 }
 
 const (
@@ -40,6 +41,8 @@ var chessBoard = image.Rect(364, 71, 621, 328)
 
 // chessExit is the floppy button, at the same spot as in the jigsaw puzzles.
 var chessExit = image.Rect(565, 406, 633, 472)
+
+var _ minigame.Carrier = (*chessGame)(nil)
 
 // New sets up the board for a fresh game.
 func New(host minigame.Host, _ int) minigame.Game {
@@ -185,6 +188,10 @@ func (c *chessGame) apply(m cmove) bool {
 	return len(c.moves(m.to, true)) > 0
 }
 
+// Takes counts the men picked out, each framed on the board — the one
+// already framed too, when it is clicked again.
+func (c *chessGame) Takes() int { return c.takes }
+
 // update runs the player's clicks and the opponent's replies.
 func (c *chessGame) Update(dt float64) (bool, int) {
 	if c.won {
@@ -228,6 +235,7 @@ func (c *chessGame) Update(dt float64) (bool, int) {
 		for _, m := range legal {
 			if m.from == cell {
 				c.sel = cell
+				c.takes++
 				return false, 0
 			}
 		}

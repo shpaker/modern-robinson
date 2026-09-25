@@ -71,6 +71,11 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 - wait — переждать сцену или просто подождать.
 - puzzle_click, puzzle_give_up — головоломки решаются кликами по ` +
 	`картинке (экран 640×480) или бросаются.
+- puzzle_move — перенести деталь одним ходом, как мышью: клик в from, ` +
+	`turns правых кликов и клик в to; если клик в from ничего не взял и ` +
+	`не выделил, дальше не идёт. Взятая деталь висит на указателе ` +
+	`серединой: to — место её середины. Кусок из нескольких частей висит ` +
+	`на одной из них — его сначала возьми puzzle_click и посмотри.
 - save и load — вне роли: служебное сохранение партии в слоты 0–11.
 
 Сохраняйся регулярно, не дожидаясь просьбы: после каждого успеха ` +
@@ -133,6 +138,15 @@ type clickIn struct {
 	Why    string `json:"why"              jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
+type moveIn struct {
+	FromX int    `json:"from_x"          jsonschema:"x детали на экране головоломки, 0..639"`
+	FromY int    `json:"from_y"          jsonschema:"y детали на экране головоломки, 0..479"`
+	ToX   int    `json:"to_x"            jsonschema:"x, куда её положить (туда придёт её середина), 0..639"`
+	ToY   int    `json:"to_y"            jsonschema:"y, куда её положить (туда придёт её середина), 0..479"`
+	Turns int    `json:"turns,omitempty" jsonschema:"сколько раз повернуть её у цели правой кнопкой, 0..3"`
+	Why   string `json:"why"             jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+}
+
 type slotIn struct {
 	Slot int `json:"slot" jsonschema:"слот от 0 до 11"`
 }
@@ -190,6 +204,16 @@ func newServer(c interfaces.IControl, version string) *sdk.Server {
 		Description: "Кликнуть по экрану головоломки 640×480; отвечает " +
 			"картинкой и тем, что прозвучало (heard).",
 	}, s.puzzleClick)
+	sdk.AddTool(srv, &sdk.Tool{
+		Name:  "puzzle_move",
+		Title: "Перенести в головоломке",
+		Description: "Перенести деталь, как мышью: клик в from берёт её, " +
+			"у to — turns правых кликов и клик, чтобы положить; если клик " +
+			"в from ничего не взял и не выделил, дальше не идёт. Взятая " +
+			"деталь висит на указателе серединой, кусок из нескольких " +
+			"частей — на одной из них. Отвечает картинкой и тем, что " +
+			"прозвучало (heard).",
+	}, s.puzzleMove)
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "puzzle_give_up",
 		Title:       "Бросить головоломку",
@@ -283,6 +307,16 @@ func (s *server) puzzleClick(
 	}
 	right := strings.EqualFold(in.Button, "right")
 	return s.answer(ctx)(s.c.PuzzleClick(ctx, in.X, in.Y, right))
+}
+
+func (s *server) puzzleMove(
+	ctx context.Context, _ *sdk.CallToolRequest, in moveIn,
+) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
+	return s.answer(ctx)(s.c.PuzzleMove(ctx,
+		in.FromX, in.FromY, in.ToX, in.ToY, in.Turns))
 }
 
 func (s *server) puzzleGiveUp(

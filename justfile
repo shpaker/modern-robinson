@@ -229,6 +229,16 @@ minigame-shot id ticks="30":
     ROBINSON_MINIGAME={{id}} {{gocmd}} run ./.vmdriver -pkg ./cmd/minigames \
         -ticks {{ticks}} -out /tmp/mg{{id}}.png -w 640 -h 480
 
+# puzzle_move на карте (0) или хижине (1) без окна: just puzzle-move 1
+puzzle-move id="0":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    log=$(mktemp); trap 'rm -f "$log"' EXIT
+    ROBINSON_SCENE=SCENA0 ROBINSON_MINIGAME={{id}} {{gocmd}} run ./.vmdriver \
+        -pkg ./tools/puzzlemove -ticks 30000 -out /tmp/move{{id}}.png \
+        -w 640 -h 480 2>&1 | tee "$log"
+    grep -qx "puzzlemove: ok" "$log" || { echo "puzzle-move: не дошла до конца"; exit 1; }
+
 # Кадр конкретной сцены: just scene PALACE
 scene name="SCENA0" ticks="40":
     ROBINSON_SCENE={{name}} {{gocmd}} run ./.vmdriver-game -pkg ./cmd \

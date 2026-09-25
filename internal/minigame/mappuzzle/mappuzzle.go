@@ -28,6 +28,7 @@ type mapGame struct {
 	held    bool
 	won     bool
 	finishT float64
+	takes   int // fragments (or glued groups) taken up so far
 }
 
 // mapTargets are the fragments' offsets within the assembled chart.
@@ -221,6 +222,8 @@ var mapAdj = [12][12]bool{
 // mapExit is the floppy button, at the same spot as in the hut puzzle.
 var mapExit = image.Rect(565, 406, 633, 472)
 
+var _ minigame.Carrier = (*mapGame)(nil)
+
 // New loads MAP.DAT and scatters the fragments over the whole mat.
 func New(host minigame.Host, _ int) minigame.Game {
 	m := &mapGame{host: host}
@@ -297,6 +300,9 @@ func (m *mapGame) selCount() int {
 	}
 	return n
 }
+
+// Takes counts the fragments, or glued groups, taken up.
+func (m *mapGame) Takes() int { return m.takes }
 
 // update drives pick (with gluing), carry, rotate, snap and the win test.
 func (m *mapGame) Update(dt float64) (bool, int) {
@@ -376,6 +382,7 @@ func (m *mapGame) Update(dt float64) (bool, int) {
 		}
 	}
 	m.held = true
+	m.takes++
 	m.host.PlaySound("m_take.wav", 1)
 	return false, 0
 }

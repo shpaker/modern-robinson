@@ -139,6 +139,14 @@ type IControl interface {
 		x, y int,
 		right bool,
 	) (types.Outcome, error)
+	// PuzzleMove carries a piece across a puzzle screen with the player's
+	// clicks: one at from takes it, turns right clicks at to turn it there
+	// (0..3), and one at to puts it down. A first click that takes nothing
+	// up of its own ends the move, and so does a press on the real mouse.
+	PuzzleMove(
+		ctx context.Context,
+		fromX, fromY, toX, toY, turns int,
+	) (types.Outcome, error)
 	// PuzzleGiveUp leaves a puzzle unsolved, as Esc does.
 	PuzzleGiveUp(ctx context.Context) (types.Outcome, error)
 	// Save writes the run into a slot (0..11).

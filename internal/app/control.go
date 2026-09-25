@@ -14,6 +14,7 @@ import (
 
 	"github.com/shpaker/modern-robinson/internal/adapters/mouse"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
+	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -36,9 +37,6 @@ const (
 	soundMax   = 64      // puzzle sounds kept per call
 )
 
-// errStop ends a job's steps early; the job's err says why, if anything.
-var errStop = errors.New("stop")
-
 // job is one driver call running on the game loop: its steps run in order,
 // each once per tick until it reports done.
 type job struct {
@@ -55,9 +53,7 @@ func (j *job) step() bool {
 	for j.i < len(j.steps) {
 		ok, err := j.steps[j.i]()
 		if err != nil {
-			if !errors.Is(err, errStop) {
-				j.err = err
-			}
+			j.err = err
 			return true
 		}
 		if !ok {
@@ -521,36 +517,135 @@ func (c *control) Wait(
 func (c *control) PuzzleClick(
 	ctx context.Context, x, y int, right bool,
 ) (types.Outcome, error) {
+	return c.puzzle(ctx, []image.Point{{x, y}}, c.click(x, y, right)...)
+}
+
+// A move lets the puzzle take in each of its clicks for a beat, and turns a
+// piece at most three quarters round: a fourth brings it back.
+const (
+	moveBeat = 2
+	turnsMax = 3
+)
+
+// PuzzleMove carries a piece the way the player does, click by click: one
+// at from takes it up, the pointer brings it to to, where the right button
+// turns it as many times as asked and a last click puts it down. When the
+// first click takes nothing up of its own — whatever was in hand before —
+// the move ends there, and the answer is what that click came to. So does
+// a press on the real mouse while the piece is carried: the pointer is the
+// player's again.
+func (c *control) PuzzleMove(
+	ctx context.Context, fromX, fromY, toX, toY, turns int,
+) (types.Outcome, error) {
+	if turns < 0 || turns > turnsMax {
+		return types.Outcome{}, fmt.Errorf("turns — от 0 до %d", turnsMax)
+	}
+	var before int
+	took := false
+	moves := []func() (bool, error){once(func() error {
+		before = c.g.takes()
+		return nil
+	})}
+	moves = append(moves, c.click(fromX, fromY, false)...)
+	moves = append(moves,
+		ticks(moveBeat, nil),
+		once(func() error {
+			took = c.g.takes() > before
+			return nil
+		}))
+	var carry []func() (bool, error)
+	for range turns {
+		carry = append(carry, c.click(toX, toY, true)...)
+		carry = append(carry, ticks(moveBeat, nil))
+	}
+	carry = append(carry, c.click(toX, toY, false)...)
+	carrying := func() bool { return took && c.hold != nil }
+	moves = append(moves, when(carrying, carry...)...)
+	return c.puzzle(ctx,
+		[]image.Point{{fromX, fromY}, {toX, toY}}, moves...)
+}
+
+// puzzle plays a player's moves on the puzzle screen, at the points given —
+// all of them on it — and answers once the puzzle has had its say, or, when
+// it is over, once the scene it hands back to is through.
+func (c *control) puzzle(
+	ctx context.Context, at []image.Point, moves ...func() (bool, error),
+) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
 	var before glance
-	press := func(down bool) func() (bool, error) {
-		return once(func() error {
-			if g.mg == nil {
-				return errStop
-			}
-			c.holdPointer(heldPointer{x, y, down && !right, down && right})
-			return nil
-		})
-	}
-	err := c.run(ctx,
+	screen := image.Rect(0, 0, ViewW, ViewH)
+	steps := []func() (bool, error){
 		c.mark(&before),
 		once(func() error {
 			if g.mg == nil {
 				return errors.New("головоломки нет")
 			}
-			if x < 0 || x >= ViewW || y < 0 || y >= ViewH {
-				return fmt.Errorf("точка %d,%d вне экрана 640×480", x, y)
+			for _, p := range at {
+				if !p.In(screen) {
+					return fmt.Errorf("точка %d,%d вне экрана 640×480",
+						p.X, p.Y)
+				}
 			}
 			out.Reacted = true
 			return nil
 		}),
-		press(false), ticks(1, nil), press(true), ticks(1, nil), press(false),
+	}
+	steps = append(steps, moves...)
+	steps = append(steps,
 		ticks(puzzleTick, func() bool { return g.mg == nil }),
 		c.afterPuzzle(),
 		c.outcome(&out, &before, false),
 	)
+	err := c.run(ctx, steps...)
 	return out, err
+}
+
+// point is a step that holds the puzzle pointer at x,y with the buttons
+// given. A puzzle that is over has let the pointer go, and is left be.
+func (c *control) point(x, y int, left, right bool) func() (bool, error) {
+	return once(func() error {
+		if c.g.mg != nil {
+			c.holdPointer(heldPointer{x, y, left, right})
+		}
+		return nil
+	})
+}
+
+// click is the player's click at x,y: the pointer comes to rest there for a
+// tick, then the button goes down for a tick and comes back up.
+func (c *control) click(x, y int, right bool) []func() (bool, error) {
+	return []func() (bool, error){
+		c.point(x, y, false, false), ticks(1, nil),
+		c.point(x, y, !right, right), ticks(1, nil),
+		c.point(x, y, false, false),
+	}
+}
+
+// when guards steps with a condition, read as each of them comes up: while
+// it does not hold, they pass straight through.
+func when(
+	ok func() bool, steps ...func() (bool, error),
+) []func() (bool, error) {
+	out := make([]func() (bool, error), len(steps))
+	for i, s := range steps {
+		out[i] = func() (bool, error) {
+			if !ok() {
+				return true, nil
+			}
+			return s()
+		}
+	}
+	return out
+}
+
+// takes counts the pieces the player has taken up in the puzzle, as he saw
+// each one go; a puzzle with nothing to carry takes none.
+func (g *Game) takes() int {
+	if c, ok := g.mg.(minigame.Carrier); ok {
+		return c.Takes()
+	}
+	return 0
 }
 
 // PuzzleGiveUp leaves the puzzle unsolved, the way Esc does.
@@ -705,8 +800,8 @@ func (g *Game) busyWith() string {
 func (g *Game) canAct() error {
 	switch g.where() {
 	case types.WherePuzzle:
-		return errors.New("сейчас головоломка: puzzle_click или " +
-			"puzzle_give_up")
+		return errors.New("сейчас головоломка: puzzle_click, " +
+			"puzzle_move или puzzle_give_up")
 	case types.WherePause:
 		return errors.New("пауза: открыто меню")
 	}
