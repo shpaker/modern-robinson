@@ -55,6 +55,8 @@ var (
 	balExit = image.Rect(565, 408, 633, 465)
 )
 
+var _ minigame.Performer = (*baloonGame)(nil)
+
 // baloonPalette maps a BALOON.DAT sprite to its palette: the instrument panel
 // and the figures on it are drawn with BAR.COL (index 1), while the sky and the
 // islands use PALETTE.COL (index 0). Verified by rendering both ways -- the
@@ -81,6 +83,10 @@ func New(host minigame.Host, _ int) minigame.Game {
 	}
 	return b
 }
+
+// Busy reports the basket coming down, or the landing made and the game about
+// to close. The flight is the player's to steer, however long it takes.
+func (b *baloonGame) Busy() bool { return b.landing || b.won }
 
 // update flies the balloon: ease the altitude, turn with it, drift, land.
 func (b *baloonGame) Update(dt float64) (bool, int) {

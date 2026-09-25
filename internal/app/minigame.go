@@ -108,6 +108,9 @@ func (g *Game) updateMinigame(dt float64) bool {
 	if g.mg == nil {
 		return false
 	}
+	if g.ctl.stands() {
+		return true // a driver answers slower than a player: it waits for him
+	}
 	if done, result := g.mg.Update(dt); done {
 		g.finishMinigame(result)
 	}

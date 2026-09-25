@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shpaker/modern-robinson/internal/adapters/mouse"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
@@ -32,7 +33,7 @@ const (
 	waitMax    = 60 * 60 // an action or a wait gives up after a minute
 	settleTick = 15      // free this long before the hero counts as free
 	cameraMax  = 3 * 60  // the view gets this long to reach a target
-	puzzleTick = 45      // a puzzle's own answer (the checkers AI waits 0.7 s)
+	puzzleTick = 45      // a puzzle's answer to a click, before what it plays out
 	saidMax    = 64      // lines kept per call
 	soundMax   = 64      // puzzle sounds kept per call
 )
@@ -76,6 +77,10 @@ type control struct {
 
 	// hold is the puzzle pointer the driver holds until a real press.
 	hold *heldPointer
+	// live is the puzzle taken over by the player at the window, with a
+	// press of the real mouse or a key: its time runs between the driver's
+	// calls too, until his next move or wait in it, or its end.
+	live bool
 
 	canvas *ebiten.Image // where Sight renders
 
@@ -132,8 +137,14 @@ func (c *control) tick() {
 		close(j.done)
 		c.cur = nil
 	}
-	c.drivePointer()
+	c.drivePointer(mousePressed(), keyPressed())
 }
+
+// stands reports a puzzle's time standing still: a driver plays it, none of
+// his calls is running, and the player at the window has not taken it over
+// (live). A puzzle waits for his next move as for a player's click — the
+// balloon too, which would fly on — and a wait is its time (Wait).
+func (c *control) stands() bool { return c != nil && c.cur == nil && !c.live }
 
 // heard notes a line the game has put on screen.
 func (c *control) heard(s string) {
@@ -498,6 +509,7 @@ func (c *control) OpenMap(ctx context.Context) (types.Outcome, error) {
 }
 
 // Wait lets the game run: until the hero is free, or for the seconds given.
+// A puzzle runs with it, and stands again once the wait is over (stands).
 func (c *control) Wait(
 	ctx context.Context, seconds float64,
 ) (types.Outcome, error) {
@@ -508,8 +520,18 @@ func (c *control) Wait(
 		n := int(seconds * 60)
 		wait = ticks(min(n, waitMax), nil)
 	}
-	err := c.run(ctx, c.mark(&before), wait, c.outcome(&out, &before, false))
+	err := c.run(ctx, c.mark(&before), c.retake(), wait,
+		c.outcome(&out, &before, false))
 	return out, err
+}
+
+// retake is a step that takes a puzzle back from the player at the window:
+// from the driver's move or wait on, it runs only while he acts.
+func (c *control) retake() func() (bool, error) {
+	return once(func() error {
+		c.live = false
+		return nil
+	})
 }
 
 // PuzzleClick clicks a puzzle screen: the pointer goes there, presses and
@@ -566,8 +588,9 @@ func (c *control) PuzzleMove(
 }
 
 // puzzle plays a player's moves on the puzzle screen, at the points given —
-// all of them on it — and answers once the puzzle has had its say, or, when
-// it is over, once the scene it hands back to is through.
+// all of them on it — and answers once the puzzle has had its say and played
+// out what the moves set going, or, when it is over, once the scene it hands
+// back to is through.
 func (c *control) puzzle(
 	ctx context.Context, at []image.Point, moves ...func() (bool, error),
 ) (types.Outcome, error) {
@@ -577,6 +600,7 @@ func (c *control) puzzle(
 	screen := image.Rect(0, 0, ViewW, ViewH)
 	steps := []func() (bool, error){
 		c.mark(&before),
+		c.retake(),
 		once(func() error {
 			if g.mg == nil {
 				return errors.New("головоломки нет")
@@ -594,6 +618,7 @@ func (c *control) puzzle(
 	steps = append(steps, moves...)
 	steps = append(steps,
 		ticks(puzzleTick, func() bool { return g.mg == nil }),
+		ticks(waitMax, func() bool { return !g.puzzleBusy() }),
 		c.afterPuzzle(),
 		c.outcome(&out, &before, false),
 	)
@@ -648,7 +673,17 @@ func (g *Game) takes() int {
 	return 0
 }
 
-// PuzzleGiveUp leaves the puzzle unsolved, the way Esc does.
+// puzzleBusy reports the puzzle playing out by itself what a move set going,
+// as the player watches it happen; a puzzle that plays nothing out never is.
+func (g *Game) puzzleBusy() bool {
+	p, ok := g.mg.(minigame.Performer)
+	return ok && p.Busy()
+}
+
+// PuzzleGiveUp leaves the puzzle unsolved, the way Esc does. What the puzzle
+// plays out by itself runs its course first, as between the player's moves:
+// a wait may have stopped in the middle of it, and a win it is showing — no
+// Esc reaches that — closes it solved.
 func (c *control) PuzzleGiveUp(ctx context.Context) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
@@ -659,8 +694,14 @@ func (c *control) PuzzleGiveUp(ctx context.Context) (types.Outcome, error) {
 			if g.mg == nil {
 				return errors.New("головоломки нет")
 			}
-			g.finishMinigame(0)
 			out.Reacted = true
+			return nil
+		}),
+		ticks(waitMax, func() bool { return !g.puzzleBusy() }),
+		once(func() error {
+			if g.mg != nil {
+				g.finishMinigame(0)
+			}
 			return nil
 		}),
 		c.untilFree(),
@@ -737,24 +778,40 @@ func checkSlot(slot int) error {
 // holdPointer drives the puzzle pointer from this tick on.
 func (c *control) holdPointer(p heldPointer) { c.hold = &p }
 
-// drivePointer feeds the held pointer to the minigames every tick. The real
-// mouse takes over with a press, not a move: a hand resting on it while the
-// driver plays used to snatch the pointer between two calls, and the piece
-// being carried went after the real cursor, off the window. A finished puzzle
-// lets go on its own.
-func (c *control) drivePointer() {
+// drivePointer feeds the held pointer to the minigames every tick; pressed
+// says a button of the real mouse is down, typed a key has just gone down.
+// The real mouse takes over with a press, not a move: a hand resting on it
+// while the driver plays used to snatch the pointer between two calls, and
+// the piece being carried went after the real cursor, off the window. Either
+// takes the puzzle's time over too (live), within the tick, so the puzzle
+// reads the key — Esc, the balloon's arrows; a key leaves the pointer where
+// it is held. A finished puzzle lets go on its own.
+func (c *control) drivePointer(pressed, typed bool) {
+	switch {
+	case c.g.mg == nil:
+		c.live = false
+	case pressed || typed:
+		c.live = true
+	}
 	if c.hold == nil {
 		return
 	}
-	if c.g.mg == nil ||
-		ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) ||
-		ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+	if c.g.mg == nil || pressed {
 		c.hold = nil
 		mouse.Release()
 		return
 	}
 	mouse.Hold(c.hold.x, c.hold.y, c.hold.left, c.hold.right)
 }
+
+// mousePressed reports a button of the real mouse held down.
+func mousePressed() bool {
+	return ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) ||
+		ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight)
+}
+
+// keyPressed reports a key of the real keyboard gone down this tick.
+func keyPressed() bool { return len(inpututil.AppendJustPressedKeys(nil)) > 0 }
 
 // where says where the hero is.
 func (g *Game) where() string {
@@ -773,7 +830,8 @@ func (g *Game) where() string {
 
 // busyWith is what keeps the hero from acting, as the player sees it: the
 // waiting clock, someone walking, a transition; "" when he is free. A puzzle
-// is waiting for its player, so it is never busy.
+// is waiting for its player, so it is busy only while it plays out by itself
+// what a move set going.
 func (g *Game) busyWith() string {
 	switch {
 	case g.mode == modeOptions || g.mode == modeSave || g.mode == modeLoad:
@@ -781,6 +839,9 @@ func (g *Game) busyWith() string {
 	case g.mode != modePlay:
 		return "заставка"
 	case g.mg != nil:
+		if g.puzzleBusy() {
+			return "ответ головоломки"
+		}
 		return ""
 	case g.fadeCurve != nil || g.pending != nil:
 		return "переход"
