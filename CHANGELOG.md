@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.2.0](https://github.com/shpaker/modern-robinson/compare/v0.1.0...v0.2.0) (2026-09-25)
+
+
+### Возможности
+
+* **bar:** имена предметов из BAR.BAR ([7aa9243](https://github.com/shpaker/modern-robinson/commit/7aa924387656dbdef086c9330363bc9b39231b68))
+* **input:** мышь мини-игр через адаптер ([faab9ec](https://github.com/shpaker/modern-robinson/commit/faab9ec6d2a1b23b8aede3670e20ca92177311d2))
+* **mcp:** мысль перед каждым действием ([0783f32](https://github.com/shpaker/modern-robinson/commit/0783f32ce27562b4b1018e3f4290290a6f4f6004))
+* **mcp:** правило регулярно сохранять партию ([4309ce7](https://github.com/shpaker/modern-robinson/commit/4309ce70ab78c321de5b6f528d4e3a55faf143d0))
+* **mcp:** правило регулярно сохранять партию ([bea428f](https://github.com/shpaker/modern-robinson/commit/bea428f444fbf7664b2847dde1e4e57756b0653b))
+* **mcp:** Роби говорит от первого лица и замечает перемены ([1c6e6ca](https://github.com/shpaker/modern-robinson/commit/1c6e6ca867489d0fda8c8075da0ebe7bf84bad9b))
+* **mcp:** Роби комментирует решения шутками и фактами ([d953980](https://github.com/shpaker/modern-robinson/commit/d953980d67ecc771c4b25493b674d3bcd9938110))
+* **mcp:** Роби комментирует решения шутками и фактами ([32a2870](https://github.com/shpaker/modern-robinson/commit/32a28708f6cf476d7bb1fe611c30798c9f5a51d1))
+* **mcp:** Робинзон под управлением MCP-клиента ([b0c4434](https://github.com/shpaker/modern-robinson/commit/b0c44348b943ec63ba65a0f57f2d2c3e4b43536e))
+* **mcp:** Робинзон под управлением MCP-клиента ([06db0e5](https://github.com/shpaker/modern-robinson/commit/06db0e57dcb095239e16e5d4f5793ac4ba17e21b))
+* **mcp:** роль Роби, что изменилось, ответы — только данные ([b8cb58f](https://github.com/shpaker/modern-robinson/commit/b8cb58f3f98069dbd35b7495b6e409d885760865))
+* **save:** двойной клик по слоту, как в оригинале ([31e77ca](https://github.com/shpaker/modern-robinson/commit/31e77cad7533c2a2685df712e5b62f84cc40ed98))
+* **save:** двойной клик по слоту, как в оригинале ([1923507](https://github.com/shpaker/modern-robinson/commit/1923507e9ce19525c3d8103709f8d2da4f6eec3f))
+* **ui:** курсоры оригинала ([fe27410](https://github.com/shpaker/modern-robinson/commit/fe2741093df081123d5c44697a67565081cdfc8a))
+* **ui:** курсоры оригинала ([4570582](https://github.com/shpaker/modern-robinson/commit/45705828fe55996ec34f8109c85756746f678901))
+
+
+### Исправления
+
+* **char:** голова Пятницы следит за курсором, а не крутится по таймеру ([947b669](https://github.com/shpaker/modern-robinson/commit/947b669713924b011c46e2bf801c4c6fd344ef55))
+* **char:** голова Пятницы следит за курсором, а не крутится по таймеру ([7c74031](https://github.com/shpaker/modern-robinson/commit/7c74031bf312017c233d507b0b3182f88f4f9497))
+* **char:** голова Роби следит за курсором по LookBox, как в оригинале ([3afb501](https://github.com/shpaker/modern-robinson/commit/3afb501aa57eb25875b93152087932dd90ab1b96))
+* **char:** голова Роби следит за курсором по LookBox, как в оригинале ([0481198](https://github.com/shpaker/modern-robinson/commit/0481198131d9e4d38ffda7823ff40be2da3ce1a0))
+* **char:** длинный простой через 27 секунд, как в оригинале ([42e5773](https://github.com/shpaker/modern-robinson/commit/42e5773774063d73191307d00ee610e2c4f2c1d3))
+* **char:** длинный простой через 27 секунд, как в оригинале ([cbcbaff](https://github.com/shpaker/modern-robinson/commit/cbcbaff8ba6e2b0d670d8f63fa2797324fa9f850))
+* **engine:** клик в паузе ролика уходит в сцену с вещью в руке ([10d827b](https://github.com/shpaker/modern-robinson/commit/10d827b579b3de9b31f7aff2fe92bbb5807cceaa))
+* **engine:** клик в паузе ролика уходит в сцену с вещью в руке ([10efc17](https://github.com/shpaker/modern-robinson/commit/10efc1755dfae21324c56c19134df1c0acbe3669))
+* **mcp:** вещь берётся через панель по кликам, с паузой на каждом ([b4ebf52](https://github.com/shpaker/modern-robinson/commit/b4ebf52e42da1670d0c482faddf84c933462389b))
+* **mcp:** вещь берётся через панель по кликам, с паузой на каждом ([30cd316](https://github.com/shpaker/modern-robinson/commit/30cd3162e34079ac4e9694fd7a93bfed28efbb26))
+* **mcp:** указатель в головоломке отдаётся мыши только нажатием ([b25f479](https://github.com/shpaker/modern-robinson/commit/b25f479657f3a17a5f6f59373ad57d48438e1a77))
+* **mcp:** указатель в головоломке отдаётся мыши только нажатием ([0a23571](https://github.com/shpaker/modern-robinson/commit/0a23571ba9d39eacfb41f81729bb47619e714a60))
+* **mcp:** уточнить, что делает «себя» в use и ask_friday ([6dfe37f](https://github.com/shpaker/modern-robinson/commit/6dfe37f786f3b2057e9fd90bb53b1a2071fd58de))
+* **mcp:** уточнить, что делает «себя» в use и ask_friday ([c355333](https://github.com/shpaker/modern-robinson/commit/c355333dc55f173a46f1f5b066ea852718e6cba1))
+* **options:** ползунки сохраняются в config.yml ([5122c2f](https://github.com/shpaker/modern-robinson/commit/5122c2f3fab7eedb7cb3b4f0e3e3dc2a659fc277))
+* **options:** ползунки сохраняются в config.yml ([bc86d2e](https://github.com/shpaker/modern-robinson/commit/bc86d2ed98194edb5ba14d17cbcddfcaf58d287d))
+* **save:** превью сохранения и слоты как в оригинале ([2cc1d94](https://github.com/shpaker/modern-robinson/commit/2cc1d9455844edb79ee767a5cfaab740bbbbde3d))
+* **save:** превью сохранения и слоты как в оригинале ([14a1ab5](https://github.com/shpaker/modern-robinson/commit/14a1ab590d6f8c0ecc4eca88acc0d97957310a7f))
+* **scene:** уходить со сцены только через зону выхода, как в оригинале ([0c11bba](https://github.com/shpaker/modern-robinson/commit/0c11bba6fb8306794c06a7909e4f078579e27dbc))
+* **scene:** уходить со сцены только через зону выхода, как в оригинале ([9321fdd](https://github.com/shpaker/modern-robinson/commit/9321fdd417b1183ccc9f7e947701771f7b76d475))
+* **sound:** громкость из config.yml действует с запуска ([76f23a2](https://github.com/shpaker/modern-robinson/commit/76f23a2e78af9ed02187d414190bab613973dfc8))
+* **sound:** громкость из config.yml действует с запуска ([d0e853d](https://github.com/shpaker/modern-robinson/commit/d0e853d2b7da6ce340782eafade6b2b796368720))
+* **web:** манифест запрашивается с версией сборки ([db4821b](https://github.com/shpaker/modern-robinson/commit/db4821b311b783d24331fc8ff670d842624b58f8))
+* **web:** манифест запрашивается с версией сборки ([4aaa3bd](https://github.com/shpaker/modern-robinson/commit/4aaa3bd6765286ddbc255d4f7ffd254c23879888))
+* **web:** не ждать разрешения на постоянное хранилище ([3e12680](https://github.com/shpaker/modern-robinson/commit/3e1268042fe70ab84c57085bfb4d061631b2f64b))
+* **web:** не ждать разрешения на постоянное хранилище ([58378df](https://github.com/shpaker/modern-robinson/commit/58378df971da684f0434fa737e7541d1550053fc))
+
+
+### Рефакторинг
+
+* **mcp:** сервер отдаёт только данные, слова — от клиента ([e1846a0](https://github.com/shpaker/modern-robinson/commit/e1846a0b5f9a2212e6d719f30ca7cf8f096f539b))
+
+
+### Документация
+
+* LookBox — зона взгляда, а не рамка персонажа ([ab0cec7](https://github.com/shpaker/modern-robinson/commit/ab0cec79e53094a401c201793367d6e9c3551463))
+* LookBox — зона взгляда, а не рамка персонажа ([ac703f2](https://github.com/shpaker/modern-robinson/commit/ac703f288e34183466b155b484e5c0f5212ad12c))
+* игра через MCP ([b57ab94](https://github.com/shpaker/modern-robinson/commit/b57ab943220f2f59ddf63b80328f52e08d74b9b5))
+
+
+### Тесты
+
+* **mcp:** краб в панаме через управление героем ([a843b0e](https://github.com/shpaker/modern-robinson/commit/a843b0ee85bbd4035d7caf61d086cf0e5dead466))
+
 ## 0.1.0 (2026-09-24)
 
 
