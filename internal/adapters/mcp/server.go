@@ -53,7 +53,8 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 - look — осмотреться; с image — ещё и картинка того, что в окне.
 - use — подойти и применить к чему-то вещь из рук; с item — сначала взять ` +
 	`эту вещь. «Рука» — пустые руки: взять, потрогать, осмотреть, ` +
-	`заговорить. target «себя» — применить вещь к себе.
+	`заговорить. target «себя» — сделать что-то с вещью самому: смотря ` +
+	`по вещи, надеть её или положить рядом с собой.
 - go — уйти через выход; на карте острова — отправиться в место.
 - map — развернуть карту острова, когда она есть.
 - ask_friday — попросить Пятницу применить её вещь к чему-то (или к себе), ` +
@@ -85,7 +86,7 @@ type lookIn struct {
 }
 
 type useIn struct {
-	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — к себе"`
+	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — самому: надеть или положить рядом"`
 	Item   string `json:"item,omitempty" jsonschema:"какую вещь взять в руки перед этим; пусто — ту, что уже в руках"`
 	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
@@ -96,7 +97,7 @@ type goIn struct {
 }
 
 type askIn struct {
-	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница к себе"`
+	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница сама, без цели"`
 	Item   string `json:"item,omitempty" jsonschema:"какую свою вещь ей взять; пусто — ту, что у неё в руках"`
 	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
