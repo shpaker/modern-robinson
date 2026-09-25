@@ -55,8 +55,7 @@ func (h earHost) PlaySound(file string, ch int) {
 }
 
 // puzzleSounds is what the ear makes of each sound of the minigames, by file
-// in lower case: the driver gets the word, the file stays in the game. The
-// organ's notes are not here (soundLabel).
+// in lower case: the driver gets the word, the file stays in the game.
 var puzzleSounds = map[string]string{
 	// The hut.
 	"h_take.wav":  "взял",
@@ -82,6 +81,19 @@ var puzzleSounds = map[string]string{
 	"lady.wav":     "дамка",
 	// The balloon.
 	"stnbalon.wav": "посадка",
+	// The organ: each note by its name, the dud by how it sounds, Friday's
+	// aria by the notes he whistles. tools/organnotes heard them once; the
+	// game itself listens to nothing.
+	"pipe00.wav": "глухо",
+	"pipe01.wav": "ми3",
+	"pipe02.wav": "до3",
+	"pipe03.wav": "фа3",
+	"pipe04.wav": "ре3",
+	"pipe05.wav": "соль2",
+	"pipe06.wav": "ля2",
+	"pipe07.wav": "си2",
+	"pipe08.wav": "до3",
+	"melody.wav": "ария: " + strings.Join(ariaNotes, " "),
 	// A puzzle solved.
 	"final0.wav": "победа",
 	"final1.wav": "победа",
@@ -89,16 +101,23 @@ var puzzleSounds = map[string]string{
 	"final5.wav": "победа",
 }
 
-// soundLabel is the word for a sound a puzzle played: the table's, a note for
-// each of the organ's pipes, and a plain sound for anything else — never its
-// file.
+// ariaNotes is Friday's aria note by note, as tools/organnotes transcribes
+// MELODY.WAV: what he whistles, three octaves and more above the organ. It is
+// heard as one sound, "ария:" and its notes, so that a driver can lay it
+// against the organ's phrase note for note. Each is the note nearest the
+// whistle, and he whistles loosely: three are a semitone off the phrase the
+// tubes play when they stand right, which the instructions warn of.
+var ariaNotes = []string{
+	"соль6", "ре-диез6", "соль-диез6", "ре-диез6", "соль-диез6", "соль6",
+	"фа6", "ля-диез5", "ля-диез5", "ля-диез5", "до6", "ре-диез6",
+	"ре-диез6", "ми6", "ре-диез6",
+}
+
+// soundLabel is the word for a sound a puzzle played: the table's, and a
+// plain sound for anything else — never its file.
 func soundLabel(file string) string {
-	f := strings.ToLower(file)
-	if w, ok := puzzleSounds[f]; ok {
+	if w, ok := puzzleSounds[strings.ToLower(file)]; ok {
 		return w
-	}
-	if strings.HasPrefix(f, "pipe") {
-		return "нота"
 	}
 	return "звук"
 }

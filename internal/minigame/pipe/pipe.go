@@ -17,19 +17,22 @@ import (
 // the top row and are carried (click to pick, click to drop) into the mouths on
 // the bottom rail. The listen hotspot plays a fifteen-note phrase over the
 // mouths; a mouth sounds its tube's note, an empty mouth plays the dud note.
-// The organ is solved when the tubes stand in the right order.
+// Friday, clicked, whistles again the aria the tubes are to play. The organ
+// is solved when the tubes stand in the right order.
 type pipeGame struct {
 	host    minigame.Host
 	sprites map[string]*ebiten.Image
-	avail   [8]bool // which tubes the hero has (the Tubs mask)
-	mouth   [8]int  // tube -> mouth, -1 = at home
-	inMouth [8]int  // mouth -> tube, -1 = empty
-	held    int     // tube being carried, -1 = none
-	takes   int     // tubes taken up so far
+	friday  *ebiten.Image // Friday standing, nil without his movie
+	avail   [8]bool       // which tubes the hero has (the Tubs mask)
+	mouth   [8]int        // tube -> mouth, -1 = at home
+	inMouth [8]int        // mouth -> tube, -1 = empty
+	held    int           // tube being carried, -1 = none
+	takes   int           // tubes taken up so far
 
 	playing bool // the phrase is sounding
 	noteIdx int
 	noteT   float64
+	aria    float64 // seconds of Friday's aria still to go
 
 	done    bool
 	result  int
@@ -50,6 +53,13 @@ var pipeSeat = [8][2]int{
 
 // pipeListen is the "play the melody" hotspot on the drummer.
 var pipeListen = image.Rect(201, 199, 264, 302)
+
+// pipeFriday is Friday, who whistles his aria again when clicked (the manual,
+// p. 31): the box of SAMPLE.MV's frames, where the original draws him.
+var pipeFriday = image.Rect(71, 203, 158, 368)
+
+// pipeAria is how long the aria holds the organ: MELODY.WAV runs 6.45 s.
+const pipeAria = 6.5
 
 var (
 	_ minigame.Carrier   = (*pipeGame)(nil)
@@ -89,6 +99,9 @@ func New(host minigame.Host, param int) minigame.Game {
 	p.sprites = host.Images("PIPE", nil)
 	if p.sprites["BACK"] == nil {
 		return nil
+	}
+	if f := host.Frames("SAMPLE.MV"); len(f) > 0 {
+		p.friday = f[0] // his whistle starts and ends on this frame
 	}
 	mask := param
 	for i := 0; i < 6; i++ {
@@ -149,8 +162,9 @@ func (p *pipeGame) solvedNow() bool {
 // Takes counts the tubes taken up.
 func (p *pipeGame) Takes() int { return p.takes }
 
-// Busy reports the phrase sounding, or the organ solved and about to close.
-func (p *pipeGame) Busy() bool { return p.playing || p.done }
+// Busy reports the phrase or the aria sounding, or the organ solved and
+// about to close.
+func (p *pipeGame) Busy() bool { return p.playing || p.aria > 0 || p.done }
 
 // update carries tubes and drives the phrase playback.
 func (p *pipeGame) Update(dt float64) (bool, int) {
@@ -174,6 +188,10 @@ func (p *pipeGame) Update(dt float64) (bool, int) {
 		}
 		return false, 0
 	}
+	if p.aria > 0 { // no click reaches the organ while Friday whistles
+		p.aria -= dt
+		return false, 0
+	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
@@ -184,6 +202,11 @@ func (p *pipeGame) Update(dt float64) (bool, int) {
 	if p.held < 0 {
 		if minigame.In(pipeListen, mx, my) {
 			p.playing, p.noteIdx, p.noteT = true, 0, 0.4
+			return false, 0
+		}
+		if minigame.In(pipeFriday, mx, my) {
+			p.host.PlaySound("melody.wav", 2)
+			p.aria = pipeAria
 			return false, 0
 		}
 		// Pick the tube under the cursor (top row or seated in a mouth).
@@ -215,9 +238,10 @@ func (p *pipeGame) Update(dt float64) (bool, int) {
 	return false, 0
 }
 
-// draw paints the beach, the organ, the tubes and the one in hand.
+// draw paints the beach, Friday, the organ, the tubes and the one in hand.
 func (p *pipeGame) Draw(screen *ebiten.Image) {
 	minigame.Blit(screen, p.sprites["BACK"], 0, 0)
+	minigame.Blit(screen, p.friday, 0, 0)
 	minigame.Blit(screen, p.sprites["PIPE18"], 255, 99) // the organ frame
 	for i := 0; i < 8; i++ {
 		if !p.avail[i] || i == p.held {

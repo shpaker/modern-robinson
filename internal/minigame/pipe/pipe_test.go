@@ -2,6 +2,7 @@ package pipe
 
 import (
 	"image"
+	"math"
 	"strings"
 	"testing"
 
@@ -21,6 +22,8 @@ type recorder struct {
 func (*recorder) Images(string, func(string) int) map[string]*ebiten.Image {
 	return map[string]*ebiten.Image{"BACK": ebiten.NewImage(1, 1)}
 }
+
+func (*recorder) Frames(string) []*ebiten.Image { return nil }
 
 func (r *recorder) PlaySound(file string, _ int) {
 	r.played = append(r.played, file)
@@ -84,5 +87,33 @@ func TestTheOrganPlaysTheTubesInItsMouths(t *testing.T) {
 			t.Errorf("arrangement %d: a seated tube sounded the dud: %s",
 				i, seated)
 		}
+	}
+}
+
+// Friday, clicked, whistles his aria once. While he does, the organ is busy
+// and no click reaches it; when he is done, it is the player's again.
+func TestFridayWhistlesTheAria(t *testing.T) {
+	defer mouse.Release()
+	h := &recorder{}
+	p := New(h, 7).(*pipeGame)
+	click(p, pipeFriday)
+	if strings.Join(h.played, " ") != "melody.wav" || !p.Busy() {
+		t.Fatalf("played %q, busy = %v: want the aria under way", h.played,
+			p.Busy())
+	}
+	click(p, p.tubeRect(0))
+	if p.held >= 0 {
+		t.Error("a tube came to hand while Friday whistled")
+	}
+	n := 4 // the ticks since the aria began: the rest of both clicks
+	for ; p.Busy() && n < 60*60; n++ {
+		p.Update(tick)
+	}
+	if s := float64(n) * tick; math.Abs(s-pipeAria) > 2*tick {
+		t.Errorf("the aria held the organ %.2f s, want %.2f", s, pipeAria)
+	}
+	click(p, p.tubeRect(0))
+	if p.held != 0 || len(h.played) != 1 {
+		t.Errorf("after the aria: held = %d, played %q", p.held, h.played)
 	}
 }

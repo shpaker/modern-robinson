@@ -588,9 +588,9 @@ func (c *control) PuzzleMove(
 }
 
 // puzzle plays a player's moves on the puzzle screen, at the points given —
-// all of them on it — and answers once the puzzle has had its say and played
-// out what the moves set going, or, when it is over, once the scene it hands
-// back to is through.
+// all of them on it — once the puzzle is through with what it was playing
+// out, and answers once it has had its say and played out what the moves set
+// going, or, when it is over, once the scene it hands back to is through.
 func (c *control) puzzle(
 	ctx context.Context, at []image.Point, moves ...func() (bool, error),
 ) (types.Outcome, error) {
@@ -614,6 +614,10 @@ func (c *control) puzzle(
 			out.Reacted = true
 			return nil
 		}),
+		// What is still playing out comes first, as the player waits for it
+		// before his next click: a call given up in the middle of it left
+		// the puzzle standing, its sound playing on.
+		ticks(waitMax, func() bool { return !g.puzzleBusy() }),
 	}
 	steps = append(steps, moves...)
 	steps = append(steps,

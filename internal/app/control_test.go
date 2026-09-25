@@ -544,7 +544,7 @@ func TestPuzzleMoveCarriesAPiece(t *testing.T) {
 		{"nothing to take", 5, image.Pt(320, 60), image.Pt(58, 99), nil},
 		{
 			"tube into a mouth", 4, image.Pt(39, 44), image.Pt(35, 435),
-			[]string{"нота"},
+			[]string{"до3"},
 		},
 		{
 			"a man a step up", 2, image.Pt(428, 264), image.Pt(471, 221),
@@ -834,20 +834,24 @@ func TestEveryPuzzleWaitsForItsPlayer(t *testing.T) {
 
 // The drummer plays the organ's whole phrase over the mouths, a note a beat
 // and the dud for an empty mouth: one click on him answers with all fifteen
-// heard, the organ quiet again and waiting.
+// heard, by their names, the organ quiet again and waiting. The tube that
+// stands in a mouth sounds on every beat of that mouth.
 func TestOrganPhraseIsHeardInOneAnswer(t *testing.T) {
 	g := openPuzzle(t, 4)
 	defer mouse.Release()
-	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
-		return g.ctl.PuzzleClick(ctx, 232, 250, false)
-	})
-	if err != nil {
-		t.Fatal(err)
+	listen := func() types.Outcome {
+		t.Helper()
+		out := clickAt(t, g, 232, 250)
+		if !out.Ready || g.puzzleBusy() {
+			t.Errorf("ready = %v busy = %v, want the phrase played out",
+				out.Ready, g.puzzleBusy())
+		}
+		return out
 	}
-	if want := slices.Repeat([]string{"нота"}, 15); !sameList(out.Heard,
-		want) || !out.Ready || g.puzzleBusy() {
-		t.Errorf("heard = %q ready = %v busy = %v, want the phrase whole",
-			out.Heard, out.Ready, g.puzzleBusy())
+	if out := listen(); !sameList(out.Heard,
+		slices.Repeat([]string{"глухо"}, 15)) {
+		t.Errorf("an empty organ: heard = %q, want the dud each beat",
+			out.Heard)
 	}
 	duds := 0
 	for _, key := range g.audio.(*fakeAudio).played {
@@ -857,6 +861,83 @@ func TestOrganPhraseIsHeardInOneAnswer(t *testing.T) {
 	}
 	if duds != 15 {
 		t.Errorf("the dud sounded %d times, want every beat", duds)
+	}
+	// Tube 2 into the first mouth, tube 0 into the second.
+	for _, m := range [][2]image.Point{
+		{image.Pt(199, 44), image.Pt(35, 435)},
+		{image.Pt(39, 44), image.Pt(110, 435)},
+	} {
+		if _, err := move(t, g, m[0], m[1], 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := strings.Fields("ми3 до3 ми3 до3 глухо ми3 глухо глухо глухо " +
+		"глухо глухо глухо до3 до3 глухо")
+	if out := listen(); !sameList(out.Heard, want) {
+		t.Errorf("two tubes in: heard = %q, want %q", out.Heard, want)
+	}
+}
+
+// Friday, clicked, whistles his aria: the answer comes once he is done, and
+// the aria is heard as one sound, by the notes he whistles.
+func TestFridaysAriaIsHeardByItsNotes(t *testing.T) {
+	g := openPuzzle(t, 4)
+	defer mouse.Release()
+	out := clickAt(t, g, 114, 285)
+	if want := []string{soundLabel("melody.wav")}; !sameList(out.Heard,
+		want) || !out.Ready || g.puzzleBusy() {
+		t.Errorf("heard = %q ready = %v busy = %v, want the aria whole",
+			out.Heard, out.Ready, g.puzzleBusy())
+	}
+	if played := g.audio.(*fakeAudio).played; !slices.Contains(played,
+		"melody.wav") {
+		t.Errorf("played = %q, want the aria still played", played)
+	}
+}
+
+// A call given up while Friday whistles leaves the organ standing busy with
+// the aria, which sounds on meanwhile. The next move waits the rest of it
+// out before its clicks, as the player would, and the tube goes in rather
+// than the click being lost to an aria no longer heard.
+func TestAMoveWaitsOutTheAriaOfACallGivenUp(t *testing.T) {
+	g := openPuzzle(t, 4)
+	defer mouse.Release()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	gone := make(chan error, 1)
+	go func() {
+		_, err := g.ctl.PuzzleClick(ctx, 114, 285, false)
+		gone <- err
+	}()
+	for n := 0; !g.puzzleBusy(); n++ {
+		if n > waitMax {
+			t.Fatal("Friday never whistled")
+		}
+		_ = g.Update()
+		runtime.Gosched()
+	}
+	run(g, 2*60) // two seconds into the aria
+	cancel()
+	for err := error(nil); err == nil; {
+		select {
+		case err = <-gone:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("the call given up: %v", err)
+			}
+		default:
+			_ = g.Update()
+			runtime.Gosched()
+		}
+	}
+	run(g, 1)
+	if g.ctl.cur != nil || !g.puzzleBusy() {
+		t.Fatalf("call on = %v busy = %v, want the aria left standing",
+			g.ctl.cur != nil, g.puzzleBusy())
+	}
+	out, err := move(t, g, image.Pt(39, 44), image.Pt(35, 435), 0)
+	if err != nil || !sameList(out.Heard, []string{"до3"}) || !out.Ready {
+		t.Errorf("the next move: heard = %q ready = %v (%v), want the tube in",
+			out.Heard, out.Ready, err)
 	}
 }
 
