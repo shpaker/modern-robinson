@@ -686,6 +686,8 @@ func (g *Game) busyWith() string {
 		return ""
 	case g.fadeCurve != nil || g.pending != nil:
 		return "переход"
+	case g.awaitsClick():
+		return "" // the movie holds for his click, an item in hand
 	case g.act != nil || !g.gs.UI["mouse"]:
 		return "сцена"
 	case g.roby.walking():

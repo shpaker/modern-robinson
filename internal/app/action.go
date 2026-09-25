@@ -291,6 +291,9 @@ func (g *Game) updateAction(dt float64) {
 			return // the same frame routed another character
 		}
 	}
+	if g.ctl != nil && g.awaitsClick() {
+		return // a driver answers slower than the authored pause: hold it for him
+	}
 	g.enqueueAction(ap, ap.player.Update(dt), false)
 	// The engine ticks a script through its owner only while he stands
 	// (+0x590), so a movie whose owner is still walking — a click-walk its
@@ -303,6 +306,34 @@ func (g *Game) updateAction(dt float64) {
 		// The movie is over: the engine hands the mouse back by itself
 		// (0x40ebea) — 51 scripts end on SetMouse OFF and lean on this.
 		g.gs.UI["mouse"] = true
+	}
+}
+
+// awaitsClick reports whether the movie has stopped for the player: four
+// scripts (ROHANRP1, ROROPBAN, ROHANBR2, ROHANSTI) hand him an item — SetMouse
+// ON, LockBar ON, AddItem, SetActive — and hold a negative-Delay frame. A click
+// then goes to the scene with that item, and the script it starts clears the
+// pause away itself (RORP1CTR, RORP1EMP: DelObject empty, SetMouse OFF). Only
+// when the frame runs out does the movie take the item back.
+func (g *Game) awaitsClick() bool {
+	return g.act != nil && g.act.wait == waitNone && g.gs.UI["mouse"] &&
+		g.act.player.Waiting()
+}
+
+// answerPause hands a click made during awaitsClick to the scene: the held
+// movie gives way to the action the click starts. A click no script answers
+// leaves the pause running, so the movie still takes its item back.
+func (g *Game) answerPause(wx, wy int) {
+	held := g.act
+	g.act = nil
+	if hs := g.hotspotAt(wx, wy); hs != nil {
+		g.startObjectAction(hs.key)
+	} else {
+		cx, cy := g.grid.ToCell(wx, wy)
+		g.startSelfAction(cx, cy)
+	}
+	if g.act == nil {
+		g.act = held
 	}
 }
 
