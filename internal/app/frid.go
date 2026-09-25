@@ -14,7 +14,7 @@ import (
 // him between scenes with the 7-arg GoScene. When he is the active character
 // (SetActive Frid) object clicks resolve FRHAN* scripts instead of ROHAN*.
 
-// fridMovie is Friday's standing loop.
+// fridMovie is Friday's standing pose table (FRID.CHR FonScript[0]).
 const fridMovie = "Frhead.mv"
 
 // fridInit resets Friday's per-scene presentation state (STARTUP.INF declares
@@ -23,6 +23,11 @@ func (g *Game) fridInit() {
 	if g.fridIdle == nil {
 		g.fridIdle = adapters.LoadAnimation(g.res, fridMovie, g.pal)
 		g.fridZ = 7 // STARTUP.INF: Frid, 7, 0, 0, *
+		if c := g.res.SceneContainer("FRID"); c != nil {
+			if d, err := c.ExtractName("FRID.CHR"); err == nil {
+				g.fridBox = g.parser.ParseChar(string(d)).LookBox
+			}
+		}
 		// Debug/test aid: place Friday explicitly ("gx,gy").
 		if v := os.Getenv("ROBINSON_FRID"); v != "" {
 			if x, y, ok := strings.Cut(v, ","); ok {
@@ -31,8 +36,6 @@ func (g *Game) fridInit() {
 			}
 		}
 	}
-	g.fridFrame = 0
-	g.fridT = 0
 	g.fridSync() // his screen position follows the cell he was placed on
 }
 
@@ -42,16 +45,22 @@ func (g *Game) fridVisible() bool {
 		g.fridIdle.OK()
 }
 
-// updateFrid advances Friday's idle loop.
-func (g *Game) updateFrid(dt float64) {
-	if !g.fridVisible() || len(g.fridPath) > 0 {
+// fridLook aims standing Friday's head at the cursor. FRHEAD.MV is the same
+// 3x3 pose table as HEAD.MV (nine frames, Delay 114, no events), and
+// Character::Tick picks the pose the same way for either character (0x40dea0):
+// by FRID.CHR's LookBox around her cell anchor, while she stands (+0x590)
+// outside a script of her own (+0x238). Her box matches Robinson's but her
+// Shift does not (99,89 against 116,85), so the box sits below her face and to
+// its left: a cursor on her face already turns her head up, as in the original.
+func (g *Game) fridLook(mx, my int) {
+	if !g.fridVisible() || len(g.fridPath) > 0 ||
+		(g.act != nil && g.act.frid) ||
+		len(g.fridIdle.Frames) < headCols*headCols {
 		return
 	}
-	g.fridT += dt
-	if g.fridT >= 0.114 { // FRHEAD.FS: Delay 114 per frame
-		g.fridT = 0
-		g.fridFrame = (g.fridFrame + 1) % len(g.fridIdle.Frames)
-	}
+	ax := int(g.fridPos[0]) - g.camX
+	ay := int(g.fridPos[1])
+	g.fridFrame = headFrame(g.fridBox, mx-ax, my-ay)
 }
 
 // drawFrid renders Friday's idle at his grid cell.
