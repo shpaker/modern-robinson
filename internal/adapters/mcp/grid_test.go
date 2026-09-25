@@ -108,69 +108,77 @@ func TestGridLinesShowOnAnyGround(t *testing.T) {
 	}
 }
 
+// signed says the label of number n is drawn on got with its pen at (x0,
+// y0): the label lights just the glyphs of that number, as the same face
+// draws it apart, and leaves the rest of its place as the ground was.
+func signed(
+	t *testing.T, got *image.RGBA, ground color.RGBA, n, x0, y0 int,
+) bool {
+	t.Helper()
+	text := strconv.Itoa(n)
+	want := image.NewAlpha(got.Bounds())
+	pen := &font.Drawer{
+		Dst: want, Src: image.Opaque, Face: basicfont.Face7x13,
+		Dot: fixed.P(x0, y0),
+	}
+	pen.DrawString(text)
+	ink := image.Rectangle{}
+	for y := y0 - 13; y < y0+2; y++ {
+		for x := x0; x < x0+7*len(text); x++ {
+			if want.AlphaAt(x, y).A != 0 {
+				ink = ink.Union(image.Rect(x, y, x+1, y+1))
+			}
+		}
+	}
+	if ink.Empty() {
+		t.Fatalf("%q draws nothing", text)
+	}
+	// The label's place: its ink with the rim around, and room for one
+	// digit more, so a longer number shows too — as far as the picture has
+	// it: a label may end on its last row.
+	place := ink.Inset(-1)
+	place.Max.X += 7
+	place = place.Intersect(got.Bounds())
+	inked := func(x, y int) bool {
+		for dy := -1; dy <= 1; dy++ {
+			for dx := -1; dx <= 1; dx++ {
+				if want.AlphaAt(x+dx, y+dy).A != 0 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for y := place.Min.Y; y < place.Max.Y; y++ {
+		for x := place.Min.X; x < place.Max.X; x++ {
+			c := got.RGBAAt(x, y)
+			switch {
+			case want.AlphaAt(x, y).A != 0:
+				if c.R <= ground.R {
+					return false
+				}
+			case !inked(x, y):
+				if c != ground {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
 // Every line is signed with its own coordinate — x along the top, y down
-// the left: the label lights just the glyphs of that number, as the same
-// face draws it apart, and leaves the rest of its place as it was.
+// the left.
 func TestGridSignsItsLines(t *testing.T) {
 	ground := grounds["grey"]
 	got := unpack(t, withGrid(flat(t, 640, 480, ground)))
-	signed := func(v, x0, y0 int) bool {
-		text := strconv.Itoa(v)
-		want := image.NewAlpha(got.Bounds())
-		pen := &font.Drawer{
-			Dst: want, Src: image.Opaque, Face: basicfont.Face7x13,
-			Dot: fixed.P(x0, y0),
-		}
-		pen.DrawString(text)
-		ink := image.Rectangle{}
-		for y := y0 - 13; y < y0+2; y++ {
-			for x := x0; x < x0+7*len(text); x++ {
-				if want.AlphaAt(x, y).A != 0 {
-					ink = ink.Union(image.Rect(x, y, x+1, y+1))
-				}
-			}
-		}
-		if ink.Empty() {
-			t.Fatalf("%q draws nothing", text)
-		}
-		// The label's place: its ink with the rim around, and room for
-		// one digit more, so a longer number shows too.
-		place := ink.Inset(-1)
-		place.Max.X += 7
-		inked := func(x, y int) bool {
-			for dy := -1; dy <= 1; dy++ {
-				for dx := -1; dx <= 1; dx++ {
-					if want.AlphaAt(x+dx, y+dy).A != 0 {
-						return true
-					}
-				}
-			}
-			return false
-		}
-		for y := place.Min.Y; y < place.Max.Y; y++ {
-			for x := place.Min.X; x < place.Max.X; x++ {
-				c := got.RGBAAt(x, y)
-				switch {
-				case want.AlphaAt(x, y).A != 0:
-					if c.R <= ground.R {
-						return false
-					}
-				case !inked(x, y):
-					if c != ground {
-						return false
-					}
-				}
-			}
-		}
-		return true
-	}
 	for x := gridStep; x < 640; x += gridStep {
-		if !signed(x, x+3, 11) {
+		if !signed(t, got, ground, x, x+3, 11) {
 			t.Errorf("the line x=%d is not signed %d", x, x)
 		}
 	}
 	for y := gridStep; y < 480; y += gridStep {
-		if !signed(y, 2, y+12) {
+		if !signed(t, got, ground, y, 2, y+12) {
 			t.Errorf("the line y=%d is not signed %d", y, y)
 		}
 	}

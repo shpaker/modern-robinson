@@ -588,3 +588,104 @@ func TestGridIsOffered(t *testing.T) {
 		}
 	}
 }
+
+// images is how many pictures a reply carries.
+func images(res *sdk.CallToolResult) int {
+	n := 0
+	for _, c := range res.Content {
+		if _, ok := c.(*sdk.ImageContent); ok {
+			n++
+		}
+	}
+	return n
+}
+
+// look with a region brings the close-up of that part of the picture, in a
+// scene as in a puzzle, in place of the whole picture; the region as the
+// picture's edges left it and the scale come with it. Without a region look
+// answers as it did, and a region that makes no close-up is refused.
+func TestLookRegionIsACloseUp(t *testing.T) {
+	scene := flat(t, 640, 400, grounds["grey"])
+	h := &hero{look: beach, sight: scene}
+	cs := connect(t, h)
+	want, err := json.Marshal(beach)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := text(call(t, cs, "look", nil)); got != string(want) {
+		t.Errorf("look without a region:\n%s\nwant\n%s", got, want)
+	}
+	past := map[string]any{"x0": 600, "y0": 300, "x1": 700, "y1": 420}
+	res := call(t, cs, "look", map[string]any{"region": past})
+	out := decode[lookOut](t, res)
+	if out.Region == nil || *out.Region != (shownOut{600, 300, 640, 400, 4}) {
+		t.Errorf("shown = %+v", out.Region)
+	}
+	if out.Where != types.WhereIsland || out.Around[1].Name != "Краб" {
+		t.Errorf("percept = %+v", out.Percept)
+	}
+	if images(res) != 1 || unpack(t, picture(res)).Bounds() !=
+		image.Rect(0, 0, 160, 400) {
+		t.Errorf("close-up: %d pictures", images(res))
+	}
+	gridded := picture(call(t, cs, "look",
+		map[string]any{"region": past, "grid": true}))
+	if bytes.Equal(gridded, picture(res)) {
+		t.Error("region with grid: no grid")
+	}
+	if !bytes.Equal(h.sight, scene) {
+		t.Error("the close-up drew on the game's own picture")
+	}
+	h.look = types.Percept{Where: types.WherePuzzle}
+	h.sight = pattern(t, 640, 480)
+	res = call(t, cs, "look", map[string]any{
+		"region": map[string]any{"x0": 100, "y0": 100, "x1": 260, "y1": 220},
+	})
+	shown := decode[lookOut](t, res).Region
+	if images(res) != 1 || unpack(t, picture(res)).Bounds() !=
+		image.Rect(0, 0, 640, 480) || shown == nil || shown.Scale != 4 {
+		t.Errorf("a puzzle's close-up: %s", text(res))
+	}
+	res = call(t, cs, "look", map[string]any{
+		"region": map[string]any{"x0": 10, "y0": 10, "x1": 5, "y1": 20},
+	})
+	if !res.IsError || !strings.HasPrefix(text(res), "region") {
+		t.Errorf("an inside-out region: %v %q", res.IsError, text(res))
+	}
+}
+
+// Only look offers a region, all four of its edges asked for, and the
+// client is told what it is for and what the grid's numbers on it are.
+func TestRegionIsOffered(t *testing.T) {
+	cs := connect(t, &hero{look: beach})
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		raw, _ := json.Marshal(tool.InputSchema)
+		var schema struct {
+			Properties map[string]struct {
+				Required []string `json:"required"`
+			} `json:"properties"`
+		}
+		_ = json.Unmarshal(raw, &schema)
+		p, has := schema.Properties["region"]
+		if has != (tool.Name == "look") {
+			t.Errorf("%s: region = %v", tool.Name, has)
+		}
+		sort.Strings(p.Required)
+		if has && strings.Join(p.Required, ",") != "x0,x1,y0,y1" {
+			t.Errorf("region requires %v", p.Required)
+		}
+	}
+	init := cs.InitializeResult()
+	for _, want := range []string{
+		"region {x0,y0,x1,y1}", "крупный план", "точнее прицелиться",
+		"экранные", "scale",
+	} {
+		if !strings.Contains(init.Instructions, want) {
+			t.Errorf("the instructions lack %q", want)
+		}
+	}
+}
