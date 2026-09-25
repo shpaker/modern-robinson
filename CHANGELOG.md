@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/shpaker/modern-robinson/compare/v0.2.0...v0.2.1) (2026-09-25)
+
+
+### Документация
+
+* вливать PR с пустым телом merge-коммита ([4df8469](https://github.com/shpaker/modern-robinson/commit/4df84693f5b0af45d7a902613582cdef9d815c18))
+
 ## [0.2.0](https://github.com/shpaker/modern-robinson/compare/v0.1.0...v0.2.0) (2026-09-25)
 
 
