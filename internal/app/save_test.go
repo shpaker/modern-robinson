@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"image"
 	"testing"
 
 	"github.com/shpaker/modern-robinson/internal/repositories"
@@ -158,5 +159,28 @@ func TestLoadSlotKeepsTheView(t *testing.T) {
 	want := clampInt(int(g.heroVisualX())-ViewW/2, 0, g.w-ViewW)
 	if g.camX != want {
 		t.Errorf("camX = %d, want the hero centred at %d", g.camX, want)
+	}
+}
+
+// A thumbnail saved before the slots took the original's size is the whole
+// 640x480 frame at 129x98, the bar's black strip included: only its top
+// 400/480 is the scene.
+func TestLegacyThumbKeepsTheScene(t *testing.T) {
+	got := legacyThumbScene(image.Rect(0, 0, 129, 98))
+	if want := image.Rect(0, 0, 129, 81); got != want {
+		t.Errorf("scene part %v, want %v", got, want)
+	}
+}
+
+// The thumbnail takes the scene alone: the 400 rows above the bar, all 480 of
+// an intro bridge, never more than the frame.
+func TestThumbSourceIsTheScene(t *testing.T) {
+	for _, c := range []struct{ h, want int }{
+		{400, 400}, {480, 480}, {0, PlayH}, {600, ViewH},
+	} {
+		if got := thumbSourceH(c.h); got != c.want {
+			t.Errorf("scene %d tall: thumbnail from %d rows, want %d",
+				c.h, got, c.want)
+		}
 	}
 }
