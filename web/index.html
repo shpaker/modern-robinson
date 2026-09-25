@@ -87,8 +87,10 @@
       .then(function () {
         // Постоянное хранилище: без него браузер вправе вычистить кеш при
         // нехватке места. Отказ не страшен, кеш просто станет вытесняемым.
+        // Ответа не ждём: Firefox спрашивает разрешение у человека и молчит,
+        // пока тот не нажмёт, — игра висела бы на «Загружаю движок…».
         if (navigator.storage && navigator.storage.persist) {
-          return navigator.storage.persist().catch(function () {});
+          navigator.storage.persist().catch(function () {});
         }
       })
       .catch(function (err) {

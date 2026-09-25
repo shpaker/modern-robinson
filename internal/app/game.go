@@ -123,14 +123,13 @@ type Game struct {
 	optSprites map[string]*ebiten.Image
 	optHover   int
 	optDrag    int
-	btnDown    int         // slot-screen button held: 0 left, 1 right, -1 none
-	slotLit    color.Color // brightest tone of the save/load palette
-	slotShade  color.Color // and its darkest, the pair slot bevels use
+	btnDown    int // slot-screen button held: 0 left, 1 right, -1 none
 	slotHover  int
 	slotSel    int
 	slotDblT   float64 // what is left of the double-click window, seconds
 	slotCache  map[int]*ebiten.Image
-	slotInfo   map[int]string
+	slotEmpty  [2]*ebiten.Image // TEMP, the empty slot: as painted, shaded
+	slotDim    float64          // unchosen thumbnails' brightness; 0 = not yet
 	saves      saveStore
 	thumb      *ebiten.Image
 	scratch    *ebiten.Image
@@ -177,9 +176,8 @@ func NewGameWith(res interfaces.IResources, cfg Config) *Game {
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // the game draws its own
 	g.loadCursors()
 	g.optHover, g.optDrag = -1, -1
-	g.slotHover, g.slotSel, g.btnDown = -1, -1, -1
+	g.slotHover, g.slotSel, g.btnDown = -1, 0, -1
 	g.slotCache = map[int]*ebiten.Image{}
-	g.slotInfo = map[int]string{}
 	g.volSound, g.volMusic, g.speed = cfg.Sound, cfg.Music, cfg.Speed
 	g.seedStartup()
 	g.loadBar()
@@ -702,11 +700,14 @@ func (g *Game) flushPending() {
 	g.startFade(p)
 }
 
-// openMenu raises the main menu with fresh hover state and slot caches.
+// openMenu raises the main menu with fresh hover state and slot caches. As in
+// the original, whose menu is built anew each time it opens (0x405fc0), the
+// slot screens start on the first slot, and their shade comes from the scene
+// the menu was opened over.
 func (g *Game) openMenu() {
 	g.mode, g.optHover, g.optDrag = modeOptions, -1, -1
 	g.slotCache = map[int]*ebiten.Image{}
-	g.slotInfo = map[int]string{}
+	g.slotSel, g.slotDim = 0, 0
 }
 
 // toggleOptions opens the main menu from play and closes it again. Before the

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,14 +249,17 @@ func labelMatch(sp, bg *types.NGB, pal types.Palette) float64 {
 	return float64(both) / float64(either)
 }
 
-// The buttons are drawn in the palette of the screens they sit on, which
-// shares not one of its 256 entries with the menu's: painted with the wrong
-// one they come out grey. Nothing else in the pack changes hands.
+// The buttons and the empty slot are drawn in the palette of the screens they
+// sit on, which shares not one of its 256 entries with the menu's: painted with
+// the wrong one they come out grey. Nothing else in the pack changes hands.
 func TestSlotButtonsUseTheirScreenPalette(t *testing.T) {
 	sprites, menuPal, slotPal := optionsPack(t)
 	res := repositories.NewResources(testutil.GameRoot(t))
 	if _, loadPal := res.Screen("OPTIONS", "LOAD"); loadPal != slotPal {
 		t.Error("SAVE.COL and LOAD.COL must be the same palette")
+	}
+	if _, tempPal := res.Screen("OPTIONS", "TEMP"); tempPal != slotPal {
+		t.Error("SAVE.COL and TEMP.COL must be the same palette")
 	}
 	shared := 0
 	for i := range slotPal {
@@ -267,7 +271,7 @@ func TestSlotButtonsUseTheirScreenPalette(t *testing.T) {
 		t.Errorf("%d palette entries shared with the menu, want none", shared)
 	}
 	for name := range sprites {
-		want := strings.HasPrefix(name, "BUT")
+		want := strings.HasPrefix(name, "BUT") || name == "TEMP"
 		if got := slotScreenSprite(name); got != want {
 			t.Errorf("slotScreenSprite(%q) = %v, want %v", name, got, want)
 		}
@@ -428,5 +432,82 @@ func TestDoubleClickOnAnEmptySlotStays(t *testing.T) {
 	}
 	if g.slotSel != 5 {
 		t.Errorf("slotSel = %d, want the clicked slot 5", g.slotSel)
+	}
+}
+
+// The slots are ROBY.EXE's table at 0x46d1f0, the openings of the painted
+// frames: a thumbnail put anywhere else covers the frame's gold.
+func TestSlotRectsAreTheOriginalTable(t *testing.T) {
+	want := [slotCount]image.Rectangle{
+		image.Rect(16, 50, 144, 146),
+		image.Rect(176, 50, 304, 146),
+		image.Rect(336, 50, 464, 146),
+		image.Rect(496, 50, 624, 146),
+		image.Rect(16, 180, 144, 276),
+		image.Rect(176, 180, 304, 276),
+		image.Rect(336, 180, 464, 276),
+		image.Rect(496, 180, 624, 276),
+		image.Rect(16, 310, 144, 406),
+		image.Rect(176, 310, 304, 406),
+		image.Rect(336, 310, 464, 406),
+		image.Rect(496, 310, 624, 406),
+	}
+	for i, r := range want {
+		if got := slotRect(i); got != r {
+			t.Errorf("slot %d at %v, want %v", i, got, r)
+		}
+	}
+}
+
+// An unchosen slot is shaded at 0.4 of a .FAD table, truncated to a step: the
+// scene's 16 steps give the sixth, a little over half the brightness, and no
+// table leaves the slot as it is.
+func TestSlotShadeIsTheOriginalStep(t *testing.T) {
+	if fadeStep(16) != 6 || fadeStep(32) != 12 {
+		t.Errorf("steps %d of 16 and %d of 32, want 6 and 12",
+			fadeStep(16), fadeStep(32))
+	}
+	if k := fadeShade(nil); k != 1 {
+		t.Errorf("no table: shade %.2f, want 1", k)
+	}
+	res := repositories.NewResources(testutil.GameRoot(t))
+	if k := fadeShade(res.SceneFade("SCENA0")); k < 0.55 || k > 0.65 {
+		t.Errorf("SCENA0 shade %.2f, want about 0.60", k)
+	}
+}
+
+// The empty slot shaded through TEMP.FAD is the same marble, darker by the
+// shade step and far from black.
+func TestEmptySlotShadeDarkensTheMarble(t *testing.T) {
+	res := repositories.NewResources(testutil.GameRoot(t))
+	n, pal := res.Screen("OPTIONS", "TEMP")
+	fad := res.ScreenFile("OPTIONS", "TEMP.FAD")
+	if n == nil || len(fad) != 32*256 {
+		t.Fatal("OPTIONS.DAT lacks TEMP.NGB or its 32-step TEMP.FAD")
+	}
+	mean := func(p types.Palette) float64 {
+		sum := 0
+		for _, i := range n.Indices {
+			c := p[i]
+			sum += int(c[0])*3 + int(c[1])*6 + int(c[2])
+		}
+		return float64(sum) / float64(len(n.Indices))
+	}
+	if r := mean(fadePalette(pal, fad)) / mean(pal); r < 0.5 || r > 0.8 {
+		t.Errorf("shaded marble at %.2f of its brightness, want 0.5..0.8", r)
+	}
+	if fadePalette(pal, nil) != pal {
+		t.Error("no table changed the palette")
+	}
+}
+
+// The menu is built anew each time it opens, so its slot screens start on the
+// first slot whichever was picked last time, shaded for the current scene.
+func TestMenuOpensOnTheFirstSlot(t *testing.T) {
+	g := &Game{mode: modePlay, slotSel: 5, slotDim: 0.6}
+	g.openMenu()
+	if g.slotSel != 0 || g.slotDim != 0 {
+		t.Errorf("slotSel %d slotDim %.1f, want 0 and 0 (not worked out)",
+			g.slotSel, g.slotDim)
 	}
 }

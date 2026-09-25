@@ -63,10 +63,9 @@ func (g *Game) saveSlot(i int) {
 	if raw, err := encodePNG(g.thumb); err == nil {
 		_ = g.store().Write(slotThumbName(i), raw)
 	}
-	// Drop the entries so the slot is read again; a stored nil now means
+	// Drop the entry so the slot is read again; a stored nil now means
 	// "checked, nothing there" and would stick.
 	delete(g.slotCache, i)
-	delete(g.slotInfo, i)
 	g.msg, g.msgT = "Игра сохранена", 2
 }
 
@@ -143,31 +142,34 @@ func (g *Game) slotThumb(i int) *ebiten.Image {
 		return nil
 	}
 	img := ebiten.NewImageFromImage(src)
+	if b := src.Bounds(); b.Dx() != slotW || b.Dy() != slotH {
+		img = legacyThumb(img)
+	}
 	g.slotCache[i] = img
 	return img
 }
 
-// slotMeta returns slot i's caption (scene and save time), cached.
-func (g *Game) slotMeta(i int) string {
-	if s, ok := g.slotInfo[i]; ok {
-		return s
+// legacyThumb refits a thumbnail saved before the slots took the original's
+// size: 129x98 of the whole 640x480 frame, with the bar's place left black at
+// the bottom. The scene part is cut out and stretched into the slot.
+func legacyThumb(old *ebiten.Image) *ebiten.Image {
+	r := legacyThumbScene(old.Bounds())
+	if r.Dx() < 1 || r.Dy() < 1 {
+		return old
 	}
-	b, err := g.store().Read(slotName(i))
-	if err != nil {
-		g.slotInfo[i] = ""
-		return ""
-	}
-	var sd types.SaveData
-	if json.Unmarshal(b, &sd) != nil {
-		g.slotInfo[i] = ""
-		return ""
-	}
-	s := sd.Scene
-	if sd.Saved != "" {
-		s += "  " + sd.Saved
-	}
-	g.slotInfo[i] = s
-	return s
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(
+		float64(slotW)/float64(r.Dx()), float64(slotH)/float64(r.Dy()),
+	)
+	img := ebiten.NewImage(slotW, slotH)
+	img.DrawImage(old.SubImage(r).(*ebiten.Image), op)
+	return img
+}
+
+// legacyThumbScene is the scene's share of an old thumbnail: its top
+// PlayH/ViewH, above where the bar was.
+func legacyThumbScene(b image.Rectangle) image.Rectangle {
+	return image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+b.Dy()*PlayH/ViewH)
 }
 
 // captureThumb renders the live scene into an offscreen frame and downscales it
@@ -183,10 +185,27 @@ func (g *Game) captureThumb() {
 	}
 	g.scratch.Clear()
 	g.drawPlay(g.scratch, false)
+	// The picture is the scene alone, as the original takes it (0x405fc0): the
+	// scene's own context, 640 wide and as tall as the scene — the bar has a
+	// context of its own — stretched whole into the slot.
+	h := thumbSourceH(g.h)
+	src := g.scratch.SubImage(image.Rect(0, 0, ViewW, h)).(*ebiten.Image)
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(float64(slotW)/float64(ViewW), float64(slotH)/float64(ViewH))
+	op.GeoM.Scale(float64(slotW)/float64(ViewW), float64(slotH)/float64(h))
 	g.thumb.Clear()
-	g.thumb.DrawImage(g.scratch, op)
+	g.thumb.DrawImage(src, op)
+}
+
+// thumbSourceH is how much of the frame a thumbnail takes: the scene's height,
+// 400 above the bar and 480 for the intro bridges.
+func thumbSourceH(sceneH int) int {
+	switch {
+	case sceneH <= 0:
+		return PlayH
+	case sceneH > ViewH:
+		return ViewH
+	}
+	return sceneH
 }
 
 // encodePNG serialises an Ebiten image to PNG bytes.

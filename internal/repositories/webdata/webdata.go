@@ -69,9 +69,18 @@ func (m *Manifest) Paths() []string {
 	return out
 }
 
-// LoadManifest fetches and parses the manifest at base.
-func LoadManifest(base string) (*Manifest, error) {
-	b, err := get(strings.TrimSuffix(base, "/") + "/manifest.json")
+// LoadManifest fetches and parses the manifest at base. A non-empty build is
+// sent along as ?build=, so every engine build asks for the manifest at an
+// address of its own: a response a browser holds on to under the bare address
+// cannot stand in for it. Once the site served the manifest as immutable for a
+// year, and Firefox kept that copy, reloads included — the engine then never
+// learned of files added to the set since. The host ignores the query.
+func LoadManifest(base, build string) (*Manifest, error) {
+	u := strings.TrimSuffix(base, "/") + "/manifest.json"
+	if build != "" {
+		u += "?build=" + url.QueryEscape(build)
+	}
+	b, err := get(u)
 	if err != nil {
 		return nil, err
 	}

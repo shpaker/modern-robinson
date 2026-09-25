@@ -3,14 +3,10 @@ package app
 import (
 	"fmt"
 	"image"
-	"image/color"
-	"sort"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
@@ -40,14 +36,16 @@ var (
 	cancelButton = image.Rect(362, 436, 602, 471)
 )
 
+// The slots are ROBY.EXE's own table (0x46d1f0): twelve 128x96 windows, the
+// openings of the frames painted on SAVE.NGB and LOAD.NGB.
 const (
 	knobW      = 29
 	slotCols   = 4
 	slotRows   = 3
-	slotW      = 129
-	slotH      = 98
-	slotX0     = 9
-	slotY0     = 45
+	slotW      = 128
+	slotH      = 96
+	slotX0     = 16
+	slotY0     = 50
 	slotPitchX = 160
 	slotPitchY = 130
 	slotCount  = slotCols * slotRows
@@ -65,12 +63,13 @@ func slotRect(i int) image.Rectangle {
 }
 
 // slotScreenSprite reports whether an OPTIONS.DAT bitmap belongs to the
-// save/load screens rather than to the menu. Those screens ship their own
-// palette (SAVE.COL, byte for byte the same as LOAD.COL) and it shares not one
-// of its 256 entries with OPTIONS.COL, so a button painted with the menu's
-// palette comes out a grey and yellow mess.
+// save/load screens rather than to the menu: the buttons and TEMP, the empty
+// slot. Those screens ship their own palette (SAVE.COL, byte for byte the same
+// as LOAD.COL and TEMP.COL) and it shares not one of its 256 entries with
+// OPTIONS.COL, so a button painted with the menu's palette comes out a grey and
+// yellow mess.
 func slotScreenSprite(name string) bool {
-	return strings.HasPrefix(name, "BUT")
+	return strings.HasPrefix(name, "BUT") || name == "TEMP"
 }
 
 // loadOptions loads the options/save/load screens and their widgets.
@@ -93,7 +92,6 @@ func (g *Game) loadOptions() {
 		img.WritePixels(rgba)
 		g.optSprites[name] = img
 	}
-	g.slotLit, g.slotShade = paletteEdges(slotPal)
 	sprites, pal := g.res.ScreenPack("OPTIONS")
 	for name, n := range sprites {
 		if n == nil || g.optSprites[name] != nil {
@@ -113,6 +111,48 @@ func (g *Game) loadOptions() {
 		img.WritePixels(rgba)
 		g.optSprites[name] = img
 	}
+	// The empty slot comes twice: as painted, and shaded the way the original
+	// draws every slot but the chosen one — through TEMP.FAD.
+	if n := sprites["TEMP"]; n != nil {
+		dim := ebiten.NewImage(n.Width, n.Height)
+		dim.WritePixels(n.RGBA(fadePalette(
+			slotPal, g.res.ScreenFile("OPTIONS", "TEMP.FAD"),
+		)))
+		g.slotEmpty = [2]*ebiten.Image{g.optSprites["TEMP"], dim}
+	}
+}
+
+// slotShadeRatio is the share of a .FAD table the original shades an unchosen
+// slot with (vrtSetFadeRatio 0.4); NGI truncates it to a step.
+const slotShadeRatio = 0.4
+
+// fadeStep is the step of an n-step .FAD table the shade lands on: 6 of a
+// scene's 16, 12 of TEMP.FAD's 32.
+func fadeStep(n int) int { return int(slotShadeRatio * float64(n-1)) }
+
+// fadeShade is how bright that step leaves a picture, read off a scene's fade
+// curve. Without a table NGI draws the slot unshaded.
+func fadeShade(curve []float64) float64 {
+	if len(curve) < 2 {
+		return 1
+	}
+	return curve[fadeStep(len(curve))]
+}
+
+// fadePalette is pal as a .FAD table's shade step leaves it: step k sends
+// palette index i to fad[k*256+i], which is how the engine darkens an 8-bit
+// picture. Without a table the palette stays as it is.
+func fadePalette(pal types.Palette, fad []byte) types.Palette {
+	n := len(fad) / 256
+	if n == 0 {
+		return pal
+	}
+	k := fadeStep(n) * 256
+	var out types.Palette
+	for i := range out {
+		out[i] = pal[fad[k+i]]
+	}
+	return out
 }
 
 // updateOptions runs the options/save/load screens; returns true while one of
@@ -326,70 +366,39 @@ func (g *Game) drawOptions(screen *ebiten.Image) {
 	}
 }
 
-// drawSlots paints each slot's thumbnail (or its scene caption) and marks the
-// hovered and selected ones.
+// drawSlots paints the twelve slots the way the original does (0x407392): the
+// chosen one as it is, every other one shaded through a .FAD table — a saved
+// picture through the scene's, an empty slot's marble (TEMP) through its own.
+// There is no frame and no hover mark: the brightness is the selection.
 func (g *Game) drawSlots(screen *ebiten.Image) {
+	if g.slotDim == 0 {
+		g.slotDim = fadeShade(g.res.SceneFade(g.sceneName))
+	}
 	for i := 0; i < slotCount; i++ {
 		r := slotRect(i)
-		if th := g.slotThumb(i); th != nil {
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(float64(r.Min.X), float64(r.Min.Y))
-			screen.DrawImage(th, op)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(r.Min.X), float64(r.Min.Y))
+		chosen := i == g.slotSel
+		img := g.slotThumb(i)
+		switch {
+		case img != nil:
+			if !chosen {
+				k := float32(g.slotDim)
+				op.ColorScale.Scale(k, k, k, 1)
+			}
+		case chosen:
+			img = g.slotEmpty[0]
+		default:
+			img = g.slotEmpty[1]
 		}
-		if meta := g.slotMeta(i); meta != "" {
-			adapters.DrawText(screen, meta, float64(r.Min.X+4),
-				float64(r.Max.Y-adapters.FontH-2), rgba(30, 24, 16, 255))
+		if img == nil {
+			continue
 		}
-		// The screens speak in bevels, so the slots do too: the hovered one
-		// stands out raised, the chosen one sits pushed in, and deeper, so the
-		// two never read alike.
-		switch i {
-		case g.slotSel:
-			g.bevelRect(screen, r, 3, true)
-		case g.slotHover:
-			g.bevelRect(screen, r, 2, false)
-		}
+		// TEMP is 129x98; the slot window clips it, as the original's does.
+		win := img.SubImage(image.Rect(0, 0, slotW, slotH)).(*ebiten.Image)
+		screen.DrawImage(win, op)
 	}
 }
-
-// bevelRect frames a rectangle the way the screens' own buttons are shaded:
-// t pixels of the palette's light tone along the top and left edges and its
-// dark one along the others, swapped when sunken.
-func (g *Game) bevelRect(
-	dst *ebiten.Image, r image.Rectangle, t float32, sunken bool,
-) {
-	top, bottom := g.slotLit, g.slotShade
-	if sunken {
-		top, bottom = bottom, top
-	}
-	x, y := float32(r.Min.X), float32(r.Min.Y)
-	w, h := float32(r.Dx()), float32(r.Dy())
-	vector.FillRect(dst, x, y, w, t, top, false)
-	vector.FillRect(dst, x, y, t, h, top, false)
-	vector.FillRect(dst, x, y+h-t, w, t, bottom, false)
-	vector.FillRect(dst, x+w-t, y, t, h, bottom, false)
-}
-
-// paletteEdges picks the two tones a slot frame is drawn with, so a frame we
-// add ourselves stays inside the screen's own range: SAVE.COL (which LOAD.COL
-// repeats byte for byte) is all sepia and gold, with not one red entry and
-// four greys in 256. Not the very ends of that range, though — those are pure
-// white and pure black, and either reads as a scratch on the page.
-func paletteEdges(p types.Palette) (lit, shade color.Color) {
-	tones := make([][4]byte, len(p))
-	copy(tones, p[:])
-	sort.Slice(tones, func(i, j int) bool {
-		return luma(tones[i]) < luma(tones[j])
-	})
-	pick := func(percent int) color.Color {
-		c := tones[percent*(len(tones)-1)/100]
-		return rgba(c[0], c[1], c[2], 255)
-	}
-	return pick(90), pick(15)
-}
-
-// luma weighs a palette entry roughly the way the eye does.
-func luma(c [4]byte) int { return int(c[0])*3 + int(c[1])*6 + int(c[2]) }
 
 // blitOpt draws a named OPTIONS.DAT bitmap at (x, y).
 func (g *Game) blitOpt(screen *ebiten.Image, name string, x, y int) {
