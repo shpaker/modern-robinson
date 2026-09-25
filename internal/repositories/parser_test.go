@@ -333,6 +333,29 @@ func TestParseChar(t *testing.T) {
 	}
 }
 
+// FRID.CHR as shipped: the same layout as ROBY.CHR, one item and four
+// GridToClose groups.
+func TestParseCharFriday(t *testing.T) {
+	chr := "CharacterName\t\t\tFrid;\r\nMoveType\t\t\tArrowGoing;\r\n" +
+		"FonScript\t\t\tfrhead;\r\n\t\t\t\tfrok;\r\n\t\t\t\tfrrest1;\r\n" +
+		"LookBox\t\t\t\t-10,-10,50,50;\r\n" +
+		"Items\t\t\t\thandfr;\r\n" +
+		"GridToClose\t\t\t0,0,8; 0,0,9; 0,-1,2; 1,-1,1;"
+	c := SceneParser{}.ParseChar(chr)
+	if c.Name != "Frid" || c.MoveType != "ArrowGoing" {
+		t.Errorf("name %q, move %q", c.Name, c.MoveType)
+	}
+	if c.Idle != [3]string{"frhead", "frok", "frrest1"} {
+		t.Errorf("idle = %v", c.Idle)
+	}
+	if c.LookBox != [4]int{-10, -10, 50, 50} {
+		t.Errorf("LookBox = %v, want [-10 -10 50 50]", c.LookBox)
+	}
+	if !reflect.DeepEqual(c.Items, []string{"handfr"}) {
+		t.Errorf("items = %v", c.Items)
+	}
+}
+
 // Both characters' .CHR carry the same LookBox around different standing
 // movies.
 func TestParseCharOnGameData(t *testing.T) {

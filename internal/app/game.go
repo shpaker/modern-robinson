@@ -69,8 +69,8 @@ type Game struct {
 	fridZ      int
 	fridHidden bool
 	fridIdle   *adapters.Animation
-	fridFrame  int
-	fridT      float64
+	fridFrame  int    // standing pose, row*3+column (fridLook)
+	fridBox    [4]int // FRID.CHR LookBox: her head turns by it
 
 	bar        *types.Bar
 	itemIcons  map[string]*ebiten.Image
@@ -685,7 +685,7 @@ func (g *Game) Update() error {
 	}
 	g.updateAmbient(dt)
 	g.updateAction(dt)
-	g.updateFrid(dt)
+	g.fridLook(mx, my)
 	g.updateIdle(dt)
 
 	if !g.moving && (g.act == nil || g.act.frid) {
