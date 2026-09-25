@@ -1,11 +1,13 @@
 package app
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -148,7 +150,8 @@ func (stubGame) Draw(*ebiten.Image) {}
 // Every sound a minigame plays reaches a driver as a word, never as its file,
 // so the table has to know them all: each PlaySound of the games, read from
 // their source, is in it, and nothing in it is a sound no game plays. Only the
-// organ names its notes at run time; they are heard as notes.
+// organ picks its notes at run time, from the files its source names; they
+// are heard as notes.
 func TestEveryPuzzleSoundIsHeardAsAWord(t *testing.T) {
 	played := map[string]bool{}
 	fset := token.NewFileSet()
@@ -163,6 +166,13 @@ func TestEveryPuzzleSoundIsHeardAsAWord(t *testing.T) {
 				return err
 			}
 			ast.Inspect(f, func(n ast.Node) bool {
+				if lit, ok := n.(*ast.BasicLit); ok && f.Name.Name == "pipe" &&
+					lit.Kind == token.STRING {
+					if file, _ := strconv.Unquote(lit.Value); strings.HasSuffix(
+						file, ".wav") {
+						played[strings.ToLower(file)] = true
+					}
+				}
 				call, ok := n.(*ast.CallExpr)
 				if !ok || len(call.Args) == 0 {
 					return true
@@ -200,14 +210,8 @@ func TestEveryPuzzleSoundIsHeardAsAWord(t *testing.T) {
 		if !played[file] {
 			t.Errorf("%s: no game plays it", file)
 		}
-		if !plainWord(word) {
+		if !plainWord(word) && !heardNotes(word) {
 			t.Errorf("%s: %q is no word the ear would use", file, word)
-		}
-	}
-	for i := range 9 {
-		file := "PIPE0" + strconv.Itoa(i) + ".WAV"
-		if got := soundLabel(file); got != "нота" {
-			t.Errorf("%s: heard as %q, want a note", file, got)
 		}
 	}
 	if got := soundLabel("h_take.WAV"); got != "взял" {
@@ -216,6 +220,61 @@ func TestEveryPuzzleSoundIsHeardAsAWord(t *testing.T) {
 	if got := soundLabel("unknown.wav"); got != "звук" {
 		t.Errorf("a sound the table misses is heard as %q", got)
 	}
+}
+
+// The organ is heard by ear, as a player with perfect pitch would hear it:
+// each tube's note by its name, the dud by how it sounds, and Friday's aria
+// as one sound — the notes he whistles in order, to be laid against the
+// organ's phrase. The two tubes the engine lets swap, PIPE02 and PIPE08, are
+// one note.
+func TestTheOrganIsHeardByItsNotes(t *testing.T) {
+	for i := range 9 {
+		file := fmt.Sprintf("PIPE%02d.WAV", i)
+		got := soundLabel(file)
+		switch {
+		case i == 0 && (!plainWord(got) || noteName.MatchString(got)):
+			t.Errorf("%s: the dud heard as %q, want how it sounds", file, got)
+		case i > 0 && !noteName.MatchString(got):
+			t.Errorf("%s: heard as %q, want a note", file, got)
+		}
+	}
+	if a, b := soundLabel("pipe02.wav"), soundLabel("pipe08.wav"); a != b {
+		t.Errorf("the tubes that swap sound %q and %q", a, b)
+	}
+	if len(ariaNotes) == 0 {
+		t.Fatal("the aria has no notes")
+	}
+	for _, n := range ariaNotes {
+		if !noteName.MatchString(n) {
+			t.Errorf("the aria: %q is no note", n)
+		}
+	}
+	want := "ария: " + strings.Join(ariaNotes, " ")
+	if got := soundLabel("MELODY.WAV"); got != want || !heardNotes(got) {
+		t.Errorf("the aria is heard as %q, want %q", got, want)
+	}
+}
+
+// noteName is a note as the ear names it: its Russian name, a sharp, and the
+// octave numbered as in scientific pitch notation (до4 is middle C).
+var noteName = regexp.MustCompile(`^(до|ре|ми|фа|соль|ля|си)(-диез)?[0-9]$`)
+
+// heardNotes reports notes named one after another, led by a plain word and
+// a colon when they are one sound, as Friday's aria is.
+func heardNotes(s string) bool {
+	if head, tail, ok := strings.Cut(s, ": "); ok {
+		if !plainWord(head) {
+			return false
+		}
+		s = tail
+	}
+	notes := strings.Split(s, " ")
+	for _, n := range notes {
+		if !noteName.MatchString(n) {
+			return false
+		}
+	}
+	return len(notes) > 0
 }
 
 // plainWord reports a word in Russian letters and spaces, nothing a file

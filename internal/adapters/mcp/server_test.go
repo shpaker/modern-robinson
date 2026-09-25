@@ -212,6 +212,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"Сохраняйся регулярно", "слоты 10 и 11",
 		"анекдотом", "ничего не выдумывай",
 		"heard", "видит и слышит", "puzzle_move", "серединой",
+		"до первой октавы", "ария Пятницы", "на полтона выше или ниже",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
@@ -452,6 +453,7 @@ func TestInstructionsRetellThePuzzleRules(t *testing.T) {
 	for _, want := range []string{
 		"Хижина", "Карта", "Записка", "Воздушный шар", "Мелодия на органе",
 		"Шашки с пиратом", "Esc", "сохраниться посреди головоломки нельзя",
+		"по Пятнице — он насвистит арию ещё раз",
 	} {
 		if !strings.Contains(puzzleRules, want) {
 			t.Errorf("the puzzle rules lack %q", want)
