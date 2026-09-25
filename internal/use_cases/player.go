@@ -38,6 +38,15 @@ func (p *Player) FrameIndex() int {
 // Done reports whether a one-shot script has finished.
 func (p *Player) Done() bool { return p.done }
 
+// Waiting reports whether the script stands on a frame with a negative Delay.
+// Its magnitude is the frame's length as usual; the sign marks a pause the
+// player may answer with a click (ROHANRP1 holds one while the rope end is in
+// hand).
+func (p *Player) Waiting() bool {
+	return p.fs != nil && p.started && !p.done && len(p.fs.Frames) > 0 &&
+		p.fs.Frames[p.idx].Delay < 0
+}
+
 // Update advances by dt seconds and returns the events of every frame entered
 // during this call (including frame 0 on the first call).
 func (p *Player) Update(dt float64) []types.Command {

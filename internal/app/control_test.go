@@ -444,3 +444,100 @@ func TestMissesCountTriesInARow(t *testing.T) {
 		t.Error("a try that lands ends the streak")
 	}
 }
+
+// The rope thrown over the bananas leaves its end in the hero's hand and the
+// movie waits for the player's click (ROROPBAN's negative-Delay frame). The
+// driver is free to act then, the pause holds for him however long he takes,
+// and the end tied to the dead tree brings the rope back.
+func TestRopeEndWaitsForTheClick(t *testing.T) {
+	g := heroGame(t, "SCENA3", nil)
+	g.gs.AddItem("rope")
+	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Бананы", "Веревка")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Ready || !g.awaitsClick() {
+		t.Fatalf("ready = %v, awaits = %v: the rope end is not held for a click",
+			out.Ready, g.awaitsClick())
+	}
+	if g.gs.Active != "rp1" {
+		t.Fatalf("in hand %q, want the rope end", g.gs.Active)
+	}
+	for range 60 * 30 { // half a minute: far past the authored five seconds
+		_ = g.Update()
+	}
+	if !g.awaitsClick() {
+		t.Fatal("the pause ran out under the driver")
+	}
+	out, err = drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Сухое дерево", "")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, tied := g.objCell("t2banan"); !tied || !g.gs.HasItem("rope") ||
+		g.gs.HasItem("rp1") || g.awaitsClick() {
+		t.Errorf("tied = %v rope = %v rp1 = %v awaits = %v, want the end "+
+			"tied (RORP1CTR)", tied, g.gs.HasItem("rope"), g.gs.HasItem("rp1"),
+			g.awaitsClick())
+	}
+	if len(out.Said) == 0 || !out.Ready {
+		t.Errorf("said = %q ready = %v", out.Said, out.Ready)
+	}
+}
+
+// ropeInHand plays the rope onto the bananas for a player at the mouse (no
+// driver) until the movie stops for his click.
+func ropeInHand(t *testing.T) *Game {
+	t.Helper()
+	t.Setenv("ROBINSON_SCENE", "SCENA3")
+	res := repositories.NewResources(testutil.GameRoot(t))
+	g := newGame(res, DefaultConfig(), &fakeAudio{})
+	g.gs.AddItem("rope")
+	g.gs.Active = "rope"
+	if !g.startObjectAction("banana") {
+		t.Fatal("no script for the rope on the bananas")
+	}
+	for i := 0; !g.awaitsClick(); i++ {
+		if i > 60*30 {
+			t.Fatal("the movie never stopped for the click")
+		}
+		_ = g.Update()
+	}
+	return g
+}
+
+// At the mouse the click made while the movie waits goes to the scene with
+// the rope end, not to skipping the movie.
+func TestPlayerTiesTheRopeEndDuringThePause(t *testing.T) {
+	g := ropeInHand(t)
+	aim, err := g.aimAt("Сухое дерево", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.clickWorld(aim) || g.act == nil || g.awaitsClick() {
+		t.Fatal("the click did not start the tying")
+	}
+	for i := 0; g.act != nil && i < 60*60; i++ {
+		_ = g.Update()
+	}
+	if _, _, tied := g.objCell("t2banan"); !tied || !g.gs.HasItem("rope") {
+		t.Errorf("tied = %v rope = %v, want the end tied (RORP1CTR)", tied,
+			g.gs.HasItem("rope"))
+	}
+}
+
+// Left alone, the pause runs its authored length and the movie takes the
+// rope end back, as without a click in the original.
+func TestUnansweredPauseTakesTheRopeEndBack(t *testing.T) {
+	g := ropeInHand(t)
+	for i := 0; g.act != nil && i < 60*30; i++ {
+		_ = g.Update()
+	}
+	if g.act != nil || g.gs.HasItem("rp1") || !g.gs.UI["mouse"] {
+		t.Errorf("act = %v rp1 = %v mouse = %v", g.act != nil,
+			g.gs.HasItem("rp1"), g.gs.UI["mouse"])
+	}
+}

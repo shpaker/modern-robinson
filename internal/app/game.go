@@ -541,6 +541,12 @@ func (g *Game) spawnCell(spawn *[2]int) [2]int {
 }
 
 func (g *Game) click(mx, my int) {
+	if g.awaitsClick() {
+		if my < PlayH {
+			g.answerPause(mx+g.camX, my)
+		}
+		return // LockBar ON: the bar stays shut while the movie waits
+	}
 	if g.act != nil {
 		// A click during a movie can only mean "get on with it", and it works
 		// even under SetMouse OFF — the engine takes the skip before it looks
