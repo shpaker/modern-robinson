@@ -19,4 +19,7 @@ type Bar struct {
 	InvMask    [2]int   // InvMaskLT: left,top of the frame that clips the slots
 	Data       string   // BarData: bar background container (bar.dat)
 	Items      []string // declared item names, in order
+	// ItemLabels is the name each item goes by in the game ("Панама" for
+	// hat), in Items order; "" where BAR.BAR gives none.
+	ItemLabels []string
 }

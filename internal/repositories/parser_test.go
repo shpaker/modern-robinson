@@ -287,4 +287,25 @@ func TestParseBar(t *testing.T) {
 	if len(b.Items) != 2 || b.Items[0] != "hand" || b.Items[1] != "axe" {
 		t.Fatalf("items=%v", b.Items)
 	}
+	if len(b.ItemLabels) != 2 || b.ItemLabels[0] != "x" ||
+		b.ItemLabels[1] != "y" {
+		t.Fatalf("labels=%q", b.ItemLabels)
+	}
+}
+
+// BAR.BAR names every item the way the game shows it, in CP1251: hat is
+// "Панама". An item declared without a name keeps its place with "".
+func TestParseBarItemLabels(t *testing.T) {
+	txt := "Items hand,\"\xd0\xf3\xea\xe0\";\n\that,\"\xcf\xe0\xed\xe0\xec\xe0\";\n" +
+		"\tadv1;\nEnd;\n"
+	b := SceneParser{}.ParseBar(txt)
+	want := []string{"Рука", "Панама", ""}
+	if len(b.ItemLabels) != len(want) {
+		t.Fatalf("labels=%q, want %q", b.ItemLabels, want)
+	}
+	for i := range want {
+		if b.ItemLabels[i] != want[i] {
+			t.Errorf("label %d = %q, want %q", i, b.ItemLabels[i], want[i])
+		}
+	}
 }
