@@ -6,6 +6,7 @@ require (
 	github.com/hajimehoshi/bitmapfont/v4 v4.1.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.12.0.20260716134733-95dde051e41c
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 )
 
@@ -22,7 +23,6 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
