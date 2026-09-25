@@ -49,9 +49,12 @@ func TestLoadConfig(t *testing.T) {
 
 // No file at all is the normal case, and it must give exactly the defaults.
 func TestLoadConfigMissing(t *testing.T) {
-	cfg := LoadConfig(t.TempDir())
-	if cfg != DefaultConfig() {
-		t.Errorf("LoadConfig = %+v, want %+v", cfg, DefaultConfig())
+	dir := t.TempDir()
+	cfg := LoadConfig(dir)
+	want := DefaultConfig()
+	want.Path = filepath.Join(dir, ConfigName) // where the sliders will go
+	if cfg != want {
+		t.Errorf("LoadConfig = %+v, want %+v", cfg, want)
 	}
 }
 
@@ -65,5 +68,61 @@ func TestConfigClampsScale(t *testing.T) {
 	}
 	if got := LoadConfig(dir).Scale; got != 4 {
 		t.Errorf("Scale = %d, want it clamped to 4", got)
+	}
+}
+
+// The sliders go back into the file they came from: only their lines change,
+// comments and other keys stay, a repeated key changes everywhere and a
+// missing one is added; the next start reads them back.
+func TestSaveLevelsKeepsTheRestOfTheFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ConfigName)
+	body := "# player settings\n" +
+		"scale: 3\n" +
+		"sound: 1.0   # loud\n" +
+		"debug: yes\n" +
+		"sound: 0.9\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := LoadConfig(dir)
+	if cfg.Path != path {
+		t.Fatalf("Path = %q, want %q", cfg.Path, path)
+	}
+	if err := cfg.SaveLevels(0.3, 0.456, 0.5); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	want := "# player settings\n" +
+		"scale: 3\n" +
+		"sound: 0.30  # loud\n" +
+		"debug: yes\n" +
+		"sound: 0.30\n" +
+		"music: 0.46\n" +
+		"speed: 0.50\n"
+	if string(got) != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	again := LoadConfig(dir)
+	if again.Sound != 0.3 || again.Music != 0.46 || again.Speed != 0.5 ||
+		again.Scale != 3 || !again.Debug {
+		t.Errorf("reloaded %+v", again)
+	}
+}
+
+// With no file yet, the levels start one beside the saves; a config that
+// never came from disk (the browser build) writes nothing.
+func TestSaveLevelsCreatesTheFile(t *testing.T) {
+	dir := t.TempDir()
+	cfg := LoadConfig(dir)
+	if err := cfg.SaveLevels(0.1, 0.2, 0.7); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, ConfigName))
+	if err != nil || string(got) != "sound: 0.10\nmusic: 0.20\nspeed: 0.70\n" {
+		t.Errorf("file = %q err = %v", got, err)
+	}
+	if err := DefaultConfig().SaveLevels(1, 1, 1); err != nil {
+		t.Errorf("in-memory config: %v", err)
 	}
 }

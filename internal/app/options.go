@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image"
+	"os"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -190,6 +191,7 @@ func (g *Game) updateOptionsMenu(mx, my int, click bool) {
 	if g.optDrag >= 0 {
 		if !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 			g.optDrag = -1
+			g.keepLevels()
 		} else {
 			g.setSlider(g.optDrag, mx)
 		}
@@ -241,6 +243,14 @@ func (g *Game) setSlider(i, mx int) {
 		g.audio.SetMusicVolume(v)
 	case 2:
 		g.speed = v
+	}
+}
+
+// keepLevels writes the sliders to config.yml once the player lets go of
+// one, so the game starts with them next time.
+func (g *Game) keepLevels() {
+	if err := g.cfg.SaveLevels(g.volSound, g.volMusic, g.speed); err != nil {
+		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
 	}
 }
 
