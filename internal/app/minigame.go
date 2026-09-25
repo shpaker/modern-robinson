@@ -41,20 +41,26 @@ func (g *Game) updateMinigame(dt float64) bool {
 	if g.mg == nil {
 		return false
 	}
-	done, result := g.mg.Update(dt)
-	if done {
-		g.mg = nil
-		if g.mgVar != "" {
-			g.gs.SetVar(g.mgVar, result)
-			g.traceState("minigame finished: %s=%d", g.mgVar, result)
-		}
-		// Resume the frame the StartGame suspended, now that the result is in.
-		if rest := g.mgResume; len(rest) > 0 {
-			g.mgResume = nil
-			g.applyEvents(rest)
-		}
+	if done, result := g.mg.Update(dt); done {
+		g.finishMinigame(result)
 	}
 	return true
+}
+
+// finishMinigame hands the screen back to the adventure: the result goes into
+// the quest variable, and the frame the StartGame suspended resumes. Giving up
+// is result 0, as Esc inside every game.
+func (g *Game) finishMinigame(result int) {
+	g.mg = nil
+	if g.mgVar != "" {
+		g.gs.SetVar(g.mgVar, result)
+		g.traceState("minigame finished: %s=%d", g.mgVar, result)
+	}
+	// Resume the frame the StartGame suspended, now that the result is in.
+	if rest := g.mgResume; len(rest) > 0 {
+		g.mgResume = nil
+		g.applyEvents(rest)
+	}
 }
 
 // drawMinigame paints the active minigame over everything else.

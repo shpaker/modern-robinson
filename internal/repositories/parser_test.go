@@ -287,4 +287,97 @@ func TestParseBar(t *testing.T) {
 	if len(b.Items) != 2 || b.Items[0] != "hand" || b.Items[1] != "axe" {
 		t.Fatalf("items=%v", b.Items)
 	}
+	if len(b.ItemLabels) != 2 || b.ItemLabels[0] != "x" ||
+		b.ItemLabels[1] != "y" {
+		t.Fatalf("labels=%q", b.ItemLabels)
+	}
+}
+
+// BAR.BAR names every item the way the game shows it, in CP1251: hat is
+// "Панама". An item declared without a name keeps its place with "".
+func TestParseBarItemLabels(t *testing.T) {
+	txt := "Items hand,\"\xd0\xf3\xea\xe0\";\n\that,\"\xcf\xe0\xed\xe0\xec\xe0\";\n" +
+		"\tadv1;\nEnd;\n"
+	b := SceneParser{}.ParseBar(txt)
+	want := []string{"Рука", "Панама", ""}
+	if len(b.ItemLabels) != len(want) {
+		t.Fatalf("labels=%q, want %q", b.ItemLabels, want)
+	}
+	for i := range want {
+		if b.ItemLabels[i] != want[i] {
+			t.Errorf("label %d = %q, want %q", i, b.ItemLabels[i], want[i])
+		}
+	}
+}
+
+// ROBY.CHR as shipped: CRLF lines, tab-aligned list rows and GridToClose on
+// the last line, with no line end after it.
+func TestParseChar(t *testing.T) {
+	chr := "CharacterName\t\t\tRoby;\r\nMoveType\t\t\tNumPadGoing;\r\n" +
+		"FonScript\t\t\thead;\r\n\t\t\t\tok0;\r\n\t\t\t\troby1;\r\n" +
+		"LookBox\t\t\t\t-10,-10,50,50;\r\n" +
+		"Items\t\t\t\thand;\r\n\t\t\t\that;\r\n" +
+		"GridToClose\t\t\t0,0,2; 0,1,8;"
+	c := SceneParser{}.ParseChar(chr)
+	if c.Name != "Roby" || c.MoveType != "NumPadGoing" {
+		t.Errorf("name %q, move %q", c.Name, c.MoveType)
+	}
+	if c.Idle != [3]string{"head", "ok0", "roby1"} {
+		t.Errorf("idle = %v", c.Idle)
+	}
+	if c.LookBox != [4]int{-10, -10, 50, 50} {
+		t.Errorf("LookBox = %v, want [-10 -10 50 50]", c.LookBox)
+	}
+	if !reflect.DeepEqual(c.Items, []string{"hand", "hat"}) {
+		t.Errorf("items = %v", c.Items)
+	}
+}
+
+// FRID.CHR as shipped: the same layout as ROBY.CHR, one item and four
+// GridToClose groups.
+func TestParseCharFriday(t *testing.T) {
+	chr := "CharacterName\t\t\tFrid;\r\nMoveType\t\t\tArrowGoing;\r\n" +
+		"FonScript\t\t\tfrhead;\r\n\t\t\t\tfrok;\r\n\t\t\t\tfrrest1;\r\n" +
+		"LookBox\t\t\t\t-10,-10,50,50;\r\n" +
+		"Items\t\t\t\thandfr;\r\n" +
+		"GridToClose\t\t\t0,0,8; 0,0,9; 0,-1,2; 1,-1,1;"
+	c := SceneParser{}.ParseChar(chr)
+	if c.Name != "Frid" || c.MoveType != "ArrowGoing" {
+		t.Errorf("name %q, move %q", c.Name, c.MoveType)
+	}
+	if c.Idle != [3]string{"frhead", "frok", "frrest1"} {
+		t.Errorf("idle = %v", c.Idle)
+	}
+	if c.LookBox != [4]int{-10, -10, 50, 50} {
+		t.Errorf("LookBox = %v, want [-10 -10 50 50]", c.LookBox)
+	}
+	if !reflect.DeepEqual(c.Items, []string{"handfr"}) {
+		t.Errorf("items = %v", c.Items)
+	}
+}
+
+// Both characters' .CHR carry the same LookBox around different standing
+// movies.
+func TestParseCharOnGameData(t *testing.T) {
+	res := NewResources(testutil.GameRoot(t))
+	for name, head := range map[string]string{
+		"ROBY": "head",
+		"FRID": "frhead",
+	} {
+		c := res.SceneContainer(name)
+		if c == nil {
+			t.Fatalf("%s container not found", name)
+		}
+		d, err := c.ExtractName(name + ".CHR")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ch := SceneParser{}.ParseChar(string(d))
+		if ch.LookBox != [4]int{-10, -10, 50, 50} {
+			t.Errorf("%s LookBox = %v", name, ch.LookBox)
+		}
+		if ch.Idle[0] != head {
+			t.Errorf("%s standing slot = %q, want %q", name, ch.Idle[0], head)
+		}
+	}
 }

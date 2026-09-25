@@ -163,13 +163,14 @@ type Startup struct {
 	GridDebug int
 }
 
-// Character is a parsed .CHR: the walk mode and the three idle slots the engine
+// Character is a parsed .CHR: the walk mode, the three idle slots the engine
 // cycles through — [0] standing, [1] the acknowledge animation, [2] the long
-// idle SetRest swaps out.
+// idle SetRest swaps out — and the LookBox the standing head turns by.
 type Character struct {
 	Name     string
 	MoveType string // NumPadGoing (8 directions) or ArrowGoing (4)
 	Idle     [3]string
+	LookBox  [4]int // left, top, right, bottom around the cell anchor
 	Items    []string
 }
 

@@ -72,6 +72,7 @@ func (g *Game) applyEffect(c types.Command) {
 			if s := g.textLine(id); s != "" {
 				// Rough read-time heuristic: base + per-character.
 				g.msg, g.msgT = s, 1.2+0.05*float64(len(s))
+				g.ctl.heard(s)
 			}
 		}
 	case "createobject":

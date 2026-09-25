@@ -3,8 +3,6 @@ package app
 import (
 	"strings"
 
-	"github.com/hajimehoshi/ebiten/v2"
-
 	"github.com/shpaker/modern-robinson/internal/adapters"
 	"github.com/shpaker/modern-robinson/internal/use_cases"
 )
@@ -28,50 +26,50 @@ const idleAfter = 27.0
 
 // HEAD.MV is not an animation but a 3x3 table of standing poses: its nine
 // frames all carry the same Delay and no events, and every frame draws the same
-// body with only the head turned. Measured by the eyes in each frame, the
-// columns look left / straight / right and the rows look down / straight / up,
-// so the frame is chosen by where the cursor is relative to the hero's head —
-// he follows the mouse instead of rolling his head on a timer.
+// body with only the head turned. The columns look left / straight / right and
+// the rows look down / straight / up. Character::Tick (0x40dea0) picks the pose
+// on every tick the hero stands outside a script of his own: it lays the .CHR
+// LookBox around his cell anchor and checks the cursor against its edges, so he
+// follows the mouse instead of rolling his head on a timer.
 const (
 	headCols    = 3
-	headDeadX   = 44 // cursor within this many px stays "straight ahead"
-	headDeadY   = 40
-	headEyeDX   = 30 // eyes relative to the cell anchor (Shift 116,85)
-	headEyeDY   = 15
 	headUpRow   = 2
 	headMidRow  = 1
 	headDownRow = 0
 )
 
-// headFrame picks the standing pose for a cursor offset from the hero's eyes.
-func headFrame(dx, dy int) int {
+// headFrame picks the standing pose for a cursor offset from the cell anchor;
+// box is the LookBox as left, top, right, bottom. An edge belongs to the turned
+// pose, and the checks run in the engine's order (0x40dee2..0x40dfd8), so on a
+// degenerate box left wins over right and up over down.
+func headFrame(box [4]int, dx, dy int) int {
 	col := 1
 	switch {
-	case dx < -headDeadX:
+	case dx <= box[0]:
 		col = 0
-	case dx > headDeadX:
+	case dx >= box[2]:
 		col = 2
 	}
 	row := headMidRow
 	switch {
-	case dy < -headDeadY:
+	case dy <= box[1]:
 		row = headUpRow
-	case dy > headDeadY:
+	case dy >= box[3]:
 		row = headDownRow
 	}
 	return row*headCols + col
 }
 
 // lookAtCursor aims the hero's standing pose at the cursor. It only applies to
-// the standing loop (slot 0); the ok/bored chains are real animations.
-func (g *Game) lookAtCursor() {
+// the standing loop (slot 0); the ok/bored chains are real animations. A
+// standing hero's pos is his cell anchor, and no scene scrolls vertically.
+func (g *Game) lookAtCursor(mx, my int) {
 	if !g.idle.OK() || len(g.idle.Frames) < headCols*headCols {
 		return // not the nine-pose table: leave the frame alone
 	}
-	mx, my := ebiten.CursorPosition()
-	ex := int(g.pos[0]) - g.camX + headEyeDX
-	ey := int(g.pos[1]) + headEyeDY
-	g.frameI = headFrame(mx-ex, my-ey)
+	ax := int(g.pos[0]) - g.camX
+	ay := int(g.pos[1])
+	g.frameI = headFrame(g.lookBox, mx-ax, my-ay)
 }
 
 // loadCharacter reads ROBY.CHR and takes its standing animation and idle slots.
@@ -86,6 +84,7 @@ func (g *Game) loadCharacter() {
 	}
 	ch := g.parser.ParseChar(string(d))
 	g.restSlots = ch.Idle
+	g.lookBox = ch.LookBox
 	if s := ch.Idle[restStand]; s != "" {
 		g.standMovie = s + ".mv" // HEAD.mv: the real standing loop
 	}

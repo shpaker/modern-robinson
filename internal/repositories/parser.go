@@ -323,6 +323,10 @@ func (SceneParser) ParseChar(text string) *types.Character {
 				c.Idle[idle] = v
 				idle++
 			}
+		case "lookbox":
+			if v := ints(st.args); len(v) >= 4 {
+				c.LookBox = [4]int{v[0], v[1], v[2], v[3]}
+			}
 		case "items":
 			if a := argSplit(st.args); len(a) > 0 {
 				c.Items = append(c.Items, a[0])
@@ -378,6 +382,11 @@ func (SceneParser) ParseBar(text string) *types.Bar {
 		case "items":
 			if a := argSplit(st.args); len(a) > 0 {
 				b.Items = append(b.Items, a[0])
+				label := ""
+				if len(a) > 1 {
+					label = decodeCP1251([]byte(a[1])) // hat,"Панама"
+				}
+				b.ItemLabels = append(b.ItemLabels, label)
 			}
 		}
 	}

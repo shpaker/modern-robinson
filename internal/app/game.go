@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -68,8 +69,8 @@ type Game struct {
 	fridZ      int
 	fridHidden bool
 	fridIdle   *adapters.Animation
-	fridFrame  int
-	fridT      float64
+	fridFrame  int    // standing pose, row*3+column (fridLook)
+	fridBox    [4]int // FRID.CHR LookBox: her head turns by it
 
 	bar        *types.Bar
 	itemIcons  map[string]*ebiten.Image
@@ -86,6 +87,7 @@ type Game struct {
 
 	idle       *adapters.Animation
 	standMovie string // ROBY.CHR standing loop, reloaded with each palette
+	lookBox    [4]int // ROBY.CHR LookBox: the head turns by it (idle.go)
 	idleAct    *idlePlay
 	restSlots  [3]string
 	idleT      float64
@@ -147,6 +149,9 @@ type Game struct {
 	fadeOut   bool
 	fadeT     float64
 	fadeTo    *types.Exit
+
+	ctl     *control    // a driver playing the hero from outside (control.go)
+	stopped atomic.Bool // Stop: end the loop on the next tick
 }
 
 // NewGame builds a game over the given resources with the default settings.
@@ -156,10 +161,17 @@ func NewGame(res interfaces.IResources) *Game {
 
 // NewGameWith builds a game over the given resources and the player's settings.
 func NewGameWith(res interfaces.IResources, cfg Config) *Game {
+	return newGame(res, cfg, adapters.NewAudio(SampleRate))
+}
+
+// newGame builds a game that plays through the given audio. The process has
+// room for one audio context, so tests that build several games bring their
+// own.
+func newGame(res interfaces.IResources, cfg Config, audio interfaces.IAudio) *Game {
 	g := &Game{
 		res:        res,
 		parser:     repositories.SceneParser{},
-		audio:      adapters.NewAudio(SampleRate),
+		audio:      audio,
 		cycleCache: map[string]*walkCycle{},
 		curDir:     6,
 		robyZ:      charZCoord,
@@ -613,7 +625,8 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.mg == nil {
 		g.toggleOptions() // inside a minigame Esc is the game's own quit
 	}
-	if g.quit {
+	g.ctl.tick() // a driver's call, if one is running (control.go)
+	if g.quit || g.stopped.Load() {
 		return ebiten.Termination
 	}
 	g.updateCursor() // every tick, whoever owns the frame, as OnIdle does
@@ -674,13 +687,14 @@ func (g *Game) Update() error {
 	}
 	g.updateAmbient(dt)
 	g.updateAction(dt)
-	g.updateFrid(dt)
+	g.fridLook(mx, my)
 	g.updateIdle(dt, wall)
 
-	if !g.moving {
-		// Standing still: the head follows the cursor (HEAD.MV is a pose table,
-		// not a loop — see idle.go).
-		g.lookAtCursor()
+	if !g.moving && (g.act == nil || g.act.frid) {
+		// Standing still and out of his own scripts (the engine's +0x590 and
+		// +0x238): the head follows the cursor (HEAD.MV is a pose table, not a
+		// loop — see idle.go). Friday's action does not hold his head.
+		g.lookAtCursor(mx, my)
 	}
 	if g.msgT > 0 {
 		if g.msgT -= dt; g.msgT <= 0 {
