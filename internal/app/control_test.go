@@ -358,3 +358,34 @@ func TestStopEndsTheLoop(t *testing.T) {
 		t.Fatal("the loop went on after Stop")
 	}
 }
+
+// The crab is caught the player's way, with the hat taken from the bar and
+// aimed at it: the crab leaves the beach and rides in the hat, and the puddle
+// takes him back and returns the hat.
+func TestCrabCaughtInTheHatAndLetGo(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Краб", "Панама")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameList(out.Look.Carry, []string{"Краб в шляпе"}) {
+		t.Errorf("carry = %q, want the crab in the hat", out.Look.Carry)
+	}
+	for _, s := range thingNames(out.Look.Around) {
+		if s == "Краб" {
+			t.Error("the caught crab is still on the beach")
+		}
+	}
+	out, err = drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Лужа", "Краб в шляпе")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameList(out.Look.Carry, []string{"Панама"}) || len(out.Said) == 0 {
+		t.Errorf("carry = %q said = %q, want the hat back", out.Look.Carry,
+			out.Said)
+	}
+}
