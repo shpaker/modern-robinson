@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -424,5 +426,40 @@ func TestPuzzleMoveNamesBothEnds(t *testing.T) {
 	}))
 	if strings.Join(o.Heard, "|") != "взял|повернул|не туда" {
 		t.Errorf("heard = %q", o.Heard)
+	}
+}
+
+// The instructions retell the manual's puzzle rules: every game by the name
+// the player sees it under, and not a number the manual does not give — no
+// spots on the screen, no tolerances; the only words not in Russian are the
+// key and the tools the player has.
+func TestInstructionsRetellThePuzzleRules(t *testing.T) {
+	init := connect(t, &hero{look: beach}).InitializeResult()
+	if !strings.Contains(init.Instructions, puzzleRules) {
+		t.Error("the instructions lack the puzzle rules")
+	}
+	for _, want := range []string{
+		"Хижина", "Карта", "Записка", "Воздушный шар", "Мелодия на органе",
+		"Шашки с пиратом", "Esc", "сохраниться посреди головоломки нельзя",
+	} {
+		if !strings.Contains(puzzleRules, want) {
+			t.Errorf("the puzzle rules lack %q", want)
+		}
+	}
+	bare := strings.NewReplacer("90°", "", "300 м", "").Replace(puzzleRules)
+	for _, w := range strings.Fields(bare) {
+		if strings.IndexFunc(w, unicode.IsDigit) >= 0 {
+			t.Errorf("the puzzle rules give a number: %q", w)
+		}
+	}
+	known := map[string]bool{
+		"Esc": true, "puzzle_click": true, "puzzle_move": true,
+		"puzzle_give_up": true,
+	}
+	for _, w := range regexp.MustCompile(`[A-Za-z_]+`).
+		FindAllString(puzzleRules, -1) {
+		if !known[w] {
+			t.Errorf("the puzzle rules name %q", w)
+		}
 	}
 }
