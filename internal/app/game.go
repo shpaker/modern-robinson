@@ -86,6 +86,7 @@ type Game struct {
 
 	idle       *adapters.Animation
 	standMovie string // ROBY.CHR standing loop, reloaded with each palette
+	lookBox    [4]int // ROBY.CHR LookBox: the head turns by it (idle.go)
 	idleAct    *idlePlay
 	restSlots  [3]string
 	idleT      float64
@@ -675,10 +676,11 @@ func (g *Game) Update() error {
 	g.updateFrid(dt)
 	g.updateIdle(dt)
 
-	if !g.moving {
-		// Standing still: the head follows the cursor (HEAD.MV is a pose table,
-		// not a loop — see idle.go).
-		g.lookAtCursor()
+	if !g.moving && (g.act == nil || g.act.frid) {
+		// Standing still and out of his own scripts (the engine's +0x590 and
+		// +0x238): the head follows the cursor (HEAD.MV is a pose table, not a
+		// loop — see idle.go). Friday's action does not hold his head.
+		g.lookAtCursor(mx, my)
 	}
 	if g.msgT > 0 {
 		if g.msgT -= dt; g.msgT <= 0 {

@@ -323,6 +323,10 @@ func (SceneParser) ParseChar(text string) *types.Character {
 				c.Idle[idle] = v
 				idle++
 			}
+		case "lookbox":
+			if v := ints(st.args); len(v) >= 4 {
+				c.LookBox = [4]int{v[0], v[1], v[2], v[3]}
+			}
 		case "items":
 			if a := argSplit(st.args); len(a) > 0 {
 				c.Items = append(c.Items, a[0])
