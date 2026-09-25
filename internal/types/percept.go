@@ -7,8 +7,8 @@ package types
 // cells or internal keys.
 type Percept struct {
 	Where string `json:"where"` // one of the Where* values
-	// Busy is what is under way ("идёт сцена", "я иду"); "" when the hero
-	// is free to act.
+	// Busy is what is under way ("сцена", "Роби идёт"); "" when the hero is
+	// free to act.
 	Busy   string  `json:"busy,omitempty"`
 	Around []Thing `json:"around,omitempty"` // what can be acted on
 	Exits  []Thing `json:"exits,omitempty"`  // the ways out of the place
@@ -19,7 +19,7 @@ type Percept struct {
 	Carry  []string   `json:"carry,omitempty"`
 	Friday *Companion `json:"friday,omitempty"` // Friday, while she is with him
 	Map    bool       `json:"map"`              // the island map can be opened
-	// Hearing is the line on screen right now.
+	// Hearing is the line on screen right now, without its quotes.
 	Hearing string `json:"hearing,omitempty"`
 }
 
@@ -53,9 +53,9 @@ type Companion struct {
 	Carry []string `json:"carry,omitempty"`
 }
 
-// Outcome is what came of an action: the lines shown while it played, whether
-// the world answered at all, whether the hero may act again, and the world
-// afterwards.
+// Outcome is what came of an action: the lines shown while it played
+// (without their quotes), whether the world answered at all, whether the hero
+// may act again, what changed, and the world afterwards.
 type Outcome struct {
 	Said []string `json:"said,omitempty"`
 	// Reacted is false when nothing happened: the game ignores an action it

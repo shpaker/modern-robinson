@@ -82,18 +82,8 @@ type control struct {
 
 	canvas *ebiten.Image // where Sight renders
 
-	voice  []string // the hero's own lines (Voice)
-	misses int      // actions in a row that came to nothing
+	misses int // actions in a row that came to nothing
 }
-
-// voiceLines are TEXT.DAT lines that show how the hero talks and give nothing
-// of the quest away: his first words on the beach (ROBAWAKE: "Где я?",
-// "Куда я попал?", "Бедный Роби!"), and the grumbles and refusals he answers
-// idle clicks and the paths with.
-var voiceLines = []int{17, 18, 413, 284, 267, 588, 567, 566, 54, 565, 569}
-
-// Voice is how the hero talks, in his own lines from the player's copy.
-func (c *control) Voice() []string { return c.voice }
 
 // glance is the world as it stood before an action, to tell what changed.
 type glance struct {
@@ -118,11 +108,6 @@ var _ interfaces.IControl = (*control)(nil)
 func (g *Game) Control() interfaces.IControl {
 	if g.ctl == nil {
 		g.ctl = &control{g: g, jobs: make(chan *job, 1)}
-		for _, id := range voiceLines {
-			if line := g.caption(id); line != "" {
-				g.ctl.voice = append(g.ctl.voice, line)
-			}
-		}
 		if !g.started {
 			g.restart()
 		}
@@ -158,8 +143,12 @@ func (c *control) heard(s string) {
 	if c == nil || c.cur == nil || len(c.said) >= saidMax {
 		return
 	}
-	c.said = append(c.said, s)
+	c.said = append(c.said, unquote(s))
 }
+
+// unquote drops the quotes TEXT.DAT keeps for the text box: what was said is
+// data, not its print.
+func unquote(s string) string { return strings.TrimSpace(strings.Trim(s, `"`)) }
 
 // callMax bounds a call in wall time: a loop that stops ticking (the window
 // put away) must not hold the driver forever.
@@ -369,7 +358,7 @@ func (c *control) sight() ([]byte, error) {
 	c.canvas.Clear()
 	switch g.where() {
 	case types.WherePause:
-		return nil, errors.New("игра на паузе: открыто меню")
+		return nil, errors.New("пауза: открыто меню")
 	case types.WherePuzzle:
 		g.mg.Draw(c.canvas)
 		return encodePNG(c.canvas)
@@ -488,9 +477,9 @@ func (c *control) OpenMap(ctx context.Context) (types.Outcome, error) {
 			}
 			switch {
 			case g.where() == types.WhereMap:
-				return errors.New("карта уже передо мной")
+				return errors.New("карта острова уже открыта")
 			case !g.gs.UI["map"] || g.bar == nil:
-				return errors.New("карты острова у меня пока нет")
+				return errors.New("карты острова ещё нет")
 			}
 			if err := g.takeControl("Roby"); err != nil {
 				return err
@@ -541,7 +530,7 @@ func (c *control) PuzzleClick(
 		c.mark(&before),
 		once(func() error {
 			if g.mg == nil {
-				return errors.New("головоломки передо мной нет")
+				return errors.New("головоломки нет")
 			}
 			if x < 0 || x >= ViewW || y < 0 || y >= ViewH {
 				return fmt.Errorf("точка %d,%d вне экрана 640×480", x, y)
@@ -566,7 +555,7 @@ func (c *control) PuzzleGiveUp(ctx context.Context) (types.Outcome, error) {
 		c.mark(&before),
 		once(func() error {
 			if g.mg == nil {
-				return errors.New("головоломки передо мной нет")
+				return errors.New("головоломки нет")
 			}
 			g.finishMinigame(0)
 			out.Reacted = true
@@ -621,7 +610,7 @@ func (c *control) Load(
 				return err
 			}
 			if g.mode != modePlay {
-				return errors.New("сейчас загрузиться нельзя: " +
+				return errors.New("загрузка сейчас невозможна: " +
 					g.busyWith())
 			}
 			if !g.loadSlot(slot) {
@@ -690,17 +679,17 @@ func (g *Game) where() string {
 func (g *Game) busyWith() string {
 	switch {
 	case g.mode == modeOptions || g.mode == modeSave || g.mode == modeLoad:
-		return "игра на паузе"
+		return "пауза"
 	case g.mode != modePlay:
-		return "идёт заставка"
+		return "заставка"
 	case g.mg != nil:
 		return ""
 	case g.fadeCurve != nil || g.pending != nil:
-		return "смена места"
+		return "переход"
 	case g.act != nil || !g.gs.UI["mouse"]:
-		return "идёт сцена"
+		return "сцена"
 	case g.roby.walking():
-		return "я иду"
+		return "Роби идёт"
 	case len(g.fridPath) > 0:
 		return "Пятница идёт"
 	}
@@ -711,13 +700,13 @@ func (g *Game) busyWith() string {
 func (g *Game) canAct() error {
 	switch g.where() {
 	case types.WherePuzzle:
-		return errors.New("передо мной головоломка: puzzle_click или " +
+		return errors.New("сейчас головоломка: puzzle_click или " +
 			"puzzle_give_up")
 	case types.WherePause:
-		return errors.New("игра на паузе: открыто меню")
+		return errors.New("пауза: открыто меню")
 	}
 	if b := g.busyWith(); b != "" {
-		return errors.New("сейчас не выйдет: " + b + ". Надо подождать (wait)")
+		return errors.New("занято: " + b + " — wait")
 	}
 	return nil
 }
@@ -738,9 +727,9 @@ func (g *Game) takeControl(who string) error {
 	}
 	if !strings.EqualFold(g.gs.ActiveChar, who) {
 		if who == "Frid" {
-			return errors.New("сейчас Пятница не откликается")
+			return errors.New("управление Пятнице не передаётся")
 		}
-		return errors.New("управление ко мне не вернулось")
+		return errors.New("управление Роби не вернулось")
 	}
 	return nil
 }
@@ -757,11 +746,11 @@ func (g *Game) pickItem(name string) error {
 		}
 	}
 	if idx < 0 {
-		who := "у меня"
+		who := "у Роби"
 		if strings.EqualFold(g.gs.ActiveChar, "Frid") {
 			who = "у Пятницы"
 		}
-		return fmt.Errorf("%s нет «%s». С собой: %s", who, name,
+		return fmt.Errorf("%s нет «%s»; с собой: %s", who, name,
 			strings.Join(g.carryOf(g.gs.ActiveChar, true), ", "))
 	}
 	if g.bar == nil {
@@ -835,17 +824,17 @@ func (g *Game) aimAt(name string, leaving bool) (sighted, error) {
 	for _, s := range pool {
 		names = append(names, s.name)
 	}
-	what := "Вокруг"
+	what := "вокруг"
 	if leaving {
-		what = "Выходы"
+		what = "выходы"
 	}
 	if len(names) == 0 {
 		if leaving {
-			return sighted{}, errors.New("отсюда пока некуда идти")
+			return sighted{}, errors.New("выходов нет")
 		}
-		return sighted{}, fmt.Errorf("здесь нет «%s», вокруг пусто", name)
+		return sighted{}, fmt.Errorf("нет «%s»; вокруг пусто", name)
 	}
-	return sighted{}, fmt.Errorf("здесь нет «%s». %s: %s", name, what,
+	return sighted{}, fmt.Errorf("нет «%s»; %s: %s", name, what,
 		strings.Join(names, ", "))
 }
 
@@ -854,11 +843,11 @@ func (g *Game) aimAt(name string, leaving bool) (sighted, error) {
 func (g *Game) selfPoint() (sighted, error) {
 	cell, standing := g.actingCell()
 	if !standing {
-		return sighted{}, errors.New("сначала надо остановиться")
+		return sighted{}, errors.New("персонаж ещё идёт — wait")
 	}
 	if strings.EqualFold(g.gs.ActiveChar, "Frid") && g.fridHidden ||
 		!strings.EqualFold(g.gs.ActiveChar, "Frid") && g.charHidden {
-		return sighted{}, errors.New("меня сейчас не видно")
+		return sighted{}, errors.New("персонажа сейчас не видно")
 	}
 	x0, y0 := g.grid.Corner(cell[0], cell[1])
 	gw, gh := 1, 1
@@ -872,7 +861,7 @@ func (g *Game) selfPoint() (sighted, error) {
 			return sighted{name: "себя", at: p}, nil
 		}
 	}
-	return sighted{}, errors.New("к себе сейчас не подступиться")
+	return sighted{}, errors.New("к персонажу не подступиться")
 }
 
 // sighted is something on stage the hero can be sent to: the name he knows
@@ -898,9 +887,7 @@ const stockExitCaption = "Идти дальше?"
 
 // caption is an object's hover caption as a name: TEXT.DAT keeps the quotes
 // the text box shows.
-func (g *Game) caption(id int) string {
-	return strings.TrimSpace(strings.Trim(g.textLine(id), `"`))
-}
+func (g *Game) caption(id int) string { return unquote(g.textLine(id)) }
 
 // sights lists what the hero can see and be sent to, left to right: every
 // object on stage the player could find with the mouse — one with a caption,
@@ -1064,7 +1051,7 @@ func (g *Game) percept() types.Percept {
 	p := types.Percept{
 		Where:   g.where(),
 		Busy:    g.busyWith(),
-		Hearing: g.msg,
+		Hearing: unquote(g.msg),
 	}
 	if p.Where == types.WherePause || p.Where == types.WherePuzzle {
 		return p

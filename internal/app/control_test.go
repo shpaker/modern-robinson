@@ -110,8 +110,8 @@ func TestUseClicksAndHearsTheLine(t *testing.T) {
 	if !out.Reacted || !out.Ready {
 		t.Errorf("reacted = %v ready = %v", out.Reacted, out.Ready)
 	}
-	if len(out.Said) == 0 || !strings.Contains(out.Said[0], "укусил") {
-		t.Errorf("said = %q, want the crab's bite", out.Said)
+	if len(out.Said) == 0 || out.Said[0] != "Он меня чуть не укусил!!!" {
+		t.Errorf("said = %q, want the crab's bite, quotes off", out.Said)
 	}
 	if g.gs.UI["mouse"] != true || g.act != nil {
 		t.Error("the action must be over when the call returns")
@@ -155,7 +155,7 @@ func TestGoLeavesThroughTheExit(t *testing.T) {
 	// Only a way out takes a Go.
 	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
 		return g.ctl.Go(ctx, "Нора")
-	}); err == nil || !strings.Contains(err.Error(), "Выходы") {
+	}); err == nil || !strings.Contains(err.Error(), "выходы") {
 		t.Errorf("going into the burrow: %v", err)
 	}
 }
@@ -187,7 +187,7 @@ func TestBusyHeroIsToldToWait(t *testing.T) {
 	_, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
 		return g.ctl.Use(ctx, "Пальма", "")
 	})
-	if err == nil || !strings.Contains(err.Error(), "идёт сцена") {
+	if err == nil || !strings.Contains(err.Error(), "сцена") {
 		t.Fatalf("err = %v, want a refusal while the scene plays", err)
 	}
 	if g.act == nil {
@@ -389,20 +389,6 @@ func TestCrabCaughtInTheHatAndLetGo(t *testing.T) {
 	if !sameList(out.Look.Carry, []string{"Панама"}) || len(out.Said) == 0 {
 		t.Errorf("carry = %q said = %q, want the hat back", out.Look.Carry,
 			out.Said)
-	}
-}
-
-// The hero's voice is his own lines from the player's copy, quotes off.
-func TestVoiceIsTheHerosOwnLines(t *testing.T) {
-	g := heroGame(t, "SCENA0", nil)
-	v := g.ctl.Voice()
-	if len(v) != len(voiceLines) || v[0] != "Где я?" {
-		t.Fatalf("voice = %q", v)
-	}
-	for _, s := range v {
-		if strings.ContainsAny(s, `"`) {
-			t.Errorf("quoted line %q", s)
-		}
 	}
 }
 

@@ -111,8 +111,9 @@ type IGrid interface {
 
 // IControl is the hero played from outside the game: he looks around and
 // acts the way a player would, through the same clicks, and learns only what
-// the player sees. Each call blocks until the game has taken it in; an error
-// is a refusal worth telling the driver ("идёт сцена, подожди").
+// the player sees — as data; the words are the driver's own. Each call blocks
+// until the game has taken it in; an error is a refusal worth telling the
+// driver ("занято: сцена").
 type IControl interface {
 	// Look is the world at a glance.
 	Look(ctx context.Context) (types.Percept, error)
@@ -144,7 +145,4 @@ type IControl interface {
 	Save(ctx context.Context, slot int) error
 	// Load restores the run from a slot.
 	Load(ctx context.Context, slot int) (types.Outcome, error)
-	// Voice is how the hero talks: a few of his own lines, as the game has
-	// them, that give nothing of the quest away.
-	Voice() []string
 }
