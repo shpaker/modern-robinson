@@ -21,6 +21,8 @@ type fakeAudio struct {
 	vols   []float64 // its level and placement, shot by shot
 	pans   []float64
 	stops  int
+	sound  float64 // the effects and music levels last set
+	music  float64
 }
 
 func (a *fakeAudio) Play(key string, _ []byte, _ int) {
@@ -43,8 +45,8 @@ func (a *fakeAudio) PlayVoice(
 func (a *fakeAudio) PlayMusic(string, []byte) {}
 func (a *fakeAudio) StopMusic()               {}
 func (a *fakeAudio) StopEffects()             { a.stops++ }
-func (a *fakeAudio) SetVolume(float64)        {}
-func (a *fakeAudio) SetMusicVolume(float64)   {}
+func (a *fakeAudio) SetVolume(v float64)      { a.sound = v }
+func (a *fakeAudio) SetMusicVolume(v float64) { a.music = v }
 
 // silentRes answers every asset lookup with nothing, so a Game can run its
 // sound and ambient paths without the game files.
@@ -334,5 +336,18 @@ func TestLeavingScena0DirectEntryKeepsFridaySilent(t *testing.T) {
 		case "step_pp.wav", "at.wav", "at2.wav", "left.wav", "right.wav":
 			t.Errorf("Friday's %s sounded, want her absent: %v", k, fa.played)
 		}
+	}
+}
+
+// The levels config.yml sets reach the sounds from the start, not only once
+// a slider is touched: until then the voice played at the adapter's default.
+func TestConfigVolumesReachTheAudio(t *testing.T) {
+	t.Setenv("ROBINSON_SCENE", "SCENA0")
+	cfg := DefaultConfig()
+	cfg.Sound, cfg.Music = 0.25, 0.4
+	fa := &fakeAudio{}
+	newGame(repositories.NewResources(testutil.GameRoot(t)), cfg, fa)
+	if fa.sound != 0.25 || fa.music != 0.4 {
+		t.Errorf("sound = %v music = %v, want 0.25 and 0.4", fa.sound, fa.music)
 	}
 }
