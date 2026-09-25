@@ -70,6 +70,18 @@ var pipeWins = [2][8]int{
 	{2, 7, 1, 3, 4, 5, 6, 0},
 }
 
+// pipeNotes is each tube's note. The engine loads the notes by their place
+// in MINIGAME.WDT, where they lie in tube order after the dud, not by the
+// numbers in their names: tube 0 sounds PIPE02, tube 2 PIPE01. So the tubes
+// run up a scale and the first and the last are the same note.
+var pipeNotes = [8]string{
+	"pipe02.wav", "pipe04.wav", "pipe01.wav", "pipe03.wav",
+	"pipe05.wav", "pipe06.wav", "pipe07.wav", "pipe08.wav",
+}
+
+// pipeDud is what an empty mouth sounds.
+const pipeDud = "pipe00.wav"
+
 // New builds the organ. The Tubs variable is a bit mask: bit 2 grants
 // tubes 0-5, bit 1 tube 7, bit 0 tube 6 — the quest reaches 7 (all of them).
 func New(host minigame.Host, param int) minigame.Game {
@@ -110,10 +122,9 @@ func (p *pipeGame) tubeRect(i int) image.Rectangle {
 
 // note sounds mouth m with whatever tube sits in it (the dud when empty).
 func (p *pipeGame) note(m int) {
-	t := p.inMouth[m]
-	name := "pipe00.wav"
-	if t >= 0 {
-		name = "pipe0" + strconv.Itoa(t+1) + ".wav"
+	name := pipeDud
+	if t := p.inMouth[m]; t >= 0 {
+		name = pipeNotes[t]
 	}
 	p.host.PlaySound(name, 3)
 }
