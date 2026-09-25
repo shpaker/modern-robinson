@@ -59,14 +59,6 @@ func drive[T any](
 	}
 }
 
-func thingNames(things []types.Thing) []string {
-	out := make([]string, 0, len(things))
-	for _, t := range things {
-		out = append(out, t.Name)
-	}
-	return out
-}
-
 func sameList(a, b []string) bool {
 	return strings.Join(a, "|") == strings.Join(b, "|")
 }
@@ -118,8 +110,8 @@ func TestUseClicksAndHearsTheLine(t *testing.T) {
 	if !out.Reacted || !out.Ready {
 		t.Errorf("reacted = %v ready = %v", out.Reacted, out.Ready)
 	}
-	if len(out.Said) == 0 || !strings.Contains(out.Said[0], "укусил") {
-		t.Errorf("said = %q, want the crab's bite", out.Said)
+	if len(out.Said) == 0 || out.Said[0] != "Он меня чуть не укусил!!!" {
+		t.Errorf("said = %q, want the crab's bite, quotes off", out.Said)
 	}
 	if g.gs.UI["mouse"] != true || g.act != nil {
 		t.Error("the action must be over when the call returns")
@@ -153,13 +145,17 @@ func TestGoLeavesThroughTheExit(t *testing.T) {
 	if g.sceneName != "SCENA1" || !out.Ready {
 		t.Fatalf("scene = %s ready = %v", g.sceneName, out.Ready)
 	}
+	if ch := out.Changes; !ch.NewPlace || len(ch.Appeared) > 0 ||
+		len(ch.Gained) > 0 {
+		t.Errorf("changes = %+v, want just the new place", ch)
+	}
 	if len(out.Look.Around) == 0 {
 		t.Error("the new place shows nothing around")
 	}
 	// Only a way out takes a Go.
 	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
 		return g.ctl.Go(ctx, "Нора")
-	}); err == nil || !strings.Contains(err.Error(), "Выходы") {
+	}); err == nil || !strings.Contains(err.Error(), "выходы") {
 		t.Errorf("going into the burrow: %v", err)
 	}
 }
@@ -191,7 +187,7 @@ func TestBusyHeroIsToldToWait(t *testing.T) {
 	_, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
 		return g.ctl.Use(ctx, "Пальма", "")
 	})
-	if err == nil || !strings.Contains(err.Error(), "идёт сцена") {
+	if err == nil || !strings.Contains(err.Error(), "сцена") {
 		t.Fatalf("err = %v, want a refusal while the scene plays", err)
 	}
 	if g.act == nil {
@@ -373,6 +369,12 @@ func TestCrabCaughtInTheHatAndLetGo(t *testing.T) {
 	if !sameList(out.Look.Carry, []string{"Краб в шляпе"}) {
 		t.Errorf("carry = %q, want the crab in the hat", out.Look.Carry)
 	}
+	ch := out.Changes
+	if !sameList(ch.Gained, []string{"Краб в шляпе"}) ||
+		!sameList(ch.Lost, []string{"Панама"}) ||
+		!sameList(ch.Vanished, []string{"Краб"}) || ch.NewPlace {
+		t.Errorf("changes = %+v", ch)
+	}
 	for _, s := range thingNames(out.Look.Around) {
 		if s == "Краб" {
 			t.Error("the caught crab is still on the beach")
@@ -387,5 +389,58 @@ func TestCrabCaughtInTheHatAndLetGo(t *testing.T) {
 	if !sameList(out.Look.Carry, []string{"Панама"}) || len(out.Said) == 0 {
 		t.Errorf("carry = %q said = %q, want the hat back", out.Look.Carry,
 			out.Said)
+	}
+}
+
+// Changes are compared where the player can see them: the map hides the bar
+// and the stage, so opening it loses nothing and nobody; a puzzle shows
+// neither.
+func TestChangesSeeOnlyWhatIsInView(t *testing.T) {
+	beach := glance{scene: "SCENA0", p: types.Percept{
+		Where: types.WhereIsland, Hands: "Рука", EmptyHands: true,
+		Carry:  []string{"Панама", "Камни", "Камни"},
+		Around: []types.Thing{{Name: "Краб"}}, Friday: &types.Companion{},
+	}}
+	onMap := glance{scene: "MAPSCR", p: types.Percept{
+		Where: types.WhereMap, Hands: "Рука", EmptyHands: true,
+		Carry: []string{"Панама", "Камни", "Камни"},
+	}}
+	ch := changes(beach, onMap)
+	if !ch.NewPlace || ch.FridayLeft || len(ch.Lost) > 0 ||
+		len(ch.Vanished) > 0 {
+		t.Errorf("to the map: %+v", ch)
+	}
+	puzzle := glance{scene: "SCENA0", p: types.Percept{
+		Where: types.WherePuzzle,
+	}}
+	if ch := changes(beach, puzzle); len(ch.Lost) > 0 || ch.NewPlace {
+		t.Errorf("into a puzzle: %+v", ch)
+	}
+	fewer := beach
+	fewer.p.Carry = []string{"Панама", "Камни"}
+	fewer.p.Hands, fewer.p.EmptyHands = "Камни", false
+	if ch := changes(beach, fewer); len(ch.Lost) > 0 || len(ch.Gained) > 0 {
+		t.Errorf("taking a stone in hand is no change: %+v", ch)
+	}
+}
+
+// Tries that come to nothing count up until one lands; waits do not count.
+func TestMissesCountTriesInARow(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	c := g.ctl
+	before := g.glance()
+	miss := func(acted, reacted bool) int {
+		out := types.Outcome{Reacted: reacted}
+		_, _ = c.outcome(&out, &before, acted)()
+		return out.Changes.Misses
+	}
+	if miss(true, false) != 1 || miss(true, false) != 2 {
+		t.Fatal("two misses in a row")
+	}
+	if miss(false, false) != 2 {
+		t.Error("a wait is no try")
+	}
+	if miss(true, true) != 0 {
+		t.Error("a try that lands ends the streak")
 	}
 }
