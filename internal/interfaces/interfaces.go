@@ -2,7 +2,11 @@
 // runtime imports — only the Domain (types). Dependencies point inward.
 package interfaces
 
-import "github.com/shpaker/modern-robinson/internal/types"
+import (
+	"context"
+
+	"github.com/shpaker/modern-robinson/internal/types"
+)
 
 // IContainer is a parsed NL resource file (.DAN / .DAT / .MV).
 type IContainer interface {
@@ -103,4 +107,37 @@ type IGrid interface {
 	// PathStraight avoids diagonals, for ArrowGoing characters.
 	PathStraight(start, goal [2]int) [][2]int
 	Dims() (int, int)
+}
+
+// IControl is the hero played from outside the game: he looks around and
+// acts the way a player would, through the same clicks, and learns only what
+// the player sees. Each call blocks until the game has taken it in; an error
+// is a refusal worth telling the driver ("идёт сцена, подожди").
+type IControl interface {
+	// Look is the world at a glance.
+	Look(ctx context.Context) (types.Percept, error)
+	// Sight is a PNG of what is in view: the scene without the bar and the
+	// cursor, or a whole puzzle screen.
+	Sight(ctx context.Context) ([]byte, error)
+	// Use aims an item at a thing around, or at the hero himself ("себя");
+	// an empty item is whatever is in hand.
+	Use(ctx context.Context, target, item string) (types.Outcome, error)
+	// Go takes an exit, or a place on the island map.
+	Go(ctx context.Context, to string) (types.Outcome, error)
+	// OpenMap unfolds the island map.
+	OpenMap(ctx context.Context) (types.Outcome, error)
+	// AskFriday has Friday aim one of her items at a thing, or at herself;
+	// control comes back to the hero afterwards.
+	AskFriday(ctx context.Context, target, item string) (types.Outcome, error)
+	// Wait lets the game run: until the hero may act, or for the seconds
+	// given.
+	Wait(ctx context.Context, seconds float64) (types.Outcome, error)
+	// PuzzleClick clicks a puzzle screen (640x480) at x,y.
+	PuzzleClick(ctx context.Context, x, y int, right bool) (types.Outcome, error)
+	// PuzzleGiveUp leaves a puzzle unsolved, as Esc does.
+	PuzzleGiveUp(ctx context.Context) (types.Outcome, error)
+	// Save writes the run into a slot (0..11).
+	Save(ctx context.Context, slot int) error
+	// Load restores the run from a slot.
+	Load(ctx context.Context, slot int) (types.Outcome, error)
 }
