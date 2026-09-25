@@ -188,6 +188,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"некоторые выходы появляются", projectURL, "хорошего выживания",
 		"Сохраняйся регулярно", "слоты 10 и 11",
 		"анекдотом", "ничего не выдумывай",
+		"heard", "видит и слышит",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
@@ -299,6 +300,28 @@ func TestPuzzleRepliesCarryThePicture(t *testing.T) {
 	if !hasImage(call(t, cs, "puzzle_click",
 		map[string]any{"x": 1, "y": 2, "why": "пробую"})) {
 		t.Error("a puzzle click answers with the picture")
+	}
+}
+
+// What a puzzle sounded comes as data, in order, the way the game heard it;
+// an answer with nothing heard carries no such field at all.
+func TestPuzzleSoundsComeAsData(t *testing.T) {
+	puzzle := types.Percept{Where: types.WherePuzzle}
+	h := &hero{look: puzzle, out: types.Outcome{
+		Heard: []string{"взял", "встало"}, Reacted: true, Look: puzzle,
+	}}
+	cs := connect(t, h)
+	res := call(t, cs, "puzzle_click",
+		map[string]any{"x": 5, "y": 6, "why": "ставлю бревно"})
+	if o := decode[types.Outcome](t, res); strings.Join(o.Heard, "|") !=
+		"взял|встало" {
+		t.Errorf("heard = %q", o.Heard)
+	}
+	h.out = types.Outcome{Reacted: true, Look: puzzle}
+	res = call(t, cs, "puzzle_click",
+		map[string]any{"x": 5, "y": 6, "why": "ещё раз"})
+	if strings.Contains(text(res), `"heard"`) {
+		t.Errorf("nothing heard, yet: %s", text(res))
 	}
 }
 

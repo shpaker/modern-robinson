@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shpaker/modern-robinson/internal/minigame"
@@ -23,7 +25,7 @@ func (g *Game) startMinigame(args []string) {
 	}
 	g.mg = nil
 	if e, ok := catalog.Get(atoiArg(args[0])); ok {
-		g.mg = e.New(minigame.NewHost(g.res, g.audio), param)
+		g.mg = e.New(earHost{minigame.NewHost(g.res, g.audio), g}, param)
 	}
 	if g.mg == nil {
 		// Assets missing: let the quest through rather than dead-end it, and
@@ -34,6 +36,71 @@ func (g *Game) startMinigame(args []string) {
 			g.applyEvents(rest)
 		}
 	}
+}
+
+// earHost is the Host a minigame gets in the adventure: it plays every sound
+// as the plain one does, and lets a driver hear it (control.sounded). It
+// holds the game, not its control: a puzzle ROBINSON_MINIGAME opens starts
+// before a driver takes the hero.
+type earHost struct {
+	minigame.Host
+	g *Game
+}
+
+var _ minigame.Host = earHost{}
+
+func (h earHost) PlaySound(file string, ch int) {
+	h.Host.PlaySound(file, ch)
+	h.g.ctl.sounded(file)
+}
+
+// puzzleSounds is what the ear makes of each sound of the minigames, by file
+// in lower case: the driver gets the word, the file stays in the game. The
+// organ's notes are not here (soundLabel).
+var puzzleSounds = map[string]string{
+	// The hut.
+	"h_take.wav":  "взял",
+	"h_turn.wav":  "повернул",
+	"h_back.wav":  "вернул",
+	"h_good.wav":  "встало",
+	"h_error.wav": "не туда",
+	// The island chart.
+	"m_take.wav": "взял",
+	"m_turn.wav": "повернул",
+	"m_put.wav":  "положил",
+	"m_good.wav": "склеилось",
+	// The translator.
+	"r_take.wav":  "взял",
+	"r_put.wav":   "поставил",
+	"r_back.wav":  "вернул",
+	"r_all.wav":   "стёр",
+	"r_error.wav": "ошибка",
+	// The checkers.
+	"move.wav":     "ход",
+	"movelady.wav": "ход дамкой",
+	"eat.wav":      "съел",
+	"lady.wav":     "дамка",
+	// The balloon.
+	"stnbalon.wav": "посадка",
+	// A puzzle solved.
+	"final0.wav": "победа",
+	"final1.wav": "победа",
+	"final3.wav": "победа",
+	"final5.wav": "победа",
+}
+
+// soundLabel is the word for a sound a puzzle played: the table's, a note for
+// each of the organ's pipes, and a plain sound for anything else — never its
+// file.
+func soundLabel(file string) string {
+	f := strings.ToLower(file)
+	if w, ok := puzzleSounds[f]; ok {
+		return w
+	}
+	if strings.HasPrefix(f, "pipe") {
+		return "нота"
+	}
+	return "звук"
 }
 
 // updateMinigame runs the active minigame; true while it owns the frame.
