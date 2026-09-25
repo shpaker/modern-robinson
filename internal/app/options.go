@@ -49,6 +49,10 @@ const (
 	slotPitchX = 160
 	slotPitchY = 130
 	slotCount  = slotCols * slotRows
+
+	// slotDblClick is how soon a second press has to follow the first to count
+	// as a double click: the 300 ms ROBY.EXE measures with GetTickCount.
+	slotDblClick = 0.3
 )
 
 // slotRect is the on-screen rectangle of save slot i (0..11).
@@ -153,7 +157,7 @@ func fadePalette(pal types.Palette, fad []byte) types.Palette {
 
 // updateOptions runs the options/save/load screens; returns true while one of
 // them owns the frame.
-func (g *Game) updateOptions() bool {
+func (g *Game) updateOptions(dt float64) bool {
 	switch g.mode {
 	case modeOptions, modeSave, modeLoad:
 	default:
@@ -164,7 +168,7 @@ func (g *Game) updateOptions() bool {
 	case modeOptions:
 		g.updateOptionsMenu(m.x, m.y, m.clicked)
 	case modeSave, modeLoad:
-		g.updateSlotScreen(m)
+		g.updateSlotScreen(m, dt)
 	}
 	return true
 }
@@ -215,10 +219,11 @@ func (g *Game) updateOptionsMenu(mx, my int, click bool) {
 	}
 }
 
-// openSlotScreen raises the save or load screen with nothing hovered and no
-// button held over from whatever opened it.
+// openSlotScreen raises the save or load screen with nothing hovered, no
+// button held over from whatever opened it and no press to pair a double click
+// with.
 func (g *Game) openSlotScreen(mode int) {
-	g.mode, g.slotHover, g.btnDown = mode, -1, -1
+	g.mode, g.slotHover, g.btnDown, g.slotDblT = mode, -1, -1, 0
 }
 
 // setSlider maps a cursor x inside a track to 0..1 and applies the setting.
@@ -272,19 +277,27 @@ func slotButtons(mode int) [2]string {
 // updateSlotScreen handles the twelve save/load thumbnails and the two buttons.
 // A button acts on release over the button the press started on — the original
 // ships its pushed-in state as a bitmap, and it has to stay on screen for as
-// long as the player holds the mouse down.
-func (g *Game) updateSlotScreen(m mouseState) {
+// long as the player holds the mouse down. A double click on a slot does not
+// wait for the release: the second press saves or restores at once, as the
+// original's WM_LBUTTONDOWN handler does (0x406c95, 0x408590).
+func (g *Game) updateSlotScreen(m mouseState, dt float64) {
 	g.slotHover = -1
 	for i := 0; i < slotCount; i++ {
 		if pointIn(slotRect(i), m.x, m.y) {
 			g.slotHover = i
 		}
 	}
+	g.slotDblT -= dt
 	switch {
 	case m.clicked:
+		dbl := g.slotDblT > 0
+		g.slotDblT = slotDblClick
 		g.btnDown = slotButtonAt(m.x, m.y)
 		if g.slotHover >= 0 {
 			g.slotSel = g.slotHover
+			if dbl {
+				g.pressSlotButton(0) // the same save or restore the button runs
+			}
 		}
 	case m.released:
 		btn := g.btnDown

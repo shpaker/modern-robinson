@@ -20,8 +20,9 @@ func clickRow(g *Game, i int) {
 
 // pressSlot presses and releases the mouse at (x, y) on a slot screen.
 func pressSlot(g *Game, x, y int) {
-	g.updateSlotScreen(mouseState{x: x, y: y, clicked: true, pressed: true})
-	g.updateSlotScreen(mouseState{x: x, y: y, released: true})
+	down := mouseState{x: x, y: y, clicked: true, pressed: true}
+	g.updateSlotScreen(down, 1.0/60)
+	g.updateSlotScreen(mouseState{x: x, y: y, released: true}, 1.0/60)
 }
 
 // slotScreen is a save or load screen with nothing hovered or held.
@@ -150,14 +151,15 @@ func TestLoadSlotMarksTheRunStarted(t *testing.T) {
 func TestSlotButtonRunsOnRelease(t *testing.T) {
 	g := slotScreen(modeSave)
 	x, y := cancelButton.Min.X+4, cancelButton.Min.Y+4
-	g.updateSlotScreen(mouseState{x: x, y: y, clicked: true, pressed: true})
+	down := mouseState{x: x, y: y, clicked: true, pressed: true}
+	g.updateSlotScreen(down, 1.0/60)
 	if g.btnDown != 1 {
 		t.Fatalf("btnDown = %d, want the cancel button held (1)", g.btnDown)
 	}
 	if g.mode != modeSave {
 		t.Errorf("the press alone left the screen: mode = %d", g.mode)
 	}
-	g.updateSlotScreen(mouseState{x: x, y: y, released: true})
+	g.updateSlotScreen(mouseState{x: x, y: y, released: true}, 1.0/60)
 	if g.mode != modeOptions {
 		t.Errorf("release: mode = %d, want modeOptions", g.mode)
 	}
@@ -173,8 +175,8 @@ func TestSlotButtonCancelledBySlidingOff(t *testing.T) {
 	g.updateSlotScreen(mouseState{
 		x: cancelButton.Min.X + 4, y: cancelButton.Min.Y + 4,
 		clicked: true, pressed: true,
-	})
-	g.updateSlotScreen(mouseState{x: 4, y: 4, released: true})
+	}, 1.0/60)
+	g.updateSlotScreen(mouseState{x: 4, y: 4, released: true}, 1.0/60)
 	if g.mode != modeSave {
 		t.Errorf("mode = %d, want to stay on the save screen", g.mode)
 	}
@@ -361,23 +363,75 @@ func TestRestoreButtonLoadsTheSelectedSlot(t *testing.T) {
 	slot := slotRect(2)
 	g.updateSlotScreen(mouseState{
 		x: slot.Min.X + 4, y: slot.Min.Y + 4, clicked: true, pressed: true,
-	})
+	}, 1.0/60)
 	if g.slotSel != 2 {
 		t.Fatalf("slotSel = %d, want the clicked slot 2", g.slotSel)
 	}
 	g.updateSlotScreen(mouseState{
 		x: saveButton.Min.X + 4, y: saveButton.Min.Y + 4,
 		clicked: true, pressed: true,
-	})
+	}, 1.0/60)
 	if g.mode != modeLoad {
 		t.Fatalf("the press alone restored: mode = %d", g.mode)
 	}
 	g.updateSlotScreen(mouseState{
 		x: saveButton.Min.X + 4, y: saveButton.Min.Y + 4, released: true,
-	})
+	}, 1.0/60)
 	if g.mode != modePlay || !g.started {
 		t.Errorf("release: mode = %d started = %v, want a restored run",
 			g.mode, g.started)
+	}
+}
+
+// A double click on a slot restores it on the second press, without waiting
+// for a release. The original's window is 300 ms: a slower second press only
+// picks the slot again.
+func TestDoubleClickRestoresTheSlot(t *testing.T) {
+	dir := t.TempDir()
+	sav := filepath.Join(dir, "robinson02.sav")
+	if err := os.WriteFile(sav, []byte(`{"scene":"SCENA0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := slotScreen(modeLoad)
+	g.res = slotDir{root: dir}
+	g.parser = repositories.SceneParser{}
+	g.gs = types.NewGameState()
+	g.cycleCache = map[string]*walkCycle{}
+
+	slot := slotRect(2)
+	x, y := slot.Min.X+4, slot.Min.Y+4
+	down := mouseState{x: x, y: y, clicked: true, pressed: true}
+	up := mouseState{x: x, y: y, released: true}
+	g.updateSlotScreen(down, 1.0/60)
+	g.updateSlotScreen(up, 0.1)
+	g.updateSlotScreen(down, 0.3) // 0.4 s after the first press
+	if g.mode != modeLoad {
+		t.Fatalf("a slow second press restored: mode = %d", g.mode)
+	}
+	if g.slotSel != 2 {
+		t.Fatalf("slotSel = %d, want the clicked slot 2", g.slotSel)
+	}
+	g.updateSlotScreen(up, 0.1)
+	g.updateSlotScreen(down, 0.1) // 0.2 s after the previous press
+	if g.mode != modePlay || !g.started {
+		t.Errorf("double click: mode = %d started = %v, want a restored run",
+			g.mode, g.started)
+	}
+}
+
+// On the load screen a double click on an empty slot has nothing to restore
+// and leaves the screen up, as the original checks the slot first.
+func TestDoubleClickOnAnEmptySlotStays(t *testing.T) {
+	g := slotScreen(modeLoad)
+	g.res = slotDir{root: t.TempDir()}
+	slot := slotRect(5)
+	pressSlot(g, slot.Min.X+4, slot.Min.Y+4)
+	pressSlot(g, slot.Min.X+4, slot.Min.Y+4)
+	if g.mode != modeLoad {
+		t.Errorf("mode = %d, want to stay on the load screen", g.mode)
+	}
+	if g.slotSel != 5 {
+		t.Errorf("slotSel = %d, want the clicked slot 5", g.slotSel)
 	}
 }
 

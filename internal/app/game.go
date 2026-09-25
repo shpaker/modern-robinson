@@ -126,6 +126,7 @@ type Game struct {
 	btnDown    int // slot-screen button held: 0 left, 1 right, -1 none
 	slotHover  int
 	slotSel    int
+	slotDblT   float64 // what is left of the double-click window, seconds
 	slotCache  map[int]*ebiten.Image
 	slotEmpty  [2]*ebiten.Image // TEMP, the empty slot: as painted, shaded
 	slotDim    float64          // unchosen thumbnails' brightness; 0 = not yet
@@ -620,7 +621,7 @@ func (g *Game) Update() error {
 	if g.updateScreens(dt) {
 		return nil // boot screens own the frame
 	}
-	if g.updateOptions() {
+	if g.updateOptions(dt) {
 		return nil // options / save / load own the frame
 	}
 	if g.updateLoading(dt) {
