@@ -25,6 +25,7 @@ type pipeGame struct {
 	mouth   [8]int  // tube -> mouth, -1 = at home
 	inMouth [8]int  // mouth -> tube, -1 = empty
 	held    int     // tube being carried, -1 = none
+	takes   int     // tubes taken up so far
 
 	playing bool // the phrase is sounding
 	noteIdx int
@@ -49,6 +50,8 @@ var pipeSeat = [8][2]int{
 
 // pipeListen is the "play the melody" hotspot on the drummer.
 var pipeListen = image.Rect(201, 199, 264, 302)
+
+var _ minigame.Carrier = (*pipeGame)(nil)
 
 // The phrase: which mouth sounds on each beat, and for how many 150 ms ticks.
 var (
@@ -129,6 +132,9 @@ func (p *pipeGame) solvedNow() bool {
 	return false
 }
 
+// Takes counts the tubes taken up.
+func (p *pipeGame) Takes() int { return p.takes }
+
 // update carries tubes and drives the phrase playback.
 func (p *pipeGame) Update(dt float64) (bool, int) {
 	if p.done {
@@ -173,6 +179,7 @@ func (p *pipeGame) Update(dt float64) (bool, int) {
 				p.mouth[i] = -1
 			}
 			p.held = i
+			p.takes++
 			return false, 0
 		}
 		return false, 0

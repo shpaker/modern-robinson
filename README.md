@@ -129,6 +129,7 @@ claude mcp add robinson -- /путь/robinson -mcp /путь/к/папке
 | `ask_friday` | попросить Пятницу применить её вещь |
 | `wait` | переждать сцену |
 | `puzzle_click`, `puzzle_give_up` | головоломки — кликом по картинке; в ответ картинка и что прозвучало |
+| `puzzle_move` | перенести деталь одним ходом: взять, повернуть у цели и положить |
 | `save`, `load` | служебное сохранение, слоты 0–11 |
 
 ## Какие файлы игры нужны
@@ -169,6 +170,7 @@ just install-tools  # один раз: gofumpt, golines, golangci-lint
 just check          # fmt + lint + test
 just demo           # headless-прогон -> PNG-кадры
 just scene PALACE   # кадр конкретной сцены
+just puzzle-move 1  # puzzle_move на хижине (0 — на карте), без окна
 ```
 
 `ROBINSON_TRACE` печатает в stderr каждую выполненную команду скриптов:

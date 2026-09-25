@@ -86,6 +86,15 @@ func (h *hero) PuzzleClick(
 	return h.out, h.err
 }
 
+func (h *hero) PuzzleMove(
+	_ context.Context,
+	fromX, fromY, toX, toY, turns int,
+) (types.Outcome, error) {
+	h.note("move", strconv.Itoa(fromX), strconv.Itoa(fromY),
+		strconv.Itoa(toX), strconv.Itoa(toY), strconv.Itoa(turns))
+	return h.out, h.err
+}
+
 func (h *hero) PuzzleGiveUp(context.Context) (types.Outcome, error) {
 	h.note("give up")
 	return h.out, h.err
@@ -162,7 +171,7 @@ var beach = types.Percept{
 	Map:        true,
 }
 
-// The server offers the hero's ten tools and the part to play: who he is,
+// The server offers the hero's eleven tools and the part to play: who he is,
 // what the data means, and no words to say.
 func TestServerOffersTheHerosTools(t *testing.T) {
 	cs := connect(t, &hero{look: beach})
@@ -177,7 +186,8 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"ask_friday", "go", "load", "look", "map",
-		"puzzle_click", "puzzle_give_up", "save", "use", "wait",
+		"puzzle_click", "puzzle_give_up", "puzzle_move", "save", "use",
+		"wait",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("tools = %v, want %v", got, want)
@@ -188,7 +198,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"некоторые выходы появляются", projectURL, "хорошего выживания",
 		"Сохраняйся регулярно", "слоты 10 и 11",
 		"анекдотом", "ничего не выдумывай",
-		"heard", "видит и слышит",
+		"heard", "видит и слышит", "puzzle_move", "серединой",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
@@ -261,6 +271,13 @@ func TestActionsReachTheHero(t *testing.T) {
 		"puzzle_click",
 		map[string]any{"x": 10, "y": 20, "button": "right", "why": "повернуть"},
 	)
+	call(t, cs, "puzzle_move", map[string]any{
+		"from_x": 400, "from_y": 100, "to_x": 150, "to_y": 60, "turns": 2,
+		"why": "бревно на место",
+	})
+	call(t, cs, "puzzle_move", map[string]any{
+		"from_x": 1, "from_y": 2, "to_x": 3, "to_y": 4, "why": "без поворота",
+	})
 	call(t, cs, "puzzle_give_up", map[string]any{"why": "не выходит"})
 	if s := decode[savedOut](t,
 		call(t, cs, "save", map[string]any{"slot": 3})); s.Slot != 3 {
@@ -269,7 +286,8 @@ func TestActionsReachTheHero(t *testing.T) {
 	call(t, cs, "load", map[string]any{"slot": 3})
 	want := []string{
 		"use Краб ", "use себя Панама", "go налево", "map",
-		"friday Пальма ", "wait", "click 10 20 right", "give up", "save 3",
+		"friday Пальма ", "wait", "click 10 20 right",
+		"move 400 100 150 60 2", "move 1 2 3 4 0", "give up", "save 3",
 		"load 3",
 	}
 	if strings.Join(h.calls, "|") != strings.Join(want, "|") {
@@ -300,6 +318,11 @@ func TestPuzzleRepliesCarryThePicture(t *testing.T) {
 	if !hasImage(call(t, cs, "puzzle_click",
 		map[string]any{"x": 1, "y": 2, "why": "пробую"})) {
 		t.Error("a puzzle click answers with the picture")
+	}
+	if !hasImage(call(t, cs, "puzzle_move", map[string]any{
+		"from_x": 1, "from_y": 2, "to_x": 3, "to_y": 4, "why": "переношу",
+	})) {
+		t.Error("a puzzle move answers with the picture")
 	}
 }
 
@@ -336,7 +359,7 @@ func TestActionsNeedAReason(t *testing.T) {
 	}
 	acts := map[string]bool{
 		"use": true, "go": true, "map": true, "ask_friday": true,
-		"puzzle_click": true, "puzzle_give_up": true,
+		"puzzle_click": true, "puzzle_move": true, "puzzle_give_up": true,
 	}
 	for _, tool := range res.Tools {
 		raw, _ := json.Marshal(tool.InputSchema)
@@ -364,5 +387,42 @@ func TestActionsNeedAReason(t *testing.T) {
 	if !strings.Contains(connect(t, h).InitializeResult().Instructions,
 		thinkFirst) {
 		t.Error("the instructions lack the thought before every action")
+	}
+}
+
+// A move names both of its ends and may leave the turns out; what it heard
+// comes back as it came, in order.
+func TestPuzzleMoveNamesBothEnds(t *testing.T) {
+	puzzle := types.Percept{Where: types.WherePuzzle}
+	h := &hero{look: puzzle, out: types.Outcome{
+		Heard:   []string{"взял", "повернул", "не туда"},
+		Reacted: true, Look: puzzle,
+	}}
+	cs := connect(t, h)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "puzzle_move" {
+			continue
+		}
+		raw, _ := json.Marshal(tool.InputSchema)
+		var schema struct {
+			Required []string `json:"required"`
+		}
+		_ = json.Unmarshal(raw, &schema)
+		sort.Strings(schema.Required)
+		if got := strings.Join(schema.Required, ","); got !=
+			"from_x,from_y,to_x,to_y,why" {
+			t.Errorf("puzzle_move requires %s", got)
+		}
+	}
+	o := decode[types.Outcome](t, call(t, cs, "puzzle_move", map[string]any{
+		"from_x": 400, "from_y": 100, "to_x": 150, "to_y": 60, "turns": 1,
+		"why": "бревно на место",
+	}))
+	if strings.Join(o.Heard, "|") != "взял|повернул|не туда" {
+		t.Errorf("heard = %q", o.Heard)
 	}
 }

@@ -30,6 +30,14 @@ type Game interface {
 	Draw(screen *ebiten.Image)
 }
 
+// Carrier is a game played by carrying pieces: a click takes one up, and it
+// stays in hand until another click puts it down. Takes counts the clicks
+// that have taken one since the game began — up to follow the pointer, or
+// picked out on the board — each of which the player sees happen.
+type Carrier interface {
+	Takes() int
+}
+
 // Host is what a minigame gets from the adventure: its pack's assets and the
 // sound channels.
 type Host interface {
