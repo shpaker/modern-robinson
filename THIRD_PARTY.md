@@ -23,7 +23,11 @@
 | github.com/jfreymuth/pulse | MIT |
 | github.com/pierrec/lz4/v4 | BSD-3-Clause |
 | github.com/srwiley/rasterx | BSD-3-Clause |
-| golang.org/x/{image,sync,sys,text} | BSD-3-Clause |
+| github.com/modelcontextprotocol/go-sdk | Apache-2.0 / MIT |
+| github.com/google/jsonschema-go | MIT |
+| github.com/segmentio/{encoding,asm} | MIT |
+| github.com/yosida95/uritemplate/v3 | BSD-3-Clause |
+| golang.org/x/{image,oauth2,sync,sys,text,time} | BSD-3-Clause |
 | Go runtime и стандартная библиотека | BSD-3-Clause |
 
 Тексты лицензий: Apache-2.0 — <https://www.apache.org/licenses/LICENSE-2.0>,

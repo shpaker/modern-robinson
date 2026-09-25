@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -147,6 +148,9 @@ type Game struct {
 	fadeOut   bool
 	fadeT     float64
 	fadeTo    *types.Exit
+
+	ctl     *control    // a driver playing the hero from outside (control.go)
+	stopped atomic.Bool // Stop: end the loop on the next tick
 }
 
 // NewGame builds a game over the given resources with the default settings.
@@ -156,10 +160,17 @@ func NewGame(res interfaces.IResources) *Game {
 
 // NewGameWith builds a game over the given resources and the player's settings.
 func NewGameWith(res interfaces.IResources, cfg Config) *Game {
+	return newGame(res, cfg, adapters.NewAudio(SampleRate))
+}
+
+// newGame builds a game that plays through the given audio. The process has
+// room for one audio context, so tests that build several games bring their
+// own.
+func newGame(res interfaces.IResources, cfg Config, audio interfaces.IAudio) *Game {
 	g := &Game{
 		res:        res,
 		parser:     repositories.SceneParser{},
-		audio:      adapters.NewAudio(SampleRate),
+		audio:      audio,
 		cycleCache: map[string]*walkCycle{},
 		curDir:     6,
 		robyZ:      charZCoord,
@@ -613,7 +624,8 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.mg == nil {
 		g.toggleOptions() // inside a minigame Esc is the game's own quit
 	}
-	if g.quit {
+	g.ctl.tick() // a driver's call, if one is running (control.go)
+	if g.quit || g.stopped.Load() {
 		return ebiten.Termination
 	}
 	g.updateCursor() // every tick, whoever owns the frame, as OnIdle does

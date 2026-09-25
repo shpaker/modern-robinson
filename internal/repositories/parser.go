@@ -378,6 +378,11 @@ func (SceneParser) ParseBar(text string) *types.Bar {
 		case "items":
 			if a := argSplit(st.args); len(a) > 0 {
 				b.Items = append(b.Items, a[0])
+				label := ""
+				if len(a) > 1 {
+					label = decodeCP1251([]byte(a[1])) // hat,"Панама"
+				}
+				b.ItemLabels = append(b.ItemLabels, label)
 			}
 		}
 	}

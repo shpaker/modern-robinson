@@ -11,8 +11,8 @@ import (
 	"image"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
+	"github.com/shpaker/modern-robinson/internal/adapters/mouse"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 )
 
@@ -129,6 +129,11 @@ func In(r image.Rectangle, x, y int) bool {
 }
 
 // Clicked reports a fresh left-button press.
-func Clicked() bool {
-	return inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-}
+func Clicked() bool { return mouse.JustPressed(ebiten.MouseButtonLeft) }
+
+// RightClicked reports a fresh right-button press.
+func RightClicked() bool { return mouse.JustPressed(ebiten.MouseButtonRight) }
+
+// Cursor is where the pointer is: the real mouse, or the one a driver holds
+// while it plays the game by picture (adapters/mouse).
+func Cursor() (int, int) { return mouse.Position() }

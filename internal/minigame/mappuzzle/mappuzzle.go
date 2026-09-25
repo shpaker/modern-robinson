@@ -307,7 +307,7 @@ func (m *mapGame) Update(dt float64) (bool, int) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
-	mx, my := ebiten.CursorPosition()
+	mx, my := minigame.Cursor()
 	if m.held {
 		// The whole group follows the cursor via its anchor piece.
 		anchor := -1
@@ -324,7 +324,7 @@ func (m *mapGame) Update(dt float64) (bool, int) {
 				m.pos[i][1] += dy
 			}
 		}
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) &&
+		if minigame.RightClicked() &&
 			m.selCount() == 1 {
 			// Only a lone fragment can be turned.
 			m.rot[anchor] = (m.rot[anchor] + 1) & 3
