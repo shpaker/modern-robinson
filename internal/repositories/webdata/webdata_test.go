@@ -49,7 +49,7 @@ func TestFetchDownloadsEveryFile(t *testing.T) {
 	}
 	base := site(t, want)
 
-	m, err := LoadManifest(base)
+	m, err := LoadManifest(base, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestFetchReportsProgressToCompletion(t *testing.T) {
 		"a": []byte(strings.Repeat("x", 1000)),
 		"b": []byte(strings.Repeat("y", 2000)),
 	})
-	m, err := LoadManifest(base)
+	m, err := LoadManifest(base, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestFetchReportsProgressToCompletion(t *testing.T) {
 // with a hole in the resource set would surface much later as a blank scene.
 func TestFetchFailsOnMissingFile(t *testing.T) {
 	base := site(t, map[string][]byte{"present": []byte("ok")})
-	m, err := LoadManifest(base)
+	m, err := LoadManifest(base, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestFetchFailsOnMissingFile(t *testing.T) {
 
 func TestFetchFailsOnShortFile(t *testing.T) {
 	base := site(t, map[string][]byte{"a": []byte("short")})
-	m, err := LoadManifest(base)
+	m, err := LoadManifest(base, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,8 +126,35 @@ func TestLoadManifestRejectsEmpty(t *testing.T) {
 		}))
 	defer srv.Close()
 
-	if _, err := LoadManifest(srv.URL); err == nil {
+	if _, err := LoadManifest(srv.URL, ""); err == nil {
 		t.Fatal("an empty manifest must be an error, not an empty game")
+	}
+}
+
+// Each engine build asks for the manifest at its own address, so a copy a
+// browser kept under another address — once the site served it as immutable —
+// never stands in for the current one. Without a build it is the bare file.
+func TestLoadManifestNamesTheBuild(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			got = append(got, r.URL.RequestURI())
+			_, _ = w.Write([]byte(
+				`{"version":"1","files":[{"path":"A.DAT","size":1}]}`))
+		}))
+	defer srv.Close()
+
+	for _, build := range []string{"dev-2026-09-25T10:15", ""} {
+		if _, err := LoadManifest(srv.URL+"/v1/", build); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{
+		"/v1/manifest.json?build=dev-2026-09-25T10%3A15",
+		"/v1/manifest.json",
+	}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("requests = %q, want %q", got, want)
 	}
 }
 
