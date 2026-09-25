@@ -304,8 +304,12 @@ func TestPuzzleClickAndGiveUp(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !mouse.Held() {
-		t.Error("the pointer must stay where the driver left it")
+	for range 120 { // a carried piece waits for the next call at the point
+		_ = g.Update()
+	}
+	if x, y := mouse.Position(); !mouse.Held() || x != 320 || y != 240 {
+		t.Errorf("pointer held = %v at %d,%d, want it kept at 320,240",
+			mouse.Held(), x, y)
 	}
 	g.gs.SetVar("DebugResult", 7)
 	if _, err := drive(t, g, g.ctl.PuzzleGiveUp); err != nil {

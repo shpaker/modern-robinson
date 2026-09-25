@@ -75,10 +75,8 @@ type control struct {
 
 	said []string // lines shown since the running call began
 
-	// hold is the puzzle pointer the driver holds; realAt is where the real
-	// mouse stood when it took over, so moving it hands the pointer back.
-	hold   *heldPointer
-	realAt image.Point
+	// hold is the puzzle pointer the driver holds until a real press.
+	hold *heldPointer
 
 	canvas *ebiten.Image // where Sight renders
 
@@ -630,24 +628,20 @@ func checkSlot(slot int) error {
 }
 
 // holdPointer drives the puzzle pointer from this tick on.
-func (c *control) holdPointer(p heldPointer) {
-	if c.hold == nil {
-		x, y := ebiten.CursorPosition()
-		c.realAt = image.Pt(x, y)
-	}
-	c.hold = &p
-}
+func (c *control) holdPointer(p heldPointer) { c.hold = &p }
 
 // drivePointer feeds the held pointer to the minigames every tick. The real
-// mouse takes over as soon as it moves or presses, and a finished puzzle lets
-// go on its own.
+// mouse takes over with a press, not a move: a hand resting on it while the
+// driver plays used to snatch the pointer between two calls, and the piece
+// being carried went after the real cursor, off the window. A finished puzzle
+// lets go on its own.
 func (c *control) drivePointer() {
 	if c.hold == nil {
 		return
 	}
-	x, y := ebiten.CursorPosition()
-	if c.g.mg == nil || image.Pt(x, y) != c.realAt ||
-		ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if c.g.mg == nil ||
+		ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) ||
+		ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
 		c.hold = nil
 		mouse.Release()
 		return
