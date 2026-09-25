@@ -151,7 +151,7 @@ func (h *houseGame) Update(dt float64) (bool, int) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 		return true, 0
 	}
-	mx, my := ebiten.CursorPosition()
+	mx, my := minigame.Cursor()
 	// A dropped piece falls to its resting height.
 	if h.fallPc >= 0 {
 		h.pos[h.fallPc][1] += 20
@@ -172,7 +172,7 @@ func (h *houseGame) Update(dt float64) (bool, int) {
 	}
 	if h.held >= 0 {
 		h.pos[h.held] = [2]int{mx, my}
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
+		if minigame.RightClicked() {
 			// Rotate about the cursor.
 			h.rot[h.held] = (h.rot[h.held] + 1) & 3
 			h.host.PlaySound("h_turn.wav", 1)
