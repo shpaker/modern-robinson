@@ -309,3 +309,52 @@ func TestParseBarItemLabels(t *testing.T) {
 		}
 	}
 }
+
+// ROBY.CHR as shipped: CRLF lines, tab-aligned list rows and GridToClose on
+// the last line, with no line end after it.
+func TestParseChar(t *testing.T) {
+	chr := "CharacterName\t\t\tRoby;\r\nMoveType\t\t\tNumPadGoing;\r\n" +
+		"FonScript\t\t\thead;\r\n\t\t\t\tok0;\r\n\t\t\t\troby1;\r\n" +
+		"LookBox\t\t\t\t-10,-10,50,50;\r\n" +
+		"Items\t\t\t\thand;\r\n\t\t\t\that;\r\n" +
+		"GridToClose\t\t\t0,0,2; 0,1,8;"
+	c := SceneParser{}.ParseChar(chr)
+	if c.Name != "Roby" || c.MoveType != "NumPadGoing" {
+		t.Errorf("name %q, move %q", c.Name, c.MoveType)
+	}
+	if c.Idle != [3]string{"head", "ok0", "roby1"} {
+		t.Errorf("idle = %v", c.Idle)
+	}
+	if c.LookBox != [4]int{-10, -10, 50, 50} {
+		t.Errorf("LookBox = %v, want [-10 -10 50 50]", c.LookBox)
+	}
+	if !reflect.DeepEqual(c.Items, []string{"hand", "hat"}) {
+		t.Errorf("items = %v", c.Items)
+	}
+}
+
+// Both characters' .CHR carry the same LookBox around different standing
+// movies.
+func TestParseCharOnGameData(t *testing.T) {
+	res := NewResources(testutil.GameRoot(t))
+	for name, head := range map[string]string{
+		"ROBY": "head",
+		"FRID": "frhead",
+	} {
+		c := res.SceneContainer(name)
+		if c == nil {
+			t.Fatalf("%s container not found", name)
+		}
+		d, err := c.ExtractName(name + ".CHR")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ch := SceneParser{}.ParseChar(string(d))
+		if ch.LookBox != [4]int{-10, -10, 50, 50} {
+			t.Errorf("%s LookBox = %v", name, ch.LookBox)
+		}
+		if ch.Idle[0] != head {
+			t.Errorf("%s standing slot = %q, want %q", name, ch.Idle[0], head)
+		}
+	}
+}
