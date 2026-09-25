@@ -68,7 +68,7 @@ func TestLeavingScena0ReachesGoScene(t *testing.T) {
 		g.moving = g.roby.walking()
 		g.updateFridWalk(dt)
 		g.updateAction(dt)
-		g.updateIdle(dt)
+		g.updateIdle(dt, dt)
 		if g.pending != nil {
 			return
 		}

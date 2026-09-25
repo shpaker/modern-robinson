@@ -23,8 +23,8 @@ const (
 )
 
 // updateAmbient fires the scene's next ambient shot when its timer runs out.
-// The timer runs on game time, like every other timer here, so the speed slider
-// thins the ambience along with the rest of the simulation.
+// The timer runs on game time, so the speed slider thins the ambience along
+// with the rest of the simulation.
 func (g *Game) updateAmbient(dt float64) {
 	if len(g.ambientPool) == 0 {
 		return
