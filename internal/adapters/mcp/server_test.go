@@ -186,6 +186,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	for _, want := range []string{
 		"Ты — Роби", "Готовых фраз нет", "changes", "misses",
 		"некоторые выходы появляются", projectURL, "хорошего выживания",
+		"Сохраняйся регулярно", "слоты 10 и 11",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
