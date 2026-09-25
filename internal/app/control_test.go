@@ -207,17 +207,53 @@ func TestPickItemScrollsTheBar(t *testing.T) {
 	g := heroGame(t, "SCENA0", map[string]string{
 		"ROBINSON_ITEMS": "coco,axe,rope,stick,fish",
 	})
-	if err := g.pickItem("Рыба"); err != nil {
-		t.Fatal(err)
-	}
+	scrolls, took := pickOnBar(t, g, "Рыба")
 	if g.gs.Active != "fish" || g.invScroll == 0 {
 		t.Errorf("active = %q scroll = %d", g.gs.Active, g.invScroll)
 	}
-	if err := g.pickItem("рука"); err != nil || g.gs.Active != "hand" ||
-		g.invScroll != 0 {
-		t.Errorf("back to the hand: %v active = %q scroll = %d",
-			err, g.gs.Active, g.invScroll)
+	// The bar is seen at every step: one arrow click per beat, the scroll
+	// never jumping, and the fish lit only after the last of them.
+	for i, s := range scrolls {
+		if s != i+1 {
+			t.Fatalf("scroll went %v, want one slot per click", scrolls)
+		}
 	}
+	if clicks := len(scrolls) + 1; took < clicks*barBeat {
+		t.Errorf("%d clicks in %d ticks, want a beat of %d after each",
+			clicks, took, barBeat)
+	}
+	if _, took := pickOnBar(t, g, "рука"); g.gs.Active != "hand" ||
+		g.invScroll != 0 || took == 0 {
+		t.Errorf("back to the hand: active = %q scroll = %d in %d ticks",
+			g.gs.Active, g.invScroll, took)
+	}
+	if _, took := pickOnBar(t, g, "рука"); took != 0 {
+		t.Errorf("the hand already held took %d ticks", took)
+	}
+}
+
+// pickOnBar runs the driver's item step tick by tick, as the game loop does,
+// and returns the bar's scroll after each change of it and the ticks spent.
+func pickOnBar(t *testing.T, g *Game, name string) ([]int, int) {
+	t.Helper()
+	step := g.ctl.pickItem(name)
+	var scrolls []int
+	last := g.invScroll
+	for n := 0; n < waitMax; n++ {
+		done, err := step()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g.invScroll != last {
+			last = g.invScroll
+			scrolls = append(scrolls, last)
+		}
+		if done {
+			return scrolls, n
+		}
+	}
+	t.Fatal("the item never came to hand")
+	return nil, 0
 }
 
 // Friday acts through the portrait, and the portrait hands control back.

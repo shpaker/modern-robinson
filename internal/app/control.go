@@ -418,14 +418,11 @@ func (c *control) act(
 		}),
 		once(func() error {
 			var err error
-			if aim, err = g.aimAt(target, leaving); err != nil {
-				return err
-			}
-			if item != "" {
-				if err := g.pickItem(item); err != nil {
-					return err
-				}
-			}
+			aim, err = g.aimAt(target, leaving)
+			return err
+		}),
+		c.pickItem(item),
+		once(func() error {
 			g.aimCamera(aim.at.X)
 			return nil
 		}),
@@ -736,9 +733,35 @@ func (g *Game) takeControl(who string) error {
 	return nil
 }
 
-// pickItem puts an item in the acting character's hand through the bar: its
-// arrows until the slot is in view, then the slot.
-func (g *Game) pickItem(name string) error {
+// barBeat is how long the bar holds after each click the driver makes on it,
+// so the scroll and the lit slot are there to be seen before the hero moves.
+const barBeat = 15
+
+// pickItem is a step that takes an item the player's way, one click on the
+// bar per beat: the arrows until its slot is in view, then the slot. An item
+// already in hand takes no click, and no name leaves the hand as it is.
+func (c *control) pickItem(name string) func() (bool, error) {
+	beat := 0
+	return func() (bool, error) {
+		if name == "" {
+			return true, nil
+		}
+		if beat > 0 {
+			beat--
+			return false, nil
+		}
+		done, err := c.g.barClick(name)
+		if done || err != nil {
+			return true, err
+		}
+		beat = barBeat
+		return false, nil
+	}
+}
+
+// barClick makes the next click on the bar that brings an item into the
+// acting character's hand, and reports done once it is there.
+func (g *Game) barClick(name string) (bool, error) {
 	inv := g.gs.Inventory()
 	idx := -1
 	for i, it := range inv {
@@ -752,33 +775,34 @@ func (g *Game) pickItem(name string) error {
 		if strings.EqualFold(g.gs.ActiveChar, "Frid") {
 			who = "у Пятницы"
 		}
-		return fmt.Errorf("%s нет «%s»; с собой: %s", who, name,
+		return false, fmt.Errorf("%s нет «%s»; с собой: %s", who, name,
 			strings.Join(g.carryOf(g.gs.ActiveChar, true), ", "))
 	}
+	if strings.EqualFold(g.gs.Active, inv[idx]) {
+		return true, nil
+	}
 	if g.bar == nil {
-		return errors.New("панели нет")
+		return false, errors.New("панели нет")
 	}
-	for tries := 0; tries < len(inv); tries++ {
-		before := g.invScroll
-		switch {
-		case idx < g.invScroll:
-			g.click(boxCentre(g.bar.LeftArrow))
-		case idx >= g.invScroll+g.bar.ItemsShown:
-			g.click(boxCentre(g.bar.RightArrow))
-		}
-		if g.invScroll == before {
-			break
-		}
-	}
-	iw, ih := g.itemCell()
-	slot := idx - g.invScroll
-	if slot >= 0 && slot < g.bar.ItemsShown {
+	before := g.invScroll
+	switch {
+	case idx < g.invScroll:
+		g.click(boxCentre(g.bar.LeftArrow))
+	case idx >= g.invScroll+g.bar.ItemsShown:
+		g.click(boxCentre(g.bar.RightArrow))
+	default:
+		iw, ih := g.itemCell()
+		slot := idx - g.invScroll
 		g.click(g.bar.Inventory[0]+slot*iw+iw/2, g.bar.Inventory[1]+ih/2)
+		if !strings.EqualFold(g.gs.Active, inv[idx]) {
+			return false, errors.New("панель сейчас не даёт взять вещь")
+		}
+		return false, nil
 	}
-	if !strings.EqualFold(g.gs.Active, inv[idx]) {
-		return errors.New("панель сейчас не даёт взять вещь")
+	if g.invScroll == before {
+		return false, errors.New("панель сейчас не листается")
 	}
-	return nil
+	return false, nil
 }
 
 // boxCentre is the middle of an x0,y0,x1,y1 box.
