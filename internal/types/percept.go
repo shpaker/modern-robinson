@@ -7,12 +7,14 @@ package types
 // cells or internal keys.
 type Percept struct {
 	Where string `json:"where"` // one of the Where* values
-	// Busy is what is under way ("идёт сцена", "ты идёшь"); "" when the hero
+	// Busy is what is under way ("идёт сцена", "я иду"); "" when the hero
 	// is free to act.
 	Busy   string  `json:"busy,omitempty"`
 	Around []Thing `json:"around,omitempty"` // what can be acted on
 	Exits  []Thing `json:"exits,omitempty"`  // the ways out of the place
 	Hands  string  `json:"hands,omitempty"`  // the item in hand; "Рука" is none
+	// EmptyHands says the hand holds nothing: Hands is the bare hand.
+	EmptyHands bool `json:"empty_hands,omitempty"`
 	// Carry is the rest of what the hero has on him, in bar order.
 	Carry  []string   `json:"carry,omitempty"`
 	Friday *Companion `json:"friday,omitempty"` // Friday, while she is with him
@@ -60,6 +62,25 @@ type Outcome struct {
 	// has no answer for, and the player sees just that.
 	Reacted bool `json:"reacted"`
 	// Ready is false when the action is still playing out when the wait ends.
-	Ready bool    `json:"ready"`
-	Look  Percept `json:"look"`
+	Ready   bool    `json:"ready"`
+	Changes Changes `json:"changes"`
+	Look    Percept `json:"look"`
+}
+
+// Changes is what the player would notice has changed since an action
+// began: a new place, things gained and lost, things that came into sight or
+// went, ways out that opened or closed, Friday joining or leaving, the map.
+// Misses counts the actions in a row that came to nothing.
+type Changes struct {
+	NewPlace   bool     `json:"new_place,omitempty"`
+	Gained     []string `json:"gained,omitempty"`
+	Lost       []string `json:"lost,omitempty"`
+	Appeared   []string `json:"appeared,omitempty"`
+	Vanished   []string `json:"vanished,omitempty"`
+	Opened     []string `json:"opened,omitempty"`
+	Closed     []string `json:"closed,omitempty"`
+	FridayCame bool     `json:"friday_came,omitempty"`
+	FridayLeft bool     `json:"friday_left,omitempty"`
+	MapGained  bool     `json:"map_gained,omitempty"`
+	Misses     int      `json:"misses,omitempty"`
 }

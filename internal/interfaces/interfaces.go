@@ -133,11 +133,18 @@ type IControl interface {
 	// given.
 	Wait(ctx context.Context, seconds float64) (types.Outcome, error)
 	// PuzzleClick clicks a puzzle screen (640x480) at x,y.
-	PuzzleClick(ctx context.Context, x, y int, right bool) (types.Outcome, error)
+	PuzzleClick(
+		ctx context.Context,
+		x, y int,
+		right bool,
+	) (types.Outcome, error)
 	// PuzzleGiveUp leaves a puzzle unsolved, as Esc does.
 	PuzzleGiveUp(ctx context.Context) (types.Outcome, error)
 	// Save writes the run into a slot (0..11).
 	Save(ctx context.Context, slot int) error
 	// Load restores the run from a slot.
 	Load(ctx context.Context, slot int) (types.Outcome, error)
+	// Voice is how the hero talks: a few of his own lines, as the game has
+	// them, that give nothing of the quest away.
+	Voice() []string
 }

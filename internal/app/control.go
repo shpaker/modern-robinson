@@ -81,7 +81,28 @@ type control struct {
 	realAt image.Point
 
 	canvas *ebiten.Image // where Sight renders
+
+	voice  []string // the hero's own lines (Voice)
+	misses int      // actions in a row that came to nothing
 }
+
+// voiceLines are TEXT.DAT lines that show how the hero talks and give nothing
+// of the quest away: his first words on the beach (ROBAWAKE: "Где я?",
+// "Куда я попал?", "Бедный Роби!"), and the grumbles and refusals he answers
+// idle clicks and the paths with.
+var voiceLines = []int{17, 18, 413, 284, 267, 588, 567, 566, 54, 565, 569}
+
+// Voice is how the hero talks, in his own lines from the player's copy.
+func (c *control) Voice() []string { return c.voice }
+
+// glance is the world as it stood before an action, to tell what changed.
+type glance struct {
+	p     types.Percept
+	scene string
+}
+
+// look takes a glance.
+func (g *Game) glance() glance { return glance{g.percept(), g.sceneName} }
 
 // heldPointer is the pointer a puzzle click drives.
 type heldPointer struct {
@@ -97,6 +118,11 @@ var _ interfaces.IControl = (*control)(nil)
 func (g *Game) Control() interfaces.IControl {
 	if g.ctl == nil {
 		g.ctl = &control{g: g, jobs: make(chan *job, 1)}
+		for _, id := range voiceLines {
+			if line := g.caption(id); line != "" {
+				g.ctl.voice = append(g.ctl.voice, line)
+			}
+		}
 		if !g.started {
 			g.restart()
 		}
@@ -211,14 +237,105 @@ func (c *control) untilFree() func() (bool, error) {
 	}
 }
 
-// outcome fills in what came of an action once it has played out.
-func (c *control) outcome(out *types.Outcome) func() (bool, error) {
+// mark is a step that takes the glance an outcome is measured against.
+func (c *control) mark(before *glance) func() (bool, error) {
+	return once(func() error {
+		*before = c.g.glance()
+		return nil
+	})
+}
+
+// outcome fills in what came of an action once it has played out: what was
+// said, whether the hero may act, what he sees now and what changed since
+// before. acted counts the call among the hero's own tries (a wait is not),
+// and a try that came to nothing adds to the misses in a row.
+func (c *control) outcome(
+	out *types.Outcome, before *glance, acted bool,
+) func() (bool, error) {
 	return once(func() error {
 		out.Said = append([]string(nil), c.said...)
 		out.Ready = c.g.busyWith() == ""
-		out.Look = c.g.percept()
+		after := c.g.glance()
+		out.Look = after.p
+		out.Changes = changes(*before, after)
+		if acted {
+			if out.Reacted || len(out.Said) > 0 {
+				c.misses = 0
+			} else {
+				c.misses++
+			}
+		}
+		out.Changes.Misses = c.misses
 		return nil
 	})
+}
+
+// changes is what the player would notice between two glances. Things around
+// and the ways out are compared within one place only, and the rest only
+// where the bar and the stage are in view.
+func changes(before, after glance) types.Changes {
+	var ch types.Changes
+	b, a := before.p, after.p
+	seen := func(p types.Percept) bool {
+		return p.Where == types.WhereIsland || p.Where == types.WhereMap
+	}
+	if !seen(b) || !seen(a) {
+		return ch
+	}
+	ch.NewPlace = before.scene != after.scene
+	ch.Gained, ch.Lost = diffNames(things(b), things(a))
+	if !ch.NewPlace {
+		ch.Appeared, ch.Vanished = diffNames(
+			thingNames(b.Around), thingNames(a.Around))
+		ch.Opened, ch.Closed = diffNames(
+			thingNames(b.Exits), thingNames(a.Exits))
+	}
+	if b.Where == types.WhereIsland && a.Where == types.WhereIsland {
+		ch.FridayCame = b.Friday == nil && a.Friday != nil
+		ch.FridayLeft = b.Friday != nil && a.Friday == nil && !ch.NewPlace
+		ch.MapGained = !b.Map && a.Map
+	}
+	return ch
+}
+
+// things is everything the hero has on him: the item in hand and the rest.
+func things(p types.Percept) []string {
+	out := append([]string(nil), p.Carry...)
+	if p.Hands != "" && !p.EmptyHands {
+		out = append(out, p.Hands)
+	}
+	return out
+}
+
+func thingNames(list []types.Thing) []string {
+	out := make([]string, 0, len(list))
+	for _, t := range list {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+// diffNames is what the second list has that the first has not, and the
+// other way round, counting repeats.
+func diffNames(before, after []string) (added, gone []string) {
+	count := map[string]int{}
+	for _, s := range before {
+		count[s]++
+	}
+	for _, s := range after {
+		if count[s] > 0 {
+			count[s]--
+		} else {
+			added = append(added, s)
+		}
+	}
+	for _, s := range before {
+		if count[s] > 0 {
+			count[s]--
+			gone = append(gone, s)
+		}
+	}
+	return added, gone
 }
 
 // Look is the world at a glance.
@@ -298,7 +415,9 @@ func (c *control) act(
 	g := c.g
 	var out types.Outcome
 	var aim sighted
+	var before glance
 	steps := []func() (bool, error){
+		c.mark(&before),
 		once(func() error {
 			if err := g.canAct(); err != nil {
 				return err
@@ -338,7 +457,7 @@ func (c *control) act(
 			}
 			return nil
 		}),
-		c.outcome(&out),
+		c.outcome(&out, &before, true),
 	}
 	err := c.run(ctx, steps...)
 	if err != nil && who == "Frid" {
@@ -360,16 +479,18 @@ func (c *control) untilCamera() func() (bool, error) {
 func (c *control) OpenMap(ctx context.Context) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
+	var before glance
 	err := c.run(ctx,
+		c.mark(&before),
 		once(func() error {
 			if err := g.canAct(); err != nil {
 				return err
 			}
 			switch {
 			case g.where() == types.WhereMap:
-				return errors.New("карта уже перед тобой")
+				return errors.New("карта уже передо мной")
 			case !g.gs.UI["map"] || g.bar == nil:
-				return errors.New("карты острова у тебя пока нет")
+				return errors.New("карты острова у меня пока нет")
 			}
 			if err := g.takeControl("Roby"); err != nil {
 				return err
@@ -379,7 +500,7 @@ func (c *control) OpenMap(ctx context.Context) (types.Outcome, error) {
 			return nil
 		}),
 		c.untilFree(),
-		c.outcome(&out),
+		c.outcome(&out, &before, true),
 	)
 	return out, err
 }
@@ -389,12 +510,13 @@ func (c *control) Wait(
 	ctx context.Context, seconds float64,
 ) (types.Outcome, error) {
 	var out types.Outcome
+	var before glance
 	wait := c.untilFree()
 	if seconds > 0 {
 		n := int(seconds * 60)
 		wait = ticks(min(n, waitMax), nil)
 	}
-	err := c.run(ctx, wait, c.outcome(&out))
+	err := c.run(ctx, c.mark(&before), wait, c.outcome(&out, &before, false))
 	return out, err
 }
 
@@ -405,6 +527,7 @@ func (c *control) PuzzleClick(
 ) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
+	var before glance
 	press := func(down bool) func() (bool, error) {
 		return once(func() error {
 			if g.mg == nil {
@@ -415,9 +538,10 @@ func (c *control) PuzzleClick(
 		})
 	}
 	err := c.run(ctx,
+		c.mark(&before),
 		once(func() error {
 			if g.mg == nil {
-				return errors.New("головоломки перед тобой нет")
+				return errors.New("головоломки передо мной нет")
 			}
 			if x < 0 || x >= ViewW || y < 0 || y >= ViewH {
 				return fmt.Errorf("точка %d,%d вне экрана 640×480", x, y)
@@ -428,7 +552,7 @@ func (c *control) PuzzleClick(
 		press(false), ticks(1, nil), press(true), ticks(1, nil), press(false),
 		ticks(puzzleTick, func() bool { return g.mg == nil }),
 		c.afterPuzzle(),
-		c.outcome(&out),
+		c.outcome(&out, &before, false),
 	)
 	return out, err
 }
@@ -437,17 +561,19 @@ func (c *control) PuzzleClick(
 func (c *control) PuzzleGiveUp(ctx context.Context) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
+	var before glance
 	err := c.run(ctx,
+		c.mark(&before),
 		once(func() error {
 			if g.mg == nil {
-				return errors.New("головоломки перед тобой нет")
+				return errors.New("головоломки передо мной нет")
 			}
 			g.finishMinigame(0)
 			out.Reacted = true
 			return nil
 		}),
 		c.untilFree(),
-		c.outcome(&out),
+		c.outcome(&out, &before, false),
 	)
 	return out, err
 }
@@ -487,7 +613,9 @@ func (c *control) Load(
 ) (types.Outcome, error) {
 	g := c.g
 	var out types.Outcome
+	var before glance
 	err := c.run(ctx,
+		c.mark(&before),
 		once(func() error {
 			if err := checkSlot(slot); err != nil {
 				return err
@@ -503,7 +631,7 @@ func (c *control) Load(
 			return nil
 		}),
 		c.untilFree(),
-		c.outcome(&out),
+		c.outcome(&out, &before, false),
 	)
 	return out, err
 }
@@ -572,7 +700,7 @@ func (g *Game) busyWith() string {
 	case g.act != nil || !g.gs.UI["mouse"]:
 		return "идёт сцена"
 	case g.roby.walking():
-		return "ты идёшь"
+		return "я иду"
 	case len(g.fridPath) > 0:
 		return "Пятница идёт"
 	}
@@ -583,13 +711,13 @@ func (g *Game) busyWith() string {
 func (g *Game) canAct() error {
 	switch g.where() {
 	case types.WherePuzzle:
-		return errors.New("перед тобой головоломка: puzzle_click или " +
+		return errors.New("передо мной головоломка: puzzle_click или " +
 			"puzzle_give_up")
 	case types.WherePause:
 		return errors.New("игра на паузе: открыто меню")
 	}
 	if b := g.busyWith(); b != "" {
-		return errors.New("сейчас не выйдет: " + b + ". Подожди (wait)")
+		return errors.New("сейчас не выйдет: " + b + ". Надо подождать (wait)")
 	}
 	return nil
 }
@@ -612,7 +740,7 @@ func (g *Game) takeControl(who string) error {
 		if who == "Frid" {
 			return errors.New("сейчас Пятница не откликается")
 		}
-		return errors.New("управление не вернулось к тебе")
+		return errors.New("управление ко мне не вернулось")
 	}
 	return nil
 }
@@ -629,9 +757,9 @@ func (g *Game) pickItem(name string) error {
 		}
 	}
 	if idx < 0 {
-		who := "У тебя"
+		who := "у меня"
 		if strings.EqualFold(g.gs.ActiveChar, "Frid") {
-			who = "У Пятницы"
+			who = "у Пятницы"
 		}
 		return fmt.Errorf("%s нет «%s». С собой: %s", who, name,
 			strings.Join(g.carryOf(g.gs.ActiveChar, true), ", "))
@@ -712,7 +840,10 @@ func (g *Game) aimAt(name string, leaving bool) (sighted, error) {
 		what = "Выходы"
 	}
 	if len(names) == 0 {
-		return sighted{}, fmt.Errorf("здесь нет «%s», и идти некуда", name)
+		if leaving {
+			return sighted{}, errors.New("отсюда пока некуда идти")
+		}
+		return sighted{}, fmt.Errorf("здесь нет «%s», вокруг пусто", name)
 	}
 	return sighted{}, fmt.Errorf("здесь нет «%s». %s: %s", name, what,
 		strings.Join(names, ", "))
@@ -727,7 +858,7 @@ func (g *Game) selfPoint() (sighted, error) {
 	}
 	if strings.EqualFold(g.gs.ActiveChar, "Frid") && g.fridHidden ||
 		!strings.EqualFold(g.gs.ActiveChar, "Frid") && g.charHidden {
-		return sighted{}, errors.New("тебя сейчас не видно")
+		return sighted{}, errors.New("меня сейчас не видно")
 	}
 	x0, y0 := g.grid.Corner(cell[0], cell[1])
 	gw, gh := 1, 1
@@ -949,6 +1080,7 @@ func (g *Game) percept() types.Percept {
 	fridActs := strings.EqualFold(g.gs.ActiveChar, "Frid")
 	if !fridActs {
 		p.Hands = g.itemLabel(g.gs.Active)
+		p.EmptyHands = isHand(g.gs.Active)
 	}
 	p.Carry = g.carryOf("Roby", false)
 	if g.fridWithHero() && p.Where != types.WhereMap {

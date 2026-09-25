@@ -100,6 +100,8 @@ func (h *hero) Load(_ context.Context, slot int) (types.Outcome, error) {
 	return h.out, h.err
 }
 
+func (h *hero) Voice() []string { return []string{"Где я?", "Бедный Роби!"} }
+
 // connect serves the hero to an in-memory client.
 func connect(t *testing.T, h *hero) *sdk.ClientSession {
 	t.Helper()
@@ -154,10 +156,11 @@ var beach = types.Percept{
 		{Name: "Пальма", Side: types.SideNear},
 		{Name: "Краб", Side: types.SideRight},
 	},
-	Exits: []types.Thing{{Name: "налево", Side: types.SideLeft}},
-	Hands: "Рука",
-	Carry: []string{"Панама"},
-	Map:   true,
+	Exits:      []types.Thing{{Name: "налево", Side: types.SideLeft}},
+	Hands:      "Рука",
+	EmptyHands: true,
+	Carry:      []string{"Панама"},
+	Map:        true,
 }
 
 // The server offers the hero's ten tools and the part to play.
@@ -180,8 +183,13 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		t.Errorf("tools = %v, want %v", got, want)
 	}
 	init := cs.InitializeResult()
-	if !strings.Contains(init.Instructions, "от лица Робинзона") {
-		t.Error("the instructions must cast the client as Robinson")
+	for _, want := range []string{
+		"Ты — Роби", "от первого лица", "«Где я?», «Бедный Роби!»",
+		"некоторые выходы появляются",
+	} {
+		if !strings.Contains(init.Instructions, want) {
+			t.Errorf("the instructions lack %q", want)
+		}
 	}
 	if init.ServerInfo.WebsiteURL != projectURL {
 		t.Errorf("website = %q", init.ServerInfo.WebsiteURL)
@@ -208,9 +216,9 @@ func TestLookTellsWhatIsAround(t *testing.T) {
 	res := call(t, cs, "look", nil)
 	s := text(res)
 	for _, want := range []string{
-		"Ты на острове.", "Вокруг: Пальма (рядом), Краб (справа).",
-		"Выходы: налево (слева).", "В руках: Рука.", "С собой: Панама.",
-		"(map)",
+		"Я на острове.", "Вокруг меня: Пальма (рядом), Краб (справа).",
+		"Отсюда можно уйти: налево (слева).", "Руки свободны.",
+		"С собой: Панама.", "(map)",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("look lacks %q:\n%s", want, s)
@@ -268,11 +276,40 @@ func TestOutcomeSaysWhenNothingHappened(t *testing.T) {
 	cs := connect(t, &hero{out: types.Outcome{Look: beach}})
 	s := text(call(t, cs, "use", map[string]any{"target": "Пальма"}))
 	if !strings.Contains(s, "Ничего не произошло.") ||
-		!strings.Contains(s, "подожди (wait)") {
+		!strings.Contains(s, "подождать (wait)") {
 		t.Errorf("reply:\n%s", s)
 	}
 	if s := text(call(t, cs, "wait", nil)); strings.Contains(s, "Ничего") {
 		t.Errorf("a wait reported failure:\n%s", s)
+	}
+}
+
+// What changed is told as plain facts, for the client to feel something
+// about; a miss counts only from the second in a row.
+func TestOutcomeTellsWhatChanged(t *testing.T) {
+	cs := connect(t, &hero{out: types.Outcome{
+		Reacted: true, Ready: true, Look: beach,
+		Changes: types.Changes{
+			Gained: []string{"Краб в шляпе"}, Lost: []string{"Панама"},
+			Vanished: []string{"Краб"}, Opened: []string{"направо"},
+			Misses: 1,
+		},
+	}})
+	s := text(call(t, cs, "use", map[string]any{"target": "Краб"}))
+	for _, want := range []string{
+		"Изменилось:\n— теперь у меня: Краб в шляпе\n— больше нет: Панама",
+		"— пропало из виду: Краб", "— открылся путь: направо",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("reply lacks %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "подряд") {
+		t.Errorf("a single miss is no streak:\n%s", s)
+	}
+	if got := narrateChanges(types.Changes{Misses: 3}); !strings.Contains(
+		got, "3-й раз подряд") {
+		t.Errorf("misses: %q", got)
 	}
 }
 

@@ -1,13 +1,15 @@
 package mcp
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/shpaker/modern-robinson/internal/types"
 )
 
-// narrate puts what the hero sees into a few plain sentences: the reply the
-// client reads, in the second person.
+// narrate puts what the hero sees into a few plain sentences, the way he
+// would take it in: the reply the client reads, in the first person, so that
+// it speaks as him in turn.
 func narrate(p types.Percept) string {
 	var b strings.Builder
 	line := func(s string) {
@@ -18,41 +20,45 @@ func narrate(p types.Percept) string {
 	}
 	switch p.Where {
 	case types.WherePause:
-		line("Игра на паузе: открыто меню. Подожди, пока его закроют.")
+		line("Игра на паузе: открыто меню. Жду, пока его закроют.")
 		return strings.TrimSpace(b.String())
 	case types.WherePuzzle:
-		line("Перед тобой головоломка — она на картинке. Кликай по ней: " +
+		line("Передо мной головоломка — она на картинке. Решаю её кликами: " +
 			"puzzle_click (экран 640×480); бросить — puzzle_give_up.")
 		return strings.TrimSpace(b.String())
 	case types.WhereScene:
-		line("Идёт заставка — подожди (wait).")
+		line("Идёт заставка — надо подождать (wait).")
 		return strings.TrimSpace(b.String())
 	case types.WhereMap:
-		line("Перед тобой карта острова.")
+		line("Передо мной карта острова.")
 	default:
-		line("Ты на острове.")
+		line("Я на острове.")
 	}
 	if p.Busy != "" {
 		line("Сейчас " + p.Busy + ".")
 	}
-	around := "Вокруг"
 	if p.Where == types.WhereMap {
-		around = "Места"
+		line(listOf("Места", p.Around))
+	} else {
+		line(listOf("Вокруг меня", p.Around))
 	}
-	line(listOf(around, p.Around))
-	line(listOf("Выходы", p.Exits))
-	if p.Hands != "" {
+	line(listOf("Отсюда можно уйти", p.Exits))
+	switch {
+	case p.EmptyHands:
+		line("Руки свободны.")
+	case p.Hands != "":
 		line("В руках: " + p.Hands + ".")
 	}
-	if len(p.Carry) > 0 {
+	switch {
+	case len(p.Carry) > 0:
 		line("С собой: " + strings.Join(p.Carry, ", ") + ".")
-	} else if p.Hands != "" {
+	case p.Hands != "":
 		line("Больше с собой ничего.")
 	}
 	if f := p.Friday; f != nil {
-		s := "Пятница рядом"
+		s := "Пятница рядом со мной"
 		if f.Side != "" && f.Side != types.SideNear {
-			s = "Пятница " + f.Side
+			s = "Пятница " + f.Side + " от меня"
 		}
 		if f.Hands != "" {
 			s += ", у неё в руках: " + f.Hands
@@ -63,16 +69,16 @@ func narrate(p types.Percept) string {
 		line(s + ".")
 	}
 	if p.Map {
-		line("Карту острова можно развернуть (map).")
+		line("Могу развернуть карту острова (map).")
 	}
 	if p.Hearing != "" {
-		line("На экране: " + p.Hearing)
+		line("Звучит: " + p.Hearing)
 	}
 	return strings.TrimSpace(b.String())
 }
 
-// listOf is a heading and the things under it with their sides: "Вокруг:
-// Пальма (слева), Краб (рядом)."
+// listOf is a heading and the things under it with their sides: "Вокруг
+// меня: Пальма (слева), Краб (рядом)."
 func listOf(head string, things []types.Thing) string {
 	if len(things) == 0 {
 		return ""
@@ -88,8 +94,45 @@ func listOf(head string, things []types.Thing) string {
 	return head + ": " + strings.Join(parts, ", ") + "."
 }
 
-// narrateOutcome tells what came of an action, then what the hero sees now.
-// A wait is no action: it has nothing to fail at.
+// narrateChanges tells what the hero notices has changed: the facts, for
+// the client to feel something about.
+func narrateChanges(ch types.Changes) string {
+	var out []string
+	add := func(head string, names []string) {
+		if len(names) > 0 {
+			out = append(out, head+": "+strings.Join(names, ", "))
+		}
+	}
+	if ch.NewPlace {
+		out = append(out, "я в новом месте")
+	}
+	add("теперь у меня", ch.Gained)
+	add("больше нет", ch.Lost)
+	add("появилось", ch.Appeared)
+	add("пропало из виду", ch.Vanished)
+	add("открылся путь", ch.Opened)
+	add("закрылся путь", ch.Closed)
+	if ch.FridayCame {
+		out = append(out, "Пятница теперь со мной")
+	}
+	if ch.FridayLeft {
+		out = append(out, "Пятницы рядом больше нет")
+	}
+	if ch.MapGained {
+		out = append(out, "теперь у меня есть карта острова")
+	}
+	if ch.Misses >= 2 {
+		out = append(out, "ничего не выходит уже "+
+			strconv.Itoa(ch.Misses)+"-й раз подряд")
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return "Изменилось:\n— " + strings.Join(out, "\n— ")
+}
+
+// narrateOutcome tells what came of an action, what changed, then what the
+// hero sees now. A wait is no action: it has nothing to fail at.
 func narrateOutcome(o types.Outcome, acted bool) string {
 	var b strings.Builder
 	if len(o.Said) > 0 {
@@ -101,7 +144,10 @@ func narrateOutcome(o types.Outcome, acted bool) string {
 		b.WriteString("Ничего не произошло.\n")
 	}
 	if !o.Ready {
-		b.WriteString("Всё ещё идёт — подожди (wait).\n")
+		b.WriteString("Всё ещё идёт — надо подождать (wait).\n")
+	}
+	if s := narrateChanges(o.Changes); s != "" {
+		b.WriteString(s + "\n")
 	}
 	look := o.Look
 	if n := len(o.Said); n > 0 && look.Hearing == o.Said[n-1] {
