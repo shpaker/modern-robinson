@@ -73,7 +73,7 @@ func main() {
 	}
 
 	ui.status("Читаю список ресурсов…")
-	m, err := webdata.LoadManifest(base)
+	m, err := webdata.LoadManifest(base, app.Version)
 	if err != nil {
 		ui.fail(err)
 		return
