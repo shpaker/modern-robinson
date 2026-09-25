@@ -42,7 +42,10 @@ var chessBoard = image.Rect(364, 71, 621, 328)
 // chessExit is the floppy button, at the same spot as in the jigsaw puzzles.
 var chessExit = image.Rect(565, 406, 633, 472)
 
-var _ minigame.Carrier = (*chessGame)(nil)
+var (
+	_ minigame.Carrier   = (*chessGame)(nil)
+	_ minigame.Performer = (*chessGame)(nil)
+)
 
 // New sets up the board for a fresh game.
 func New(host minigame.Host, _ int) minigame.Game {
@@ -191,6 +194,10 @@ func (c *chessGame) apply(m cmove) bool {
 // Takes counts the men picked out, each framed on the board — the one
 // already framed too, when it is clicked again.
 func (c *chessGame) Takes() int { return c.takes }
+
+// Busy reports the sailor over his reply, the board about to be laid out
+// again after a loss, or the game won and about to close.
+func (c *chessGame) Busy() bool { return c.aiWait > 0 || c.lost > 0 || c.won }
 
 // update runs the player's clicks and the opponent's replies.
 func (c *chessGame) Update(dt float64) (bool, int) {

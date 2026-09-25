@@ -38,6 +38,14 @@ type Carrier interface {
 	Takes() int
 }
 
+// Performer is a game that plays something out by itself after a move — a
+// phrase, a falling piece, the opponent's reply, the win before the game
+// closes — and needs no input meanwhile. Busy reports one under way; a game
+// waiting for its player, however long, is not busy.
+type Performer interface {
+	Busy() bool
+}
+
 // Host is what a minigame gets from the adventure: its pack's assets and the
 // sound channels.
 type Host interface {

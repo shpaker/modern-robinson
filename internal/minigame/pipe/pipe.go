@@ -51,7 +51,10 @@ var pipeSeat = [8][2]int{
 // pipeListen is the "play the melody" hotspot on the drummer.
 var pipeListen = image.Rect(201, 199, 264, 302)
 
-var _ minigame.Carrier = (*pipeGame)(nil)
+var (
+	_ minigame.Carrier   = (*pipeGame)(nil)
+	_ minigame.Performer = (*pipeGame)(nil)
+)
 
 // The phrase: which mouth sounds on each beat, and for how many 150 ms ticks.
 var (
@@ -134,6 +137,9 @@ func (p *pipeGame) solvedNow() bool {
 
 // Takes counts the tubes taken up.
 func (p *pipeGame) Takes() int { return p.takes }
+
+// Busy reports the phrase sounding, or the organ solved and about to close.
+func (p *pipeGame) Busy() bool { return p.playing || p.done }
 
 // update carries tubes and drives the phrase playback.
 func (p *pipeGame) Update(dt float64) (bool, int) {

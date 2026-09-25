@@ -57,7 +57,10 @@ var (
 	cryptExitBtn  = image.Rect(550, 406, 633, 465)
 )
 
-var _ minigame.Carrier = (*cryptGame)(nil)
+var (
+	_ minigame.Carrier   = (*cryptGame)(nil)
+	_ minigame.Performer = (*cryptGame)(nil)
+)
 
 // New loads CRYPT.DAT, scrambles the alphabet and typesets the text. The
 // alphabet comes from the text itself, so param (Find6, its size) is not read.
@@ -145,6 +148,9 @@ func (c *cryptGame) stripX() int {
 
 // Takes counts the letters taken from the strip.
 func (c *cryptGame) Takes() int { return c.takes }
+
+// Busy reports the message read and the game about to close.
+func (c *cryptGame) Busy() bool { return c.solved }
 
 // update implements the engine's click logic.
 func (c *cryptGame) Update(dt float64) (bool, int) {

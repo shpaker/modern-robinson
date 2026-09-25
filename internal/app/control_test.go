@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -471,10 +472,7 @@ func TestPuzzleMoveClicksLikeThePlayer(t *testing.T) {
 		}
 	}
 	pad.presses, pad.offers = nil, true
-	pad.grab = func() {
-		g.ctl.hold = nil // what a real press does (drivePointer)
-		mouse.Release()
-	}
+	pad.grab = func() { g.ctl.drivePointer(true, false) } // a real press
 	if _, err := move(t, g, from, to, 3); err != nil {
 		t.Fatal(err)
 	}
@@ -596,6 +594,269 @@ func TestPuzzleMoveTakesAtItsFrom(t *testing.T) {
 	if err != nil || !sameList(out.Heard, []string{"ход", "ход"}) {
 		t.Errorf("from the man: heard = %q (%v), want his move and the "+
 			"answer", out.Heard, err)
+	}
+}
+
+// clockGame stands for a puzzle that runs in time, as the balloon flies: it
+// counts the ticks it has run. A click sets it playing something out by
+// itself for a while, as the organ plays its phrase; with wins, what it plays
+// out is the win, and the game closes after it.
+type clockGame struct {
+	ran  int // ticks run
+	left int // ticks left of what a click set going
+	wins bool
+}
+
+// clockPlay is how long a click sets the clock playing out: well past the
+// puzzle's answer to the click itself.
+const clockPlay = 2 * puzzleTick
+
+func (c *clockGame) Update(float64) (bool, int) {
+	c.ran++
+	if c.left > 0 {
+		c.left--
+		return c.left == 0 && c.wins, 1
+	}
+	if minigame.Clicked() {
+		c.left = clockPlay
+	}
+	return false, 0
+}
+
+func (*clockGame) Draw(*ebiten.Image) {}
+
+func (c *clockGame) Busy() bool { return c.left > 0 }
+
+// waitFor runs a wait against the live loop.
+func waitFor(t *testing.T, g *Game, seconds float64) types.Outcome {
+	t.Helper()
+	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Wait(ctx, seconds)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// clickAt runs a puzzle click against the live loop.
+func clickAt(t *testing.T, g *Game, x, y int) types.Outcome {
+	t.Helper()
+	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, x, y, false)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// run ticks the game loop n times with no driver's call running.
+func run(g *Game, n int) {
+	for range n {
+		_ = g.Update()
+	}
+}
+
+// A driven puzzle waits for the driver's move as for a player's click: its
+// time stands between his calls, a look among them, and runs through a wait
+// for as long as asked. A press on the real mouse lets it run as it does for
+// the player, until the driver's next move or wait takes it back; without a
+// driver the puzzle runs as ever.
+func TestPuzzleStandsBetweenMoves(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	clock := &clockGame{}
+	g.mg = clock
+	run(g, 60)
+	if _, err := drive(t, g, g.ctl.Look); err != nil {
+		t.Fatal(err)
+	}
+	if clock.ran != 0 {
+		t.Fatalf("ran %d ticks between calls, want none", clock.ran)
+	}
+	waitFor(t, g, 1)
+	run(g, 60)
+	if clock.ran != 60 {
+		t.Errorf("a second's wait ran %d ticks, want 60", clock.ran)
+	}
+	g.ctl.drivePointer(true, false) // a press on the real mouse
+	run(g, 30)
+	if clock.ran != 90 {
+		t.Errorf("taken over by the mouse: ran %d ticks, want 90", clock.ran)
+	}
+	waitFor(t, g, 0.5) // the mouse's puzzle runs on until the wait comes up
+	ran := clock.ran
+	run(g, 60)
+	if ran < 120 || clock.ran != ran {
+		t.Errorf("taken back by a wait: ran %d ticks, then %d more, want "+
+			"at least 120 and none after", ran, clock.ran-ran)
+	}
+	g.ctl.drivePointer(true, false)
+	run(g, 30)
+	clickAt(t, g, 100, 100)
+	ran = clock.ran
+	run(g, 60)
+	if clock.ran != ran {
+		t.Errorf("taken back by a click: ran %d ticks after it, want none",
+			clock.ran-ran)
+	}
+	alone := newGame(repositories.NewResources(testutil.GameRoot(t)),
+		DefaultConfig(), &fakeAudio{})
+	free := &clockGame{}
+	alone.mg = free
+	run(alone, 30)
+	if free.ran != 30 {
+		t.Errorf("without a driver: ran %d ticks, want 30", free.ran)
+	}
+}
+
+// A key pressed at the window takes the puzzle over as a press on the mouse
+// does, within the tick — the puzzle reads it, Esc or the balloon's arrows —
+// but leaves the pointer where the driver holds it: a key moves no pointer.
+func TestKeyTakesThePuzzleOver(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	clock := &clockGame{}
+	g.mg = clock
+	clickAt(t, g, 100, 100)
+	run(g, 30)
+	ran := clock.ran
+	g.ctl.drivePointer(false, true) // a key on the real keyboard
+	g.updateMinigame(1.0 / 60)
+	if clock.ran != ran+1 {
+		t.Errorf("the key's tick ran %d ticks, want 1", clock.ran-ran)
+	}
+	run(g, 30)
+	if clock.ran != ran+31 {
+		t.Errorf("taken over by a key: ran %d ticks, want 31", clock.ran-ran)
+	}
+	if x, y := mouse.Position(); !mouse.Held() || x != 100 || y != 100 {
+		t.Errorf("pointer held = %v at %d,%d, want it kept at 100,100",
+			mouse.Held(), x, y)
+	}
+}
+
+// The player's hold on a puzzle ends with it: the next one a driver opens
+// stands between his calls from the start.
+func TestPuzzleEndTakesTheHoldAway(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	g.mg = &clockGame{}
+	g.ctl.drivePointer(true, false) // the player takes the puzzle over
+	g.finishMinigame(0)             // and solves it, say
+	run(g, 1)
+	next := &clockGame{}
+	g.mg = next
+	run(g, 60)
+	if next.ran != 0 {
+		t.Errorf("the next puzzle ran %d ticks before a call, want none",
+			next.ran)
+	}
+}
+
+// Giving up waits out what the puzzle plays out by itself, as the player's
+// Esc waits between moves: a wait may have stopped in the middle of it. What
+// it plays out is given up after, and a win it shows closes it solved.
+func TestGiveUpWaitsOutWhatPlaysOut(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		wins   bool
+		result int
+	}{{"a phrase", false, 0}, {"the win", true, 1}} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := heroGame(t, "SCENA0", nil)
+			defer mouse.Release()
+			clock := &clockGame{left: clockPlay, wins: tc.wins}
+			g.mg, g.mgVar = clock, "Res"
+			g.gs.SetVar("Res", 7)
+			if _, err := drive(t, g, g.ctl.PuzzleGiveUp); err != nil {
+				t.Fatal(err)
+			}
+			if clock.left > 0 || g.mg != nil ||
+				g.gs.Var("Res") != tc.result {
+				t.Errorf("given up %d ticks short: puzzle on = %v "+
+					"result = %d, want %d", clock.left, g.mg != nil,
+					g.gs.Var("Res"), tc.result)
+			}
+		})
+	}
+}
+
+// A click answers once the puzzle has played out what it set going, however
+// long past its own answer, and one that ends in the win answers once the
+// puzzle is closed. What is still playing out keeps the hero busy with it,
+// and a plain wait sits it out.
+func TestPuzzleAnswersOncePlayedOut(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	clock := &clockGame{}
+	g.mg = clock
+	out := clickAt(t, g, 100, 100)
+	if clock.left > 0 || clock.ran < clockPlay || !out.Ready ||
+		out.Look.Busy != "" {
+		t.Errorf("answered %d ticks short after %d: ready = %v busy = %q",
+			clock.left, clock.ran, out.Ready, out.Look.Busy)
+	}
+	clock.left = clockPlay // set going by the real mouse, say
+	if p, err := drive(t, g, g.ctl.Look); err != nil || p.Busy == "" {
+		t.Errorf("a look while it plays out: busy = %q (%v)", p.Busy, err)
+	}
+	if out := waitFor(t, g, 0); clock.left > 0 || !out.Ready {
+		t.Errorf("the wait ended %d ticks short: ready = %v", clock.left,
+			out.Ready)
+	}
+	clock.wins = true
+	out = clickAt(t, g, 100, 100)
+	if g.mg != nil || out.Look.Where != types.WhereIsland || !out.Ready {
+		t.Errorf("the win: puzzle on = %v where = %q ready = %v",
+			g.mg != nil, out.Look.Where, out.Ready)
+	}
+}
+
+// Every puzzle tells when it plays something out by itself, and a fresh one
+// plays nothing out: it waits for its player — the balloon's flight too, or
+// the answer to a move would never come.
+func TestEveryPuzzleWaitsForItsPlayer(t *testing.T) {
+	for id, e := range catalog.Games {
+		t.Run(e.Name, func(t *testing.T) {
+			g := openPuzzle(t, id)
+			p, ok := g.mg.(minigame.Performer)
+			if !ok {
+				t.Fatal("it cannot tell when it plays out")
+			}
+			if p.Busy() {
+				t.Error("busy before a move")
+			}
+		})
+	}
+}
+
+// The drummer plays the organ's whole phrase over the mouths, a note a beat
+// and the dud for an empty mouth: one click on him answers with all fifteen
+// heard, the organ quiet again and waiting.
+func TestOrganPhraseIsHeardInOneAnswer(t *testing.T) {
+	g := openPuzzle(t, 4)
+	defer mouse.Release()
+	out, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, 232, 250, false)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := slices.Repeat([]string{"нота"}, 15); !sameList(out.Heard,
+		want) || !out.Ready || g.puzzleBusy() {
+		t.Errorf("heard = %q ready = %v busy = %v, want the phrase whole",
+			out.Heard, out.Ready, g.puzzleBusy())
+	}
+	duds := 0
+	for _, key := range g.audio.(*fakeAudio).played {
+		if key == "pipe00.wav" {
+			duds++
+		}
+	}
+	if duds != 15 {
+		t.Errorf("the dud sounded %d times, want every beat", duds)
 	}
 }
 

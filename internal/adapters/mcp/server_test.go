@@ -463,3 +463,34 @@ func TestInstructionsRetellThePuzzleRules(t *testing.T) {
 		}
 	}
 }
+
+// A puzzle stands between calls, and the client is told so where it acts:
+// the instructions and the wait tool say a wait is the puzzle's time — the
+// balloon's flight too — and a move answers once the puzzle has played out.
+// The manual retold says nothing of it: the player's balloon flies on.
+func TestWaitIsThePuzzlesTime(t *testing.T) {
+	cs := connect(t, &hero{look: beach})
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name == "wait" &&
+			!strings.Contains(tool.Description, "Головоломка") {
+			t.Errorf("the wait tool says nothing of puzzles: %q",
+				tool.Description)
+		}
+	}
+	init := cs.InitializeResult()
+	for _, want := range []string{
+		"между вызовами стоит", "wait с seconds", "летит воздушный шар",
+		"доиграла",
+	} {
+		if !strings.Contains(init.Instructions, want) {
+			t.Errorf("the instructions lack %q", want)
+		}
+	}
+	if strings.Contains(puzzleRules, "wait") {
+		t.Error("the manual retold speaks of the wait tool")
+	}
+}

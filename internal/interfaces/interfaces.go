@@ -131,9 +131,12 @@ type IControl interface {
 	// control comes back to the hero afterwards.
 	AskFriday(ctx context.Context, target, item string) (types.Outcome, error)
 	// Wait lets the game run: until the hero may act, or for the seconds
-	// given.
+	// given. A puzzle stands between calls, waiting for the next move, and
+	// a wait is its time.
 	Wait(ctx context.Context, seconds float64) (types.Outcome, error)
-	// PuzzleClick clicks a puzzle screen (640x480) at x,y.
+	// PuzzleClick clicks a puzzle screen (640x480) at x,y. It answers once
+	// the puzzle has played out what the click set going, and after the win
+	// once the puzzle has closed.
 	PuzzleClick(
 		ctx context.Context,
 		x, y int,
@@ -147,7 +150,8 @@ type IControl interface {
 		ctx context.Context,
 		fromX, fromY, toX, toY, turns int,
 	) (types.Outcome, error)
-	// PuzzleGiveUp leaves a puzzle unsolved, as Esc does.
+	// PuzzleGiveUp leaves a puzzle unsolved, as Esc does, once it has played
+	// out what it was playing out: a win it shows closes it solved.
 	PuzzleGiveUp(ctx context.Context) (types.Outcome, error)
 	// Save writes the run into a slot (0..11).
 	Save(ctx context.Context, slot int) error
