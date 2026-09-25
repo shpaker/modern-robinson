@@ -61,10 +61,16 @@ func (vp *voicePool) pick(busy func(i int) bool) int {
 
 var _ interfaces.IAudio = (*Audio)(nil)
 
-// NewAudio creates an audio adapter at the given sample rate.
+// NewAudio creates an audio adapter at the given sample rate. Ebitengine allows
+// one audio context per process, so a second adapter (a second Game, as the
+// tests build) shares the first one's.
 func NewAudio(sampleRate int) *Audio {
+	ctx := audio.CurrentContext()
+	if ctx == nil {
+		ctx = audio.NewContext(sampleRate)
+	}
 	return &Audio{
-		ctx:      audio.NewContext(sampleRate),
+		ctx:      ctx,
 		cache:    map[string][]byte{},
 		chans:    map[int]*audio.Player{},
 		voices:   map[string]*voicePool{},

@@ -644,7 +644,9 @@ func (g *Game) Update() error {
 		return nil // a minigame owns the frame
 	}
 	// The speed slider scales the whole simulation, like the original's
-	// DelayFactor: 0.5 on the slider is the authored pace.
+	// DelayFactor: 0.5 on the slider is the authored pace. The wait before the
+	// long idle keeps the unscaled tick (see updateIdle).
+	wall := dt
 	dt *= 0.5 + g.speed
 	// A cutscene starts under the new scene's fade-in, which owns the frame for
 	// ~0.3 s. Take the skip anyway, or the first press of an impatient player
@@ -686,7 +688,7 @@ func (g *Game) Update() error {
 	g.updateAmbient(dt)
 	g.updateAction(dt)
 	g.fridLook(mx, my)
-	g.updateIdle(dt)
+	g.updateIdle(dt, wall)
 
 	if !g.moving && (g.act == nil || g.act.frid) {
 		// Standing still and out of his own scripts (the engine's +0x590 and

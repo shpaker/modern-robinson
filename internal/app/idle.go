@@ -17,8 +17,12 @@ const (
 	restBored = 2
 )
 
-// idleAfter is how long the hero stands still before playing his long idle.
-const idleAfter = 9.0
+// idleAfter is how long the hero stands still before his long idle. The
+// engine rearms a timeGetTime()+27000 deadline whenever a chain, a walk or a
+// script ends (0x40e178, 0x40e6f6, 0x40eb7f, 0x40ed12) and starts slot 2 once
+// the clock is strictly past it (0x40e05f). The speed setting divides frame
+// delays (0x416699), not the deadline: the wait keeps the unscaled clock.
+const idleAfter = 27.0
 
 // HEAD.MV is not an animation but a 3x3 table of standing poses: its nine
 // frames all carry the same Delay and no events, and every frame draws the same
@@ -123,15 +127,18 @@ func (g *Game) setRest(args []string) {
 	g.idleT = 0
 }
 
-// updateIdle counts standing time and plays the long idle once it is due.
-func (g *Game) updateIdle(dt float64) {
+// updateIdle plays a running idle chain on game time and counts standing time
+// on the unscaled clock, starting the long idle once it is due.
+func (g *Game) updateIdle(dt, wall float64) {
 	g.updateIdlePlay(dt)
 	if g.moving || g.act != nil || g.idleAct != nil {
 		g.idleT = 0
 		return
 	}
-	g.idleT += dt
-	if g.idleT < idleAfter {
+	g.idleT += wall
+	// HideChar holds the chain back but leaves the deadline alone (0x40e018):
+	// shown again, an overdue hero starts it at once.
+	if g.idleT <= idleAfter || g.charHidden {
 		return
 	}
 	g.idleT = 0
