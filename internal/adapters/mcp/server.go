@@ -59,7 +59,10 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 	`map_gained, misses — сколько действий подряд ни к чему не привели.
 
 Инструменты:
-- look — осмотреться; с image — ещё и картинка того, что в окне.
+- look — осмотреться; с image — ещё и картинка того, что в окне; с ` +
+	`grid — картинка с сеткой координат через 40 px: x подписан сверху, ` +
+	`y слева. grid есть и у puzzle_click, puzzle_move и wait; кликать по ` +
+	`координатам можно только в головоломке.
 - use — подойти и применить к чему-то вещь из рук; с item — сначала взять ` +
 	`эту вещь. «Рука» — пустые руки: взять, потрогать, осмотреть, ` +
 	`заговорить. target «себя» — сделать что-то с вещью самому: смотря ` +
@@ -144,6 +147,7 @@ const puzzleRules = `Головоломки — что о них сказано 
 
 type lookIn struct {
 	Image bool `json:"image,omitempty" jsonschema:"приложить картинку того, что сейчас в окне"`
+	Grid  bool `json:"grid,omitempty"  jsonschema:"приложить картинку с сеткой координат через 40 px; кликать по ним — только в головоломке"`
 }
 
 type useIn struct {
@@ -170,12 +174,14 @@ type whyIn struct {
 
 type waitIn struct {
 	Seconds float64 `json:"seconds,omitempty" jsonschema:"сколько секунд ждать, до 60; без него — пока не сможешь действовать"`
+	Grid    bool    `json:"grid,omitempty"    jsonschema:"сетка координат через 40 px на картинке головоломки"`
 }
 
 type clickIn struct {
 	X      int    `json:"x"                jsonschema:"x на экране головоломки, 0..639"`
 	Y      int    `json:"y"                jsonschema:"y на экране головоломки, 0..479"`
 	Button string `json:"button,omitempty" jsonschema:"left (по умолчанию) или right"`
+	Grid   bool   `json:"grid,omitempty"   jsonschema:"сетка координат через 40 px на картинке ответа"`
 	Why    string `json:"why"              jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
@@ -185,6 +191,7 @@ type moveIn struct {
 	ToX   int    `json:"to_x"            jsonschema:"x, куда её положить (туда придёт её середина), 0..639"`
 	ToY   int    `json:"to_y"            jsonschema:"y, куда её положить (туда придёт её середина), 0..479"`
 	Turns int    `json:"turns,omitempty" jsonschema:"сколько раз повернуть её у цели правой кнопкой, 0..3"`
+	Grid  bool   `json:"grid,omitempty"  jsonschema:"сетка координат через 40 px на картинке ответа"`
 	Why   string `json:"why"             jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
 }
 
@@ -299,7 +306,8 @@ func (s *server) look(
 	if err != nil {
 		return nil, types.Percept{}, err
 	}
-	return s.reply(ctx, p, in.Image || p.Where == types.WherePuzzle), p, nil
+	sight := in.Image || in.Grid || p.Where == types.WherePuzzle
+	return s.reply(ctx, p, sight, in.Grid), p, nil
 }
 
 func (s *server) use(
@@ -308,7 +316,7 @@ func (s *server) use(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.Use(ctx, in.Target, in.Item))
+	return s.answer(ctx, false)(s.c.Use(ctx, in.Target, in.Item))
 }
 
 func (s *server) goTo(
@@ -317,7 +325,7 @@ func (s *server) goTo(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.Go(ctx, in.To))
+	return s.answer(ctx, false)(s.c.Go(ctx, in.To))
 }
 
 func (s *server) openMap(
@@ -326,7 +334,7 @@ func (s *server) openMap(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.OpenMap(ctx))
+	return s.answer(ctx, false)(s.c.OpenMap(ctx))
 }
 
 func (s *server) askFriday(
@@ -335,13 +343,13 @@ func (s *server) askFriday(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.AskFriday(ctx, in.Target, in.Item))
+	return s.answer(ctx, false)(s.c.AskFriday(ctx, in.Target, in.Item))
 }
 
 func (s *server) wait(
 	ctx context.Context, _ *sdk.CallToolRequest, in waitIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
-	return s.answer(ctx)(s.c.Wait(ctx, in.Seconds))
+	return s.answer(ctx, in.Grid)(s.c.Wait(ctx, in.Seconds))
 }
 
 func (s *server) puzzleClick(
@@ -351,7 +359,7 @@ func (s *server) puzzleClick(
 		return nil, types.Outcome{}, err
 	}
 	right := strings.EqualFold(in.Button, "right")
-	return s.answer(ctx)(s.c.PuzzleClick(ctx, in.X, in.Y, right))
+	return s.answer(ctx, in.Grid)(s.c.PuzzleClick(ctx, in.X, in.Y, right))
 }
 
 func (s *server) puzzleMove(
@@ -360,7 +368,7 @@ func (s *server) puzzleMove(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.PuzzleMove(ctx,
+	return s.answer(ctx, in.Grid)(s.c.PuzzleMove(ctx,
 		in.FromX, in.FromY, in.ToX, in.ToY, in.Turns))
 }
 
@@ -370,7 +378,7 @@ func (s *server) puzzleGiveUp(
 	if err := reasoned(in.Why); err != nil {
 		return nil, types.Outcome{}, err
 	}
-	return s.answer(ctx)(s.c.PuzzleGiveUp(ctx))
+	return s.answer(ctx, false)(s.c.PuzzleGiveUp(ctx))
 }
 
 func (s *server) save(
@@ -379,13 +387,13 @@ func (s *server) save(
 	if err := s.c.Save(ctx, in.Slot); err != nil {
 		return nil, savedOut{}, err
 	}
-	return s.reply(ctx, savedOut(in), false), savedOut(in), nil
+	return s.reply(ctx, savedOut(in), false, false), savedOut(in), nil
 }
 
 func (s *server) load(
 	ctx context.Context, _ *sdk.CallToolRequest, in slotIn,
 ) (*sdk.CallToolResult, types.Outcome, error) {
-	return s.answer(ctx)(s.c.Load(ctx, in.Slot))
+	return s.answer(ctx, false)(s.c.Load(ctx, in.Slot))
 }
 
 // errNoWhy refuses an action taken without a reason.
@@ -402,8 +410,8 @@ func reasoned(why string) error {
 }
 
 // answer turns an outcome into the tool's reply: the outcome as data, with
-// the puzzle's picture while one is on screen.
-func (s *server) answer(ctx context.Context) func(
+// the puzzle's picture while one is on screen — with the grid on request.
+func (s *server) answer(ctx context.Context, grid bool) func(
 	types.Outcome, error,
 ) (*sdk.CallToolResult, types.Outcome, error) {
 	return func(o types.Outcome, err error) (
@@ -412,14 +420,16 @@ func (s *server) answer(ctx context.Context) func(
 		if err != nil {
 			return nil, types.Outcome{}, err
 		}
-		return s.reply(ctx, o, o.Look.Where == types.WherePuzzle), o, nil
+		sight := o.Look.Where == types.WherePuzzle
+		return s.reply(ctx, o, sight, grid), o, nil
 	}
 }
 
 // reply is data as JSON text — the structured content too, for clients that
-// read it — and, with sight, the picture of what is in view.
+// read it — and, with sight, the picture of what is in view, with grid the
+// coordinate grid over it (withGrid).
 func (s *server) reply(
-	ctx context.Context, data any, sight bool,
+	ctx context.Context, data any, sight, grid bool,
 ) *sdk.CallToolResult {
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -430,6 +440,9 @@ func (s *server) reply(
 	}
 	if sight {
 		if png, err := s.c.Sight(ctx); err == nil && len(png) > 0 {
+			if grid {
+				png = withGrid(png)
+			}
 			res.Content = append(res.Content,
 				&sdk.ImageContent{Data: png, MIMEType: "image/png"})
 		}

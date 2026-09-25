@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
 	"regexp"
 	"sort"
 	"strconv"
@@ -22,6 +24,7 @@ import (
 type hero struct {
 	look  types.Percept
 	out   types.Outcome
+	sight []byte // what is in view; a bare PNG signature without it
 	err   error
 	calls []string
 }
@@ -41,6 +44,9 @@ func (h *hero) Look(
 }
 
 func (h *hero) Sight(context.Context) ([]byte, error) {
+	if h.sight != nil {
+		return h.sight, nil
+	}
 	return []byte("\x89PNG"), nil
 }
 
@@ -152,12 +158,17 @@ func text(res *sdk.CallToolResult) string {
 }
 
 func hasImage(res *sdk.CallToolResult) bool {
+	return picture(res) != nil
+}
+
+// picture is the image a reply carries, if any.
+func picture(res *sdk.CallToolResult) []byte {
 	for _, c := range res.Content {
-		if _, ok := c.(*sdk.ImageContent); ok {
-			return true
+		if ic, ok := c.(*sdk.ImageContent); ok {
+			return ic.Data
 		}
 	}
-	return false
+	return nil
 }
 
 var beach = types.Percept{
@@ -492,5 +503,88 @@ func TestWaitIsThePuzzlesTime(t *testing.T) {
 	}
 	if strings.Contains(puzzleRules, "wait") {
 		t.Error("the manual retold speaks of the wait tool")
+	}
+}
+
+// The grid comes on request, over the very picture the game gave: look
+// brings it anywhere, the puzzle's moves and wait lay it over the puzzle
+// they answer with; without it the picture goes byte for byte as it came.
+func TestGridOnRequest(t *testing.T) {
+	puzzle := types.Percept{Where: types.WherePuzzle}
+	screen := flat(t, 640, 480, grounds["grey"])
+	h := &hero{look: puzzle, sight: screen, out: types.Outcome{
+		Reacted: true, Ready: true, Look: puzzle,
+	}}
+	cs := connect(t, h)
+	click := map[string]any{"x": 1, "y": 2, "why": "пробую"}
+	move := map[string]any{
+		"from_x": 1, "from_y": 2, "to_x": 3, "to_y": 4, "why": "переношу",
+	}
+	for name, args := range map[string]map[string]any{
+		"look": nil, "puzzle_click": click, "puzzle_move": move, "wait": nil,
+	} {
+		if got := picture(call(t, cs, name, args)); !bytes.Equal(got, screen) {
+			t.Errorf("%s without grid changed the picture", name)
+		}
+		gridded := map[string]any{"grid": true}
+		for k, v := range args {
+			gridded[k] = v
+		}
+		got := picture(call(t, cs, name, gridded))
+		if bytes.Equal(got, screen) {
+			t.Errorf("%s with grid: no grid", name)
+			continue
+		}
+		if img := unpack(t, got); img.RGBAAt(40, 250) == grounds["grey"] ||
+			img.RGBAAt(60, 250) != grounds["grey"] {
+			t.Errorf("%s with grid: not the grid over the screen", name)
+		}
+	}
+	h.look = beach
+	scene := flat(t, 640, 400, grounds["grey"])
+	h.sight = scene
+	if hasImage(call(t, cs, "look", nil)) {
+		t.Error("a scene's picture is on request only")
+	}
+	got := picture(call(t, cs, "look", map[string]any{"grid": true}))
+	if got == nil || unpack(t, got).Bounds() != image.Rect(0, 0, 640, 400) {
+		t.Error("grid:true brings the scene's picture with the grid")
+	}
+	if !bytes.Equal(h.sight, scene) {
+		t.Error("the grid drew on the game's own picture")
+	}
+}
+
+// The grid is asked for where there is a picture to lay it on, and the
+// client is told what its numbers are worth outside a puzzle.
+func TestGridIsOffered(t *testing.T) {
+	cs := connect(t, &hero{look: beach})
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		"look": true, "puzzle_click": true, "puzzle_move": true, "wait": true,
+	}
+	for _, tool := range res.Tools {
+		raw, _ := json.Marshal(tool.InputSchema)
+		var schema struct {
+			Properties map[string]struct {
+				Type string `json:"type"`
+			} `json:"properties"`
+		}
+		_ = json.Unmarshal(raw, &schema)
+		p, has := schema.Properties["grid"]
+		if has != want[tool.Name] || has && p.Type != "boolean" {
+			t.Errorf("%s: grid = %v %q", tool.Name, has, p.Type)
+		}
+	}
+	init := cs.InitializeResult()
+	for _, want := range []string{
+		"с grid", "40 px", "x подписан сверху", "только в головоломке",
+	} {
+		if !strings.Contains(init.Instructions, want) {
+			t.Errorf("the instructions lack %q", want)
+		}
 	}
 }
