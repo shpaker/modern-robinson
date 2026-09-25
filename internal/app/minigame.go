@@ -82,6 +82,8 @@ var puzzleSounds = map[string]string{
 	"lady.wav":     "дамка",
 	// The balloon.
 	"stnbalon.wav": "посадка",
+	// The organ: Friday whistles his aria.
+	"melody.wav": "ария",
 	// A puzzle solved.
 	"final0.wav": "победа",
 	"final1.wav": "победа",

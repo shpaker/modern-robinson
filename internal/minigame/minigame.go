@@ -53,6 +53,9 @@ type Host interface {
 	// index a sprite belongs to for packs that ship several; nil, or an index it
 	// does not answer for, means the pack's default palette.
 	Images(pack string, palOf func(name string) int) map[string]*ebiten.Image
+	// Frames decodes a movie's frames in its own palette: the minigames' .MV
+	// files are full-screen decals. None when the movie is missing.
+	Frames(movie string) []*ebiten.Image
 	// Text is a text entry of a pack, "" when it is missing.
 	Text(pack, name string) string
 	// PlaySound plays a .wav from the minigame sound bank on a channel.
@@ -103,6 +106,20 @@ func (h host) Images(
 		img := ebiten.NewImage(n.Width, n.Height)
 		img.WritePixels(rgba)
 		out[name] = img
+	}
+	return out
+}
+
+func (h host) Frames(movie string) []*ebiten.Image {
+	frames, pal := h.res.MovieFrames(movie)
+	out := make([]*ebiten.Image, 0, len(frames))
+	for _, n := range frames {
+		if n == nil {
+			continue
+		}
+		img := ebiten.NewImage(n.Width, n.Height)
+		img.WritePixels(n.RGBA(pal))
+		out = append(out, img)
 	}
 	return out
 }
