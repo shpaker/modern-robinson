@@ -128,6 +128,7 @@ type Game struct {
 	slotShade  color.Color // and its darkest, the pair slot bevels use
 	slotHover  int
 	slotSel    int
+	slotDblT   float64 // what is left of the double-click window, seconds
 	slotCache  map[int]*ebiten.Image
 	slotInfo   map[int]string
 	saves      saveStore
@@ -622,7 +623,7 @@ func (g *Game) Update() error {
 	if g.updateScreens(dt) {
 		return nil // boot screens own the frame
 	}
-	if g.updateOptions() {
+	if g.updateOptions(dt) {
 		return nil // options / save / load own the frame
 	}
 	if g.updateLoading(dt) {
