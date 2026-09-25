@@ -191,6 +191,8 @@ func newGame(res interfaces.IResources, cfg Config, audio interfaces.IAudio) *Ga
 	g.slotHover, g.slotSel, g.btnDown = -1, 0, -1
 	g.slotCache = map[int]*ebiten.Image{}
 	g.volSound, g.volMusic, g.speed = cfg.Sound, cfg.Music, cfg.Speed
+	g.audio.SetVolume(g.volSound) // the sliders show them; the sounds obey too
+	g.audio.SetMusicVolume(g.volMusic)
 	g.seedStartup()
 	g.loadBar()
 	g.loadOptions()
