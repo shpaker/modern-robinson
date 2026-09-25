@@ -62,7 +62,10 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 - look — осмотреться; с image — ещё и картинка того, что в окне; с ` +
 	`grid — картинка с сеткой координат через 40 px: x подписан сверху, ` +
 	`y слева. grid есть и у puzzle_click, puzzle_move и wait; кликать по ` +
-	`координатам можно только в головоломке.
+	`координатам можно только в головоломке. С region {x0,y0,x1,y1} look ` +
+	`даёт крупный план этой части картинки (не больше 320×240), чтобы ` +
+	`точнее прицелиться: координаты в сетке на нём — экранные, а region ` +
+	`в ответе — что показано и во сколько раз (scale) увеличено.
 - use — подойти и применить к чему-то вещь из рук; с item — сначала взять ` +
 	`эту вещь. «Рука» — пустые руки: взять, потрогать, осмотреть, ` +
 	`заговорить. target «себя» — сделать что-то с вещью самому: смотря ` +
@@ -146,8 +149,15 @@ const puzzleRules = `Головоломки — что о них сказано 
 	`по очередной клетке.`
 
 type lookIn struct {
-	Image bool `json:"image,omitempty" jsonschema:"приложить картинку того, что сейчас в окне"`
-	Grid  bool `json:"grid,omitempty"  jsonschema:"приложить картинку с сеткой координат через 40 px; кликать по ним — только в головоломке"`
+	Image  bool      `json:"image,omitempty"  jsonschema:"приложить картинку того, что сейчас в окне"`
+	Grid   bool      `json:"grid,omitempty"   jsonschema:"приложить картинку с сеткой координат через 40 px (на крупном плане чаще); кликать по ним — только в головоломке"`
+	Region *regionIn `json:"region,omitempty" jsonschema:"крупный план части картинки до 320×240 (в головоломке — экрана 640×480), чтобы точнее прицелиться; координаты в сетке на нём — экранные"`
+}
+
+// lookOut is the percept, and with a region what its close-up shows.
+type lookOut struct {
+	types.Percept
+	Region *shownOut `json:"region,omitempty"`
 }
 
 type useIn struct {
@@ -301,13 +311,29 @@ func ServeStdio(
 
 func (s *server) look(
 	ctx context.Context, _ *sdk.CallToolRequest, in lookIn,
-) (*sdk.CallToolResult, types.Percept, error) {
+) (*sdk.CallToolResult, lookOut, error) {
 	p, err := s.c.Look(ctx)
 	if err != nil {
-		return nil, types.Percept{}, err
+		return nil, lookOut{}, err
 	}
-	sight := in.Image || in.Grid || p.Where == types.WherePuzzle
-	return s.reply(ctx, p, sight, in.Grid), p, nil
+	out := lookOut{Percept: p}
+	if in.Region != nil {
+		pic, err := s.c.Sight(ctx)
+		if err != nil {
+			return nil, lookOut{}, err
+		}
+		pic, shown, err := closeUp(pic, *in.Region, in.Grid)
+		if err != nil {
+			return nil, lookOut{}, err
+		}
+		out.Region = &shown
+		return reply(out, pic), out, nil
+	}
+	var pic []byte
+	if in.Image || in.Grid || p.Where == types.WherePuzzle {
+		pic = s.sight(ctx, in.Grid)
+	}
+	return reply(out, pic), out, nil
 }
 
 func (s *server) use(
@@ -387,7 +413,7 @@ func (s *server) save(
 	if err := s.c.Save(ctx, in.Slot); err != nil {
 		return nil, savedOut{}, err
 	}
-	return s.reply(ctx, savedOut(in), false, false), savedOut(in), nil
+	return reply(savedOut(in), nil), savedOut(in), nil
 }
 
 func (s *server) load(
@@ -420,17 +446,30 @@ func (s *server) answer(ctx context.Context, grid bool) func(
 		if err != nil {
 			return nil, types.Outcome{}, err
 		}
-		sight := o.Look.Where == types.WherePuzzle
-		return s.reply(ctx, o, sight, grid), o, nil
+		var pic []byte
+		if o.Look.Where == types.WherePuzzle {
+			pic = s.sight(ctx, grid)
+		}
+		return reply(o, pic), o, nil
 	}
 }
 
+// sight is the picture of what is in view, with grid the coordinate grid
+// over it (withGrid); nil when there is none to give.
+func (s *server) sight(ctx context.Context, grid bool) []byte {
+	pic, err := s.c.Sight(ctx)
+	if err != nil || len(pic) == 0 {
+		return nil
+	}
+	if grid {
+		return withGrid(pic)
+	}
+	return pic
+}
+
 // reply is data as JSON text — the structured content too, for clients that
-// read it — and, with sight, the picture of what is in view, with grid the
-// coordinate grid over it (withGrid).
-func (s *server) reply(
-	ctx context.Context, data any, sight, grid bool,
-) *sdk.CallToolResult {
+// read it — and the picture, when there is one.
+func reply(data any, pic []byte) *sdk.CallToolResult {
 	raw, err := json.Marshal(data)
 	if err != nil {
 		raw = []byte("{}")
@@ -438,14 +477,9 @@ func (s *server) reply(
 	res := &sdk.CallToolResult{
 		Content: []sdk.Content{&sdk.TextContent{Text: string(raw)}},
 	}
-	if sight {
-		if png, err := s.c.Sight(ctx); err == nil && len(png) > 0 {
-			if grid {
-				png = withGrid(png)
-			}
-			res.Content = append(res.Content,
-				&sdk.ImageContent{Data: png, MIMEType: "image/png"})
-		}
+	if pic != nil {
+		res.Content = append(res.Content,
+			&sdk.ImageContent{Data: pic, MIMEType: "image/png"})
 	}
 	return res
 }
