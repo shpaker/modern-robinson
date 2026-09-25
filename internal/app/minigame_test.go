@@ -1,8 +1,15 @@
 package app
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -137,3 +144,90 @@ type stubGame struct{ result int }
 func (s stubGame) Update(float64) (bool, int) { return true, s.result }
 
 func (stubGame) Draw(*ebiten.Image) {}
+
+// Every sound a minigame plays reaches a driver as a word, never as its file,
+// so the table has to know them all: each PlaySound of the games, read from
+// their source, is in it, and nothing in it is a sound no game plays. Only the
+// organ names its notes at run time; they are heard as notes.
+func TestEveryPuzzleSoundIsHeardAsAWord(t *testing.T) {
+	played := map[string]bool{}
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(filepath.Join("..", "minigame"),
+		func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") ||
+				strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				return err
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok || len(call.Args) == 0 {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != "PlaySound" {
+					return true
+				}
+				lit, ok := call.Args[0].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					if f.Name.Name != "pipe" {
+						t.Errorf("%s: a sound named at run time",
+							fset.Position(call.Pos()))
+					}
+					return true
+				}
+				file, _ := strconv.Unquote(lit.Value)
+				played[strings.ToLower(file)] = true
+				return true
+			})
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(played) == 0 {
+		t.Fatal("no PlaySound found in the minigames")
+	}
+	for file := range played {
+		if _, ok := puzzleSounds[file]; !ok {
+			t.Errorf("%s: no word for it", file)
+		}
+	}
+	for file, word := range puzzleSounds {
+		if !played[file] {
+			t.Errorf("%s: no game plays it", file)
+		}
+		if !plainWord(word) {
+			t.Errorf("%s: %q is no word the ear would use", file, word)
+		}
+	}
+	for i := range 9 {
+		file := "PIPE0" + strconv.Itoa(i) + ".WAV"
+		if got := soundLabel(file); got != "нота" {
+			t.Errorf("%s: heard as %q, want a note", file, got)
+		}
+	}
+	if got := soundLabel("h_take.WAV"); got != "взял" {
+		t.Errorf("the table is read case aside: %q", got)
+	}
+	if got := soundLabel("unknown.wav"); got != "звук" {
+		t.Errorf("a sound the table misses is heard as %q", got)
+	}
+}
+
+// plainWord reports a word in Russian letters and spaces, nothing a file
+// name would carry.
+func plainWord(s string) bool {
+	if strings.TrimSpace(s) == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != ' ' && !unicode.Is(unicode.Cyrillic, r) {
+			return false
+		}
+	}
+	return true
+}

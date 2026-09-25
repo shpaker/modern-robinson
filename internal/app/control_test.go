@@ -113,6 +113,9 @@ func TestUseClicksAndHearsTheLine(t *testing.T) {
 	if len(out.Said) == 0 || out.Said[0] != "Он меня чуть не укусил!!!" {
 		t.Errorf("said = %q, want the crab's bite, quotes off", out.Said)
 	}
+	if len(out.Heard) > 0 {
+		t.Errorf("heard = %q, want no puzzle sounds on the beach", out.Heard)
+	}
 	if g.gs.UI["mouse"] != true || g.act != nil {
 		t.Error("the action must be over when the call returns")
 	}
@@ -322,6 +325,44 @@ func TestPuzzleClickAndGiveUp(t *testing.T) {
 	_ = g.Update()
 	if mouse.Held() {
 		t.Error("a finished puzzle hands the pointer back")
+	}
+}
+
+// A puzzle is heard as well as seen: each click answers with what it sounded,
+// in the ear's words and only its own, while the sounds still play.
+func TestPuzzleClickHearsItsSounds(t *testing.T) {
+	g := heroGame(t, "SCENA0", map[string]string{"ROBINSON_MINIGAME": "5"})
+	defer mouse.Release()
+	if g.mg == nil {
+		t.Skip("no translator assets")
+	}
+	click := func(x, y int) []string {
+		t.Helper()
+		out, err := drive(t, g,
+			func(ctx context.Context) (types.Outcome, error) {
+				return g.ctl.PuzzleClick(ctx, x, y, false)
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.Heard
+	}
+	// The strip's first letter comes to hand; dropped off the text, it goes
+	// back to the strip with the error sound.
+	if heard := click(15, 36); !sameList(heard, []string{"взял"}) {
+		t.Errorf("taking a letter: heard = %q", heard)
+	}
+	if heard := click(320, 60); !sameList(heard, []string{"ошибка"}) {
+		t.Errorf("dropping it off the text: heard = %q", heard)
+	}
+	var played []string
+	for _, key := range g.audio.(*fakeAudio).played {
+		if strings.HasPrefix(key, "r_") {
+			played = append(played, key)
+		}
+	}
+	if !sameList(played, []string{"r_take.wav", "r_error.wav"}) {
+		t.Errorf("played = %q, want both sounds still played", played)
 	}
 }
 

@@ -54,10 +54,14 @@ type Companion struct {
 }
 
 // Outcome is what came of an action: the lines shown while it played
-// (without their quotes), whether the world answered at all, whether the hero
-// may act again, what changed, and the world afterwards.
+// (without their quotes), what a puzzle sounded meanwhile, whether the world
+// answered at all, whether the hero may act again, what changed, and the
+// world afterwards.
 type Outcome struct {
 	Said []string `json:"said,omitempty"`
+	// Heard is what a puzzle sounded while the action played, in order, as
+	// the ear takes it ("взял", "встало", "победа") — never a file.
+	Heard []string `json:"heard,omitempty"`
 	// Reacted is false when nothing happened: the game ignores an action it
 	// has no answer for, and the player sees just that.
 	Reacted bool `json:"reacted"`

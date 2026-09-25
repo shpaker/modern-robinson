@@ -23,7 +23,8 @@ import (
 // every Update until the job is done. Every action is made of the clicks a
 // player would make, through Game.click and the bar, so the quest sees nothing
 // it would not see from the mouse — and the driver learns only what is on
-// screen: captions, item names and lines, never variables or scripts.
+// screen and in the ear: captions, item names, lines and a puzzle's sounds,
+// never variables, scripts or files.
 
 // Limits of a driver's waits, in ticks of the 60 TPS loop.
 const (
@@ -32,6 +33,7 @@ const (
 	cameraMax  = 3 * 60  // the view gets this long to reach a target
 	puzzleTick = 45      // a puzzle's own answer (the checkers AI waits 0.7 s)
 	saidMax    = 64      // lines kept per call
+	soundMax   = 64      // puzzle sounds kept per call
 )
 
 // errStop ends a job's steps early; the job's err says why, if anything.
@@ -73,7 +75,8 @@ type control struct {
 	jobs chan *job
 	cur  *job
 
-	said []string // lines shown since the running call began
+	said   []string // lines shown since the running call began
+	sounds []string // what a puzzle sounded since then, as heard
 
 	// hold is the puzzle pointer the driver holds until a real press.
 	hold *heldPointer
@@ -125,7 +128,7 @@ func (c *control) tick() {
 	if c.cur == nil {
 		select {
 		case c.cur = <-c.jobs:
-			c.said = nil
+			c.said, c.sounds = nil, nil
 		default:
 		}
 	}
@@ -142,6 +145,14 @@ func (c *control) heard(s string) {
 		return
 	}
 	c.said = append(c.said, unquote(s))
+}
+
+// sounded notes a sound a puzzle has played, by what the ear makes of it.
+func (c *control) sounded(file string) {
+	if c == nil || c.cur == nil || len(c.sounds) >= soundMax {
+		return
+	}
+	c.sounds = append(c.sounds, soundLabel(file))
 }
 
 // unquote drops the quotes TEXT.DAT keeps for the text box: what was said is
@@ -233,14 +244,15 @@ func (c *control) mark(before *glance) func() (bool, error) {
 }
 
 // outcome fills in what came of an action once it has played out: what was
-// said, whether the hero may act, what he sees now and what changed since
-// before. acted counts the call among the hero's own tries (a wait is not),
-// and a try that came to nothing adds to the misses in a row.
+// said and heard, whether the hero may act, what he sees now and what changed
+// since before. acted counts the call among the hero's own tries (a wait is
+// not), and a try that came to nothing adds to the misses in a row.
 func (c *control) outcome(
 	out *types.Outcome, before *glance, acted bool,
 ) func() (bool, error) {
 	return once(func() error {
 		out.Said = append([]string(nil), c.said...)
+		out.Heard = append([]string(nil), c.sounds...)
 		out.Ready = c.g.busyWith() == ""
 		after := c.g.glance()
 		out.Look = after.p
