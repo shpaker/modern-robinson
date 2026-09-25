@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.0](https://github.com/shpaker/modern-robinson/compare/v0.1.0...v0.2.0) (2026-09-25)
+
+
+### Возможности
+
+* **save:** двойной клик по слоту, как в оригинале ([31e77ca](https://github.com/shpaker/modern-robinson/commit/31e77cad7533c2a2685df712e5b62f84cc40ed98))
+* **save:** двойной клик по слоту, как в оригинале ([1923507](https://github.com/shpaker/modern-robinson/commit/1923507e9ce19525c3d8103709f8d2da4f6eec3f))
+* **ui:** курсоры оригинала ([fe27410](https://github.com/shpaker/modern-robinson/commit/fe2741093df081123d5c44697a67565081cdfc8a))
+* **ui:** курсоры оригинала ([4570582](https://github.com/shpaker/modern-robinson/commit/45705828fe55996ec34f8109c85756746f678901))
+
+
+### Исправления
+
+* **save:** превью сохранения и слоты как в оригинале ([2cc1d94](https://github.com/shpaker/modern-robinson/commit/2cc1d9455844edb79ee767a5cfaab740bbbbde3d))
+* **save:** превью сохранения и слоты как в оригинале ([14a1ab5](https://github.com/shpaker/modern-robinson/commit/14a1ab590d6f8c0ecc4eca88acc0d97957310a7f))
+* **scene:** уходить со сцены только через зону выхода, как в оригинале ([0c11bba](https://github.com/shpaker/modern-robinson/commit/0c11bba6fb8306794c06a7909e4f078579e27dbc))
+* **scene:** уходить со сцены только через зону выхода, как в оригинале ([9321fdd](https://github.com/shpaker/modern-robinson/commit/9321fdd417b1183ccc9f7e947701771f7b76d475))
+* **web:** манифест запрашивается с версией сборки ([db4821b](https://github.com/shpaker/modern-robinson/commit/db4821b311b783d24331fc8ff670d842624b58f8))
+* **web:** манифест запрашивается с версией сборки ([4aaa3bd](https://github.com/shpaker/modern-robinson/commit/4aaa3bd6765286ddbc255d4f7ffd254c23879888))
+* **web:** не ждать разрешения на постоянное хранилище ([3e12680](https://github.com/shpaker/modern-robinson/commit/3e1268042fe70ab84c57085bfb4d061631b2f64b))
+* **web:** не ждать разрешения на постоянное хранилище ([58378df](https://github.com/shpaker/modern-robinson/commit/58378df971da684f0434fa737e7541d1550053fc))
+
 ## 0.1.0 (2026-09-24)
 
 
