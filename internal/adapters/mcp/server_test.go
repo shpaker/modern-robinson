@@ -269,6 +269,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
 		projectURL, "хорошего выживания",
 		"Шкалы героев видишь только ты", "ни чисел, ни названий шкал",
+		"До первой встречи с Пятницей",
 	)
 	if init.ServerInfo.WebsiteURL != projectURL {
 		t.Errorf("website = %q", init.ServerInfo.WebsiteURL)

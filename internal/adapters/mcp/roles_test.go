@@ -116,6 +116,7 @@ func TestThePartyPlaysByTheRules(t *testing.T) {
 		"сам не пиши (SendMessage)",
 		"не ждите подсказок игрока", "Как выглядит чат", "JSON",
 		"Шкал в чате нет", "Ответа не жди",
+		"До неё Роби его не знает", "прочерк и не меняется",
 	)
 	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
 		"тебя не слышат", "«—»", "Не подсказывай",
