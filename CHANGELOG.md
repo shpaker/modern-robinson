@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0](https://github.com/shpaker/modern-robinson/compare/v0.4.0...v0.5.0) (2026-09-26)
+
+
+### Возможности
+
+* **mcp:** модель больше не сохраняется сама ([4cde868](https://github.com/shpaker/modern-robinson/commit/4cde8687e4ffb08c76a9f97d34cf3845d6adc4bb))
+* **mcp:** Пятница — осторожный скептик с ломаной речью ([5c931e3](https://github.com/shpaker/modern-robinson/commit/5c931e3d8f9fe4bfb327931d8d7a6122e5cdab1f))
+* **mcp:** роли в файлах roles/, координатор и герои-сабагенты ([c19e094](https://github.com/shpaker/modern-robinson/commit/c19e09455c0a3d6561ee3c47b9cd2b9b37fe564e))
+* **mcp:** характер Роби — находчивый и самоуверенный горожанин ([0dd7910](https://github.com/shpaker/modern-robinson/commit/0dd79106ccda6a2baba517a7a3a1b1a78d2c6661))
+* ретро-фильтр ЭЛТ ([0e66256](https://github.com/shpaker/modern-robinson/commit/0e66256087de02aa160000bc5a82861cb14599db))
+* фулскрин по клавише F ([7068070](https://github.com/shpaker/modern-robinson/commit/706807034e9918c6d208d0dc1b1f1ebf9eef0e32))
+
+
+### Исправления
+
+* **mcp:** под LockBar говорить, что панель заперта, а не про прокрутку ([11fdf2d](https://github.com/shpaker/modern-robinson/commit/11fdf2dba06e7dd853dd1815d58d0c41a53f3f0d))
+* **mcp:** под LockBar отказывать и в портрете, и в кнопке карты ([2535492](https://github.com/shpaker/modern-robinson/commit/253549270d184c4fe759666b8e4d9dc5e1ac7ef7))
+
+
+### Документация
+
+* игра сабагентами и папка roles ([0a4635b](https://github.com/shpaker/modern-robinson/commit/0a4635b4750f35dfcf51c142c3397a50eb7130fc))
+
 ## [0.4.0](https://github.com/shpaker/modern-robinson/compare/v0.3.0...v0.4.0) (2026-09-26)
 
 
