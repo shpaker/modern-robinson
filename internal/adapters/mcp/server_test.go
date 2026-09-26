@@ -214,6 +214,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"до первой октавы", "ария Пятницы", "на полтона выше или ниже",
 		"Играй честно", "исходники ремейка", "перебор — не игра",
 		"напиши её в чат", "следствие",
+		"накормить и напоить", "жди новой просьбы",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
