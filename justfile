@@ -116,26 +116,28 @@ web-push-data host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_defau
     echo "Ресурсы $(du -sh "$src" | cut -f1) -> {{host}}:{{path}}/v{{version}}/"
     rsync -a --delete --partial -v "$src" "{{host}}:{{path}}/v{{version}}/"
 
-# Собрать архивы для раздачи: бинарник + README + образец настроек
+# Собрать архив для раздачи, как в релизе: бинарники всех систем, README,
+# образец настроек, AGENTS.md для папки игры и скилл
 release version="dev":
     #!/usr/bin/env bash
     set -euo pipefail
-    out=_build/release; rm -rf "$out"; mkdir -p "$out"
-    for target in macos:darwin:arm64:1:robinson_darwin_arm64 \
-                  linux:linux:amd64:0:robinson_linux_amd64 \
-                  windows:windows:amd64:0:robinson_windows_amd64.exe; do
-        IFS=: read -r name goos goarch cgo binary <<<"$target"
-        stage="$out/$name"; mkdir -p "$stage"
+    out=_build/release; top="modern-robinson_{{version}}"; stage="$out/$top"
+    rm -rf "$out"; mkdir -p "$stage/skills"
+    for target in darwin:arm64:1:robinson_darwin_arm64 \
+                  linux:amd64:0:robinson_linux_amd64 \
+                  windows:amd64:0:robinson_windows_amd64.exe; do
+        IFS=: read -r goos goarch cgo binary <<<"$target"
         GOOS="$goos" GOARCH="$goarch" CGO_ENABLED="$cgo" {{gocmd}} build -trimpath \
             -ldflags "-s -w -X {{module}}/internal/app.Version={{version}}" \
             -o "$stage/$binary" ./cmd
-        cp README.md THIRD_PARTY.md "$stage/"
-        cp packaging/config.yml "$stage/"
-        ( cd "$out" && zip -qr "modern-robinson_{{version}}_$name.zip" "$name" )
-        rm -rf "$stage"
     done
+    cp README.md THIRD_PARTY.md packaging/config.yml "$stage/"
+    cp packaging/AGENTS.md "$stage/AGENTS.md"
+    cp -R skills/robinson "$stage/skills/"
+    ( cd "$out" && zip -qrX "$top.zip" "$top" -x '*.DS_Store' )
+    rm -rf "$stage"
     ls -la "$out"
-    echo "Put the binary for your OS next to the game's DATA/ folder; see README.md."
+    echo "Один архив на все системы: бинарник своей системы положить рядом с DATA/ игры, см. README.md."
 
 
 # Запустить (нужна папка игры рядом или путём аргументом)

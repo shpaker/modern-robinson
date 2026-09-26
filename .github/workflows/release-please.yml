@@ -1,7 +1,7 @@
 name: release-please
 
 # release-please keeps a release PR open; merging it cuts the release. A release
-# made with GITHUB_TOKEN starts no other workflow, so the archives are built
+# made with GITHUB_TOKEN starts no other workflow, so the archive is built
 # from here, not from an `on: release` workflow.
 on:
   push:

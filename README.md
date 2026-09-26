@@ -7,7 +7,7 @@
 Репозиторий — <https://github.com/shpaker/modern-robinson>, готовые сборки —
 [Releases](https://github.com/shpaker/modern-robinson/releases).
 
-> Ассетов игры нет ни в репозитории, ни в архивах релиза — нужна своя копия
+> Ассетов игры нет ни в репозитории, ни в архиве релиза — нужна своя копия
 > игры (диск или его образ).
 
 ## Как запустить
@@ -23,18 +23,23 @@
 оказаться `DATA/WAVE/WAVE.DAN`.
 
 **2. Взять сборку** со страницы
-[Releases](https://github.com/shpaker/modern-robinson/releases) — архив своей
-системы:
+[Releases](https://github.com/shpaker/modern-robinson/releases) — архив
+`modern-robinson_<версия>.zip`, один на все системы. В нём одна папка:
+бинарники всех трёх систем, `README.md`, `THIRD_PARTY.md`, образец настроек
+`config.yml`, `AGENTS.md` (правила для агента в папке игры) и скилл
+`skills/robinson` для игры через MCP (см. [«Игра через MCP»](#игра-через-mcp)).
 
-| Система | Архив | Бинарник |
-|---|---|---|
-| Windows x64 | `…_windows.zip` | `robinson_windows_amd64.exe` |
-| macOS на Apple Silicon (M1 и новее) | `…_macos.zip` | `robinson_darwin_arm64` |
-| Linux x86-64 (glibc 2.34+) | `…_linux.zip` | `robinson_linux_amd64` |
+| Система | Бинарник |
+|---|---|
+| Windows x64 | `robinson_windows_amd64.exe` |
+| macOS на Apple Silicon (M1 и новее) | `robinson_darwin_arm64` |
+| Linux x86-64 (glibc 2.34+) | `robinson_linux_amd64` |
 
-Бинарник (и при желании `config.yml`) переложить прямо в папку игры, рядом с
-`DATA`, а не во вложенную папку из архива, и запустить. Или запустить откуда
-угодно, передав путь: `robinson_linux_amd64 /путь/к/папке`.
+Всё из папки архива переложить прямо в папку игры, рядом с `DATA`, а не во
+вложенную папку, и запустить бинарник своей системы. Можно переложить и только
+его (при желании — с `config.yml`): бинарники других систем не нужны, но и не
+мешают. Или запустить откуда угодно, передав путь:
+`robinson_linux_amd64 /путь/к/папке`.
 
 Сборки не подписаны. macOS при первом запуске откажется открыть файл: выполните
 в папке игры `xattr -d com.apple.quarantine robinson_darwin_arm64` или нажмите
@@ -50,8 +55,9 @@ just build
 ./robinson /путь/к/папке
 ```
 Либо положить `robinson` прямо в папку игры и запустить без аргументов.
-Кросс-сборки: `just build-macos|build-linux|build-windows`, архивы для раздачи —
-`just release`. Браузерная версия — [docs/11-web-build.md](docs/11-web-build.md).
+Кросс-сборки: `just build-macos|build-linux|build-windows` (все три —
+`just build-all`), архив для раздачи, как в релизе, — `just release`.
+Браузерная версия — [docs/11-web-build.md](docs/11-web-build.md).
 
 ## Управление
 
@@ -308,7 +314,7 @@ Ebitengine, Apache-2.0); сторонние компоненты и их лиц�
 [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Графика, звук и тексты игры принадлежат правообладателю (Никита). В репозитории
-и архивах релиза их нет. Веб-версия их тоже не содержит: она скачивает набор,
+и архиве релиза их нет. Веб-версия их тоже не содержит: она скачивает набор,
 который `tools/packweb` упаковывает из вашей копии игры, с хоста данных
 (`?data=` — любой другой источник, включая локальный `just web-serve`), а
 фавикон `just build-wasm` берёт из `START.ICO` той же копии.
