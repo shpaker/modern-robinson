@@ -1193,8 +1193,48 @@ func TestLockedBarIsToldNotBlamedOnScroll(t *testing.T) {
 	}
 }
 
+// The portrait and the map button are on the bar too: under LockBar Friday is
+// not asked and the map not unfolded, the driver says why, and the rope end
+// stays held for the click.
+func TestLockedBarShutsPortraitAndMap(t *testing.T) {
+	g := heroGame(t, "SCENA3", map[string]string{
+		"ROBINSON_VARS": "FridIs=1", "ROBINSON_FRID": "2,3",
+	})
+	g.gs.AddItem("rope")
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Бананы", "Веревка")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.awaitsClick() || !g.fridWithHero() {
+		t.Fatalf("awaits = %v friday = %v: no rope end held with Friday by",
+			g.awaitsClick(), g.fridWithHero())
+	}
+	g.gs.UI["map"] = true
+	for _, call := range []struct {
+		name string
+		do   func(context.Context) (types.Outcome, error)
+	}{
+		{"ask_friday", func(ctx context.Context) (types.Outcome, error) {
+			return g.ctl.AskFriday(ctx, "Бананы", "")
+		}},
+		{"map", g.ctl.OpenMap},
+	} {
+		_, err := drive(t, g, call.do)
+		if err == nil || !strings.Contains(err.Error(), "заперта") {
+			t.Errorf("%s: err = %v, want the bar told locked", call.name, err)
+		}
+		if !g.awaitsClick() || g.gs.ActiveChar != "Roby" {
+			t.Errorf("%s: awaits = %v, control with %s: want the rope end "+
+				"still in Roby's hand", call.name, g.awaitsClick(),
+				g.gs.ActiveChar)
+		}
+	}
+}
+
 // Under LockBar the bar click is refused before it is made, naming the item
-// the game waits on; the item already in hand needs no click and passes.
+// the game waits on; the item already in hand needs no click and passes, and
+// so does the character already in control. The portrait is shut as well.
 func TestBarClickUnderLockBarSaysSo(t *testing.T) {
 	g := &Game{gs: types.NewGameState(), mode: modePlay}
 	g.gs.AddItem("pole")
@@ -1209,6 +1249,13 @@ func TestBarClickUnderLockBarSaysSo(t *testing.T) {
 	}
 	if done, err := g.barClick("pole"); !done || err != nil {
 		t.Errorf("the item in hand: done = %v err = %v", done, err)
+	}
+	if err := g.takeControl("Frid"); err == nil ||
+		!strings.Contains(err.Error(), "заперта") {
+		t.Errorf("the portrait: err = %v, want the bar told locked", err)
+	}
+	if err := g.takeControl("Roby"); err != nil {
+		t.Errorf("control already with Roby: err = %v", err)
 	}
 	g.gs.UI["barlock"] = false
 	if _, err := g.barClick("rope"); err == nil ||

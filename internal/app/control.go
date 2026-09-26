@@ -495,6 +495,9 @@ func (c *control) OpenMap(ctx context.Context) (types.Outcome, error) {
 			case !g.gs.UI["map"] || g.bar == nil:
 				return errors.New("карты острова ещё нет")
 			}
+			if err := g.barShut(); err != nil {
+				return err
+			}
 			if err := g.takeControl("Roby"); err != nil {
 				return err
 			}
@@ -887,6 +890,9 @@ func (g *Game) takeControl(who string) error {
 	if strings.EqualFold(g.gs.ActiveChar, who) {
 		return nil
 	}
+	if err := g.barShut(); err != nil {
+		return err
+	}
 	if g.bar != nil {
 		g.click(boxCentre(g.bar.CharBox))
 	}
@@ -897,6 +903,17 @@ func (g *Game) takeControl(who string) error {
 		return errors.New("управление Роби не вернулось")
 	}
 	return nil
+}
+
+// barShut refuses a click on the bar under LockBar: the script holds the item
+// in hand for the player's click (awaitsClick), and the bar — items, arrows,
+// portrait, map button — answers no click until it is used.
+func (g *Game) barShut() error {
+	if !g.gs.UI["barlock"] {
+		return nil
+	}
+	return fmt.Errorf("панель заперта: игра ждёт, что ты применишь «%s» — "+
+		"к чему-то вокруг или к себе", g.itemLabel(g.gs.Active))
 }
 
 // barBeat is how long the bar holds after each click the driver makes on it,
@@ -947,11 +964,8 @@ func (g *Game) barClick(name string) (bool, error) {
 	if strings.EqualFold(g.gs.Active, inv[idx]) {
 		return true, nil
 	}
-	if g.gs.UI["barlock"] {
-		// LockBar: the script holds the item in hand for the player's click
-		// (awaitsClick), and the bar answers no click until it is used.
-		return false, fmt.Errorf("панель заперта: игра ждёт, что ты применишь "+
-			"«%s» — к чему-то вокруг или к себе", g.itemLabel(g.gs.Active))
+	if err := g.barShut(); err != nil {
+		return false, err
 	}
 	if g.bar == nil {
 		return false, errors.New("панели нет")
