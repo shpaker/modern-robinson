@@ -116,8 +116,8 @@ web-push-data host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_defau
     echo "Ресурсы $(du -sh "$src" | cut -f1) -> {{host}}:{{path}}/v{{version}}/"
     rsync -a --delete --partial -v "$src" "{{host}}:{{path}}/v{{version}}/"
 
-# Собрать архив для раздачи, как в релизе: бинарники всех систем, README,
-# образец настроек, AGENTS.md для папки игры и скилл
+# Собрать архив для раздачи, как в релизе: бинарники всех систем, запускалку,
+# README, образец настроек, AGENTS.md и .mcp.json для папки игры и скилл
 release version="dev":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -125,19 +125,20 @@ release version="dev":
     rm -rf "$out"; mkdir -p "$stage/skills"
     for target in darwin:arm64:1:robinson_darwin_arm64 \
                   linux:amd64:0:robinson_linux_amd64 \
-                  windows:amd64:0:robinson_windows_amd64.exe; do
+                  windows:amd64:0:robinson.exe; do
         IFS=: read -r goos goarch cgo binary <<<"$target"
         GOOS="$goos" GOARCH="$goarch" CGO_ENABLED="$cgo" {{gocmd}} build -trimpath \
             -ldflags "-s -w -X {{module}}/internal/app.Version={{version}}" \
             -o "$stage/$binary" ./cmd
     done
-    cp README.md THIRD_PARTY.md packaging/config.yml "$stage/"
+    cp README.md THIRD_PARTY.md packaging/config.yml packaging/.mcp.json "$stage/"
+    install -m 0755 packaging/robinson "$stage/"
     cp packaging/AGENTS.md "$stage/AGENTS.md"
     cp -R skills/robinson "$stage/skills/"
     ( cd "$out" && zip -qrX "$top.zip" "$top" -x '*.DS_Store' )
     rm -rf "$stage"
     ls -la "$out"
-    echo "Один архив на все системы: бинарник своей системы положить рядом с DATA/ игры, см. README.md."
+    echo "Один архив на все системы: всё из него, и .mcp.json тоже, положить рядом с DATA/ игры, см. README.md."
 
 
 # Запустить (нужна папка игры рядом или путём аргументом)

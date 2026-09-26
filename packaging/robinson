@@ -1,0 +1,13 @@
+#!/bin/sh
+# Запускает сборку своей системы из этой же папки: так у .mcp.json одна
+# команда на все системы. В Windows вместо этого файла запускается
+# robinson.exe — туда имя без расширения дополняется само.
+case $(uname -sm) in
+"Darwin arm64") bin=robinson_darwin_arm64 ;;
+"Linux x86_64") bin=robinson_linux_amd64 ;;
+*)
+	echo "robinson: no build for $(uname -sm), see README.md" >&2
+	exit 1
+	;;
+esac
+exec "$(dirname "$0")/$bin" "$@"

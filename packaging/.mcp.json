@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "robinson": {
+      "type": "stdio",
+      "command": "./robinson",
+      "args": ["-mcp"]
+    }
+  }
+}
