@@ -1,14 +1,17 @@
-// Package mcp serves the hero over the Model Context Protocol: a client — a
-// language model — plays Robinson himself. The server hands it data only:
-// what the hero sees, holds and hears, and what changed (interfaces.IControl);
-// every word said as the hero is the client's own. The game starts it with
-// -mcp and talks over stdin/stdout.
+// Package mcp serves the game over the Model Context Protocol to a client —
+// a language model — and the subagents it runs: the coordinator passes the
+// game's answers on, the narrator tells the story, Robinson decides, Friday
+// advises. The server hands out data only: what the hero sees, holds and
+// hears, and what changed (interfaces.IControl); every word said is the
+// client's own. Who plays what is told by text files, the roles (roles.go).
+// The game starts it with -mcp and talks over stdin/stdout.
 package mcp
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -20,163 +23,6 @@ import (
 
 // projectURL is where the remake lives.
 const projectURL = "https://github.com/shpaker/modern-robinson"
-
-// instructions is the part the client plays and what the data it gets
-// means. The server hands out data only — names, sides, lines, what changed;
-// every word said as the hero is the client's own.
-const instructions = `Ты — Роби, Робинзон: обычного горожанина занесло на ` +
-	`необитаемый остров, и надо с него выбраться. Ты и есть он: всё, что ` +
-	`приходит от игры, — это то, что ты видишь, слышишь и держишь в руках. ` +
-	`В чат пиши только от себя, как Роби, своими словами: что думаешь, что ` +
-	`чувствуешь, что задумал. Готовых фраз нет — говори сам, по тому, что ` +
-	`происходит. Какой Роби, узнавай из того, что он сам говорит в игре ` +
-	`(said, hearing).
-
-` + thinkFirst + `
-
-` + fairPlay + `
-
-` + playerTask + `
-
-Что приходит от игры (JSON):
-- where — где ты: остров, карта острова, головоломка, заставка, пауза; ` +
-	`busy — что сейчас идёт, пока действовать нельзя.
-- around — что вокруг (name, side: слева, справа, рядом); exits — куда ` +
-	`можно уйти; на карте острова around — это места.
-- hands — что в руках (empty_hands — руки свободны), carry — что ещё с ` +
-	`собой; friday — Пятница рядом и её вещи; map — карту можно развернуть.
-- hearing — реплика на экране; said — все реплики, прозвучавшие за ` +
-	`действие, твои и чужие.
-- heard — что прозвучало в головоломке за действие, по порядку: ` +
-	`взял, повернул, встало, не туда, победа и другие. Орган слышен ` +
-	`нотами: название и октава (до4 — до первой октавы), глухо — без ` +
-	`ноты; ария Пятницы — один звук: «ария:» и её ноты по порядку. ` +
-	`Свистит он неточно: нота арии — ближайшая к свисту, а задумана ` +
-	`могла быть на полтона выше или ниже.
-- reacted — мир откликнулся на действие; ready — можно действовать ` +
-	`дальше; look — что вокруг после действия.
-- changes — что изменилось: new_place, gained и lost (вещи), appeared и ` +
-	`vanished (вокруг), opened и closed (выходы), friday_came, friday_left, ` +
-	`map_gained, misses — сколько действий подряд ни к чему не привели.
-
-Инструменты:
-- look — осмотреться; с image — ещё и картинка того, что в окне; с ` +
-	`grid — картинка с сеткой координат через 40 px: x подписан сверху, ` +
-	`y слева. grid есть и у puzzle_click, puzzle_move и wait; кликать по ` +
-	`координатам можно только в головоломке. С region {x0,y0,x1,y1} look ` +
-	`даёт крупный план этой части картинки (не больше 320×240), чтобы ` +
-	`точнее прицелиться: координаты в сетке на нём — экранные, а region ` +
-	`в ответе — что показано и во сколько раз (scale) увеличено.
-- use — подойти и применить к чему-то вещь из рук; с item — сначала взять ` +
-	`эту вещь. «Рука» — пустые руки: взять, потрогать, осмотреть, ` +
-	`заговорить. target «себя» — сделать что-то с вещью самому: смотря ` +
-	`по вещи, надеть её или положить рядом с собой.
-- go — уйти через выход; на карте острова — отправиться в место.
-- map — развернуть карту острова, когда она есть.
-- ask_friday — попросить Пятницу применить её вещь к чему-то (или к себе), ` +
-	`пока она рядом.
-- wait — переждать сцену или просто подождать. Головоломка ждёт ` +
-	`твоего хода: время в ней идёт, только пока идёт твой ход или wait, ` +
-	`а между вызовами стоит; wait с seconds даёт ей идти столько секунд ` +
-	`— так летит воздушный шар.
-- puzzle_click, puzzle_give_up — головоломки решаются кликами по ` +
-	`картинке (экран 640×480) или бросаются. Ответ на ход приходит, ` +
-	`когда головоломка доиграла то, что он начал (мелодию, ход ` +
-	`соперника), а после победы — когда она закрылась.
-- puzzle_move — перенести деталь одним ходом, как мышью: клик в from, ` +
-	`turns правых кликов и клик в to; если клик в from ничего не взял и ` +
-	`не выделил, дальше не идёт. Взятая деталь висит на указателе ` +
-	`серединой: to — место её середины. Кусок из нескольких частей висит ` +
-	`на одной из них — его сначала возьми puzzle_click и посмотри.
-- save и load — вне роли: служебное сохранение партии в слоты 0–11.
-
-` + puzzleRules + `
-
-Сохраняйся регулярно, не дожидаясь просьбы: после каждого успеха ` +
-	`(в changes появилась вещь, новое место, открылся выход, решена ` +
-	`головоломка) и перед тем, что может плохо кончиться. Чередуй слоты ` +
-	`10 и 11, чтобы неудачное сохранение не отрезало путь назад; слоты ` +
-	`0–9 — игрока, их без просьбы не трогай.
-
-Не все пути открыты сразу: некоторые выходы появляются, только когда ` +
-	`сделаешь что-то нужное — здесь или в другом месте. Если reacted=false ` +
-	`и никто ничего не сказал — так не выйдет. Не бери наугад следующую ` +
-	`вещь — вернись к тому, что видел и слышал, и подумай, чего не хватает. ` +
-	`Имена вещей, мест и выходов передавай в точности как в данных. Ты ` +
-	`знаешь только то, что видит и слышит герой: подсказок игра не даёт.
-
-Проект: ` + projectURL + `. Перед первым ходом поприветствуй игрока ` +
-	`своими словами, дай ему эту ссылку и пожелай хорошего выживания.`
-
-// thinkFirst is how the client plays: a thought before every action, as the
-// user put it.
-const thinkFirst = "Перед каждым действием модель пишет в чат мысль от лица " +
-	"Роби: что вижу, что знаю, чего хочу и почему именно это. После ответа — " +
-	"короткая реакция. Не перебирать вещи на всём подряд, а связывать " +
-	"услышанное с увиденным. Если ничего не выходит, остановиться и " +
-	"подумать, что упускаешь."
-
-// fairPlay is what playing fair means: the world learnt from the game's
-// answers alone, moves made through these tools alone, no guessing down a
-// list — every action has its own reason, told in the chat before the call,
-// and what came of it is told after.
-const fairPlay = "Играй честно: мир ты узнаёшь только из ответов игры. " +
-	"Не открывай и не разбирай её файлы — ресурсы, скрипты, сохранения — " +
-	"и исходники ремейка, не ищи прохождения и подсказки ни в сети, ни в " +
-	"файлах: подсказать может только сам игрок. В игре действуй только " +
-	"инструментами этого сервера, без своих скриптов, циклов и обёрток " +
-	"вокруг неё. Не перебирай вслепую — вещь за вещью на всём подряд, " +
-	"клики наугад: перебор — не игра. Пробовать можно, но каждая попытка " +
-	"— из своей догадки о том, что видел и слышал. У каждого действия " +
-	"своя причина, не общая на серию и не заготовка: перед вызовом напиши " +
-	"её в чат, а why — её короткий пересказ, не замена. После ответа " +
-	"напиши в чат и следствие: что вышло и что ты из этого понял. С wait " +
-	"в головоломке — так же."
-
-// playerTask is what the client plays: the whole game or the piece the player
-// asks for, with the player free to move at the window and to give hints.
-const playerTask = "Делаешь то, о чём просит игрок: всю игру или кусок — " +
-	"например, накормить и напоить Роби, решить головоломку, добраться до " +
-	"какого-то места. Просто «сыграй» — вся игра. Сделал кусок — или " +
-	"понял, что дальше без игрока не выйдет, — сохранись, скажи в чат, что " +
-	"вышло, и жди новой просьбы. Игрок может между твоими ходами ходить и " +
-	"сам, в окне игры: если он так делал, сначала осмотрись (look) — мир " +
-	"мог измениться. Его подсказки словами бери в расчёт, а его партию из " +
-	"слотов 0–9 загружай, когда попросит."
-
-// puzzleRules is what the player knows of the puzzles: the game's manual
-// retold, each game by the name it goes by on screen — the controls and the
-// goal, and nothing the manual keeps back. A rule the remake does not keep
-// yet (todo.md, stage 8) stays out until it does.
-const puzzleRules = `Головоломки — что о них сказано в руководстве к ` +
-	`игре. Дискета на экране или Esc (puzzle_give_up) — выйти без ` +
-	`результата; сохраниться посреди головоломки нельзя.
-- Хижина — мозаика: левый клик прилепляет деталь к указателю, правый ` +
-	`поворачивает её на 90° по часовой, ещё один левый отпускает. Строят ` +
-	`снизу: с крыши дом не начинают.
-- Карта — тоже мозаика с теми же кликами. Верно приложенные куски ` +
-	`притягиваются друг к другу в один фрагмент, а после выхода собранное ` +
-	`снова перемешано.
-- Записка — шифр: каждая закорючка — своя русская буква; подумай, кто, ` +
-	`кому и в каком положении её написал. Букву сверху кликом берут и ` +
-	`кликом ставят на закорючку — заменяются все такие же; клик по ` +
-	`поставленной возвращает её отовсюду, левая нижняя кнопка — все буквы.
-- Воздушный шар — перелететь на другой остров, ловя на разной высоте ` +
-	`ветер в нужную сторону. Клик по Роби сбрасывает камень (шар чуть ` +
-	`выше), по Пятнице — выпускает воздух (ниже); высота и курс — на ` +
-	`приборах, острова и шар — на карте слева внизу. Долетел — значит ` +
-	`прошёл над островом не выше 300 м.
-- Мелодия на органе — сначала надо собрать все его части: пока не все ` +
-	`окошки сверху заполнены, мотив не подобрать, остаётся выйти (Esc) и ` +
-	`искать недостающие. Когда все на месте — подобрать мотив, который ` +
-	`насвистел Пятница: предмет сверху кликом берут и кликом ставят в ` +
-	`трубочку внизу; клик по маленькому туземцу с перьями — послушать, ` +
-	`что вышло, а клик по Пятнице — он насвистит арию ещё раз.
-- Шашки с пиратом — стаканы вместо шашек, бутылки вместо дамок. Клик ` +
-	`по своему стакану обводит клетку под ним красной рамкой, клик по ` +
-	`клетке — ход, если он по правилам. Бить обязательно; в серии взятий ` +
-	`каждый прыжок — отдельно: первый puzzle_move, следующие puzzle_click ` +
-	`по очередной клетке.`
 
 type lookIn struct {
 	Image  bool      `json:"image,omitempty"  jsonschema:"приложить картинку того, что сейчас в окне"`
@@ -193,23 +39,23 @@ type lookOut struct {
 type useIn struct {
 	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — самому: надеть или положить рядом"`
 	Item   string `json:"item,omitempty" jsonschema:"какую вещь взять в руки перед этим; пусто — ту, что уже в руках"`
-	Why    string `json:"why"            jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Why    string `json:"why"            jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 type goIn struct {
 	To  string `json:"to"  jsonschema:"куда: имя из exits, а на карте острова — место из around"`
-	Why string `json:"why" jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Why string `json:"why" jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 type askIn struct {
-	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница сама, без цели"`
-	Item   string `json:"item,omitempty" jsonschema:"какую свою вещь ей взять; пусто — ту, что у неё в руках"`
-	Why    string `json:"why"            jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница сам, без цели"`
+	Item   string `json:"item,omitempty" jsonschema:"какую свою вещь ему взять; пусто — ту, что у него в руках"`
+	Why    string `json:"why"            jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 // whyIn is an action that takes nothing but its reason.
 type whyIn struct {
-	Why string `json:"why" jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Why string `json:"why" jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 type waitIn struct {
@@ -222,7 +68,7 @@ type clickIn struct {
 	Y      int    `json:"y"                jsonschema:"y на экране головоломки, 0..479"`
 	Button string `json:"button,omitempty" jsonschema:"left (по умолчанию) или right"`
 	Grid   bool   `json:"grid,omitempty"   jsonschema:"сетка координат через 40 px на картинке ответа"`
-	Why    string `json:"why"              jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Why    string `json:"why"              jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 type moveIn struct {
@@ -232,7 +78,7 @@ type moveIn struct {
 	ToY   int    `json:"to_y"            jsonschema:"y, куда её положить (туда придёт её середина), 0..479"`
 	Turns int    `json:"turns,omitempty" jsonschema:"сколько раз повернуть её у цели правой кнопкой, 0..3"`
 	Grid  bool   `json:"grid,omitempty"  jsonschema:"сетка координат через 40 px на картинке ответа"`
-	Why   string `json:"why"             jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
+	Why   string `json:"why"             jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
 type slotIn struct {
@@ -243,59 +89,82 @@ type savedOut struct {
 	Slot int `json:"slot"`
 }
 
-type server struct{ c interfaces.IControl }
+type roleIn struct {
+	Who string `json:"who" jsonschema:"чья роль: coordinator — основная модель, narrator — рассказчик, robinson — Роби, friday — Пятница"`
+}
 
-// newServer builds the MCP server over a controlled hero.
-func newServer(c interfaces.IControl, version string) *sdk.Server {
-	s := &server{c: c}
+type server struct {
+	c interfaces.IControl
+	r roles
+}
+
+// newServer builds the MCP server over a controlled hero, with the roles it
+// hands out.
+func newServer(
+	c interfaces.IControl, version string, r roles,
+) (*sdk.Server, error) {
+	instr, err := r.instructions()
+	if err != nil {
+		return nil, err
+	}
+	s := &server{c: c, r: r}
 	srv := sdk.NewServer(
 		&sdk.Implementation{
 			Name: "robinson", Title: "Новый Робинзон", Version: version,
 			WebsiteURL: projectURL,
 		},
-		&sdk.ServerOptions{Instructions: instructions},
+		&sdk.ServerOptions{Instructions: instr},
 	)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
+		Name:  "role",
+		Title: "Роль (вне игры)",
+		Description: "Полный текст роли: её файл из папки roles рядом с " +
+			"игрой и общие правила. Первым делом возьми свою: основная " +
+			"модель — coordinator, сабагент — своё имя. Есть: " +
+			strings.Join(r.names(), ", ") + ".",
+		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true},
+	}, s.role)
+	add(srv, &sdk.Tool{
 		Name:        "look",
 		Title:       "Осмотреться",
 		Description: "Где ты, что вокруг, выходы, что в руках и с собой.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true},
 	}, s.look)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:        "use",
 		Title:       "Применить",
 		Description: "Подойти и применить вещь из рук к тому, что вокруг, или к себе.",
 	}, s.use)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:        "go",
 		Title:       "Уйти",
 		Description: "Уйти через выход; на карте острова — отправиться в место.",
 	}, s.goTo)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:        "map",
 		Title:       "Карта острова",
 		Description: "Развернуть карту острова, если она есть.",
 	}, s.openMap)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:        "ask_friday",
 		Title:       "Попросить Пятницу",
-		Description: "Попросить Пятницу применить её вещь к чему-то или к себе.",
+		Description: "Попросить Пятницу применить его вещь к чему-то или к себе.",
 	}, s.askFriday)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:  "wait",
 		Title: "Подождать",
 		Description: "Переждать сцену или подождать столько секунд. " +
 			"Головоломка между вызовами стоит, а wait даёт ей идти " +
 			"столько секунд.",
 	}, s.wait)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:  "puzzle_click",
 		Title: "Клик в головоломке",
 		Description: "Кликнуть по экрану головоломки 640×480; отвечает, " +
 			"когда она доиграла начатое, картинкой и тем, что прозвучало " +
 			"(heard).",
 	}, s.puzzleClick)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:  "puzzle_move",
 		Title: "Перенести в головоломке",
 		Description: "Перенести деталь, как мышью: клик в from берёт её, " +
@@ -305,38 +174,64 @@ func newServer(c interfaces.IControl, version string) *sdk.Server {
 			"частей — на одной из них. Отвечает, когда головоломка " +
 			"доиграла начатое, картинкой и тем, что прозвучало (heard).",
 	}, s.puzzleMove)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:  "puzzle_give_up",
 		Title: "Бросить головоломку",
 		Description: "Оставить головоломку нерешённой, как по Esc, " +
 			"когда она доиграла начатое.",
 	}, s.puzzleGiveUp)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:  "save",
 		Title: "Сохранить (вне роли)",
 		Description: "Вне роли: сохранить партию в слот 0–11. Сохраняйся " +
 			"после каждого успеха, чередуя слоты 10 и 11.",
 	}, s.save)
-	sdk.AddTool(srv, &sdk.Tool{
+	add(srv, &sdk.Tool{
 		Name:        "load",
 		Title:       "Загрузить (вне роли)",
 		Description: "Вне роли: загрузить партию из слота 0–11.",
 	}, s.load)
-	return srv
+	return srv, nil
 }
 
-// ServeStdio serves the hero over stdin and stdout until the client hangs up.
-// stdout belongs to the protocol from here on: whatever else the process
-// prints goes to stderr.
+// add offers a tool the client keeps in view from the start: Claude Code
+// otherwise defers MCP tools behind a search, a subagent's ones too.
+func add[In, Out any](
+	srv *sdk.Server, t *sdk.Tool, h sdk.ToolHandlerFor[In, Out],
+) {
+	t.Meta = sdk.Meta{"anthropic/alwaysLoad": true}
+	sdk.AddTool(srv, t, h)
+}
+
+// ServeStdio serves the hero over stdin and stdout until the client hangs up,
+// with the roles of the given folders laid over the built-in ones. stdout
+// belongs to the protocol from here on: whatever else the process prints
+// goes to stderr.
 func ServeStdio(
-	ctx context.Context, c interfaces.IControl, version string,
+	ctx context.Context, c interfaces.IControl, version string, dirs ...fs.FS,
 ) error {
+	srv, err := newServer(c, version, newRoles(dirs...))
+	if err != nil {
+		return err
+	}
 	out, err := claimStdout()
 	if err != nil {
 		return err
 	}
-	return newServer(c, version).Run(ctx,
-		&sdk.IOTransport{Reader: os.Stdin, Writer: out})
+	return srv.Run(ctx, &sdk.IOTransport{Reader: os.Stdin, Writer: out})
+}
+
+// role hands out who's role: its own text followed by the shared ones.
+func (s *server) role(
+	_ context.Context, _ *sdk.CallToolRequest, in roleIn,
+) (*sdk.CallToolResult, any, error) {
+	text, err := s.r.role(strings.TrimSpace(in.Who))
+	if err != nil {
+		return nil, nil, err
+	}
+	return &sdk.CallToolResult{
+		Content: []sdk.Content{&sdk.TextContent{Text: text}},
+	}, nil, nil
 }
 
 func (s *server) look(
@@ -454,12 +349,12 @@ func (s *server) load(
 
 // errNoWhy refuses an action taken without a reason.
 var errNoWhy = errors.New(
-	"why пуст: сначала напиши в чат, зачем это действие, и коротко повтори в why",
+	"why пуст: сначала причина героя — в чат, а коротко — в why",
 )
 
 // reasoned refuses an action whose reason is blank: every action is meant to
-// come after a thought written in the chat (thinkFirst, fairPlay). The reason
-// stays with the client; the game never sees it.
+// come after the hero's thought put in the chat (roles/common.md). The
+// reason stays with the client; the game never sees it.
 func reasoned(why string) error {
 	if strings.TrimSpace(why) == "" {
 		return errNoWhy

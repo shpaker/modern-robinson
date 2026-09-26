@@ -117,7 +117,7 @@ web-push-data host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_defau
     rsync -a --delete --partial -v "$src" "{{host}}:{{path}}/v{{version}}/"
 
 # Собрать архив для раздачи, как в релизе: бинарники всех систем, запускалку,
-# README, образец настроек, AGENTS.md и .mcp.json для папки игры и скилл
+# README, образец настроек, AGENTS.md и .mcp.json для папки игры, скилл и роли
 release version="dev":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -135,6 +135,7 @@ release version="dev":
     install -m 0755 packaging/robinson "$stage/"
     cp packaging/AGENTS.md "$stage/AGENTS.md"
     cp -R skills/robinson "$stage/skills/"
+    cp -R internal/adapters/mcp/roles "$stage/"
     ( cd "$out" && zip -qrX "$top.zip" "$top" -x '*.DS_Store' )
     rm -rf "$stage"
     ls -la "$out"

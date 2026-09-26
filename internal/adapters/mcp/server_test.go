@@ -118,12 +118,22 @@ func (h *hero) Load(_ context.Context, slot int) (types.Outcome, error) {
 	return h.out, h.err
 }
 
-// connect serves the hero to an in-memory client.
+// connect serves the hero to an in-memory client, with the built-in roles.
 func connect(t *testing.T, h *hero) *sdk.ClientSession {
+	t.Helper()
+	return connectWith(t, h, newRoles())
+}
+
+// connectWith serves the hero to an in-memory client, with the given roles.
+func connectWith(t *testing.T, h *hero, r roles) *sdk.ClientSession {
 	t.Helper()
 	ctx := context.Background()
 	st, ct := sdk.NewInMemoryTransports()
-	if _, err := newServer(h, "test").Connect(ctx, st, nil); err != nil {
+	srv, err := newServer(h, "test", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	cs, err := sdk.NewClient(&sdk.Implementation{Name: "t"}, nil).
@@ -184,8 +194,34 @@ var beach = types.Percept{
 	Map:        true,
 }
 
-// The server offers the hero's eleven tools and the part to play: who he is,
-// what the data means, and no words to say.
+// roleOf is who's role as the role tool hands it out.
+func roleOf(t *testing.T, cs *sdk.ClientSession, who string) string {
+	t.Helper()
+	res := call(t, cs, "role", map[string]any{"who": who})
+	if res.IsError {
+		t.Fatalf("role %s: %s", who, text(res))
+	}
+	return text(res)
+}
+
+// prose is a text with its lines run together, the way it reads: the role
+// files wrap their lines.
+func prose(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// lacks reports the phrases a text does not carry.
+func lacks(t *testing.T, what, s string, want ...string) {
+	t.Helper()
+	s = prose(s)
+	for _, w := range want {
+		if !strings.Contains(s, w) {
+			t.Errorf("%s lacks %q", what, w)
+		}
+	}
+}
+
+// The server offers the hero's twelve tools, short instructions that send
+// each player to its role, and the roles: who the hero is, what the data
+// means, and no words to say.
 func TestServerOffersTheHerosTools(t *testing.T) {
 	cs := connect(t, &hero{look: beach})
 	res, err := cs.ListTools(context.Background(), nil)
@@ -199,27 +235,33 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"ask_friday", "go", "load", "look", "map",
-		"puzzle_click", "puzzle_give_up", "puzzle_move", "save", "use",
-		"wait",
+		"puzzle_click", "puzzle_give_up", "puzzle_move", "role", "save",
+		"use", "wait",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("tools = %v, want %v", got, want)
 	}
 	init := cs.InitializeResult()
-	for _, want := range []string{
+	lacks(t, "the instructions", init.Instructions,
+		"role", "who=coordinator", "narrator", "robinson", "friday",
+		"сабагент", "координатор без голоса", "Claude Desktop",
+		"по-старому", "Играй честно", projectURL,
+	)
+	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"Ты — Роби", "Готовых фраз нет", "changes", "misses",
-		"некоторые выходы появляются", projectURL, "хорошего выживания",
-		"Сохраняйся регулярно", "слоты 10 и 11",
+		"некоторые выходы появляются",
 		"heard", "видит и слышит", "puzzle_move", "серединой",
 		"до первой октавы", "ария Пятницы", "на полтона выше или ниже",
 		"Играй честно", "исходники ремейка", "перебор — не игра",
-		"напиши её в чат", "следствие",
+		"уходит в чат до вызова", "следствие",
+	)
+	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
+		"сохраняйся регулярно", "слоты 10 и 11",
 		"накормить и напоить", "жди новой просьбы",
-	} {
-		if !strings.Contains(init.Instructions, want) {
-			t.Errorf("the instructions lack %q", want)
-		}
-	}
+	)
+	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
+		projectURL, "хорошего выживания",
+	)
 	if init.ServerInfo.WebsiteURL != projectURL {
 		t.Errorf("website = %q", init.ServerInfo.WebsiteURL)
 	}
@@ -408,15 +450,14 @@ func TestActionsNeedAReason(t *testing.T) {
 	if len(h.calls) > 0 {
 		t.Errorf("an action without a reason reached the game: %q", h.calls)
 	}
-	instr := connect(t, h).InitializeResult().Instructions
-	if !strings.Contains(instr, thinkFirst) {
-		t.Error("the instructions lack the thought before every action")
-	}
-	if !strings.Contains(instr, fairPlay) {
-		t.Error("the instructions lack the rule of fair play")
-	}
-	if strings.Contains(instr, "пробуй другое") {
-		t.Error("the instructions still send the client to try the next thing")
+	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
+		"Перед каждым решением — мысль от лица Роби",
+		"У каждого действия своя причина",
+	)
+	for _, who := range newRoles().names() {
+		if strings.Contains(roleOf(t, cs, who), "пробуй другое") {
+			t.Errorf("%s's role sends the client to try the next thing", who)
+		}
 	}
 }
 
@@ -457,24 +498,33 @@ func TestPuzzleMoveNamesBothEnds(t *testing.T) {
 	}
 }
 
-// The instructions retell the manual's puzzle rules: every game by the name
-// the player sees it under, and not a number the manual does not give — no
+// puzzleRules is the manual's puzzle rules as the roles carry them.
+func puzzleRules(t *testing.T) string {
+	t.Helper()
+	rules, err := newRoles().file("puzzles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prose(rules)
+}
+
+// Every role retells the manual's puzzle rules: every game by the name the
+// player sees it under, and not a number the manual does not give — no
 // spots on the screen, no tolerances; the only words not in Russian are the
 // key and the tools the player has.
-func TestInstructionsRetellThePuzzleRules(t *testing.T) {
-	init := connect(t, &hero{look: beach}).InitializeResult()
-	if !strings.Contains(init.Instructions, puzzleRules) {
-		t.Error("the instructions lack the puzzle rules")
+func TestRolesRetellThePuzzleRules(t *testing.T) {
+	cs := connect(t, &hero{look: beach})
+	puzzleRules := puzzleRules(t)
+	for _, who := range newRoles().names() {
+		if !strings.Contains(prose(roleOf(t, cs, who)), puzzleRules) {
+			t.Errorf("%s's role lacks the puzzle rules", who)
+		}
 	}
-	for _, want := range []string{
+	lacks(t, "the puzzle rules", puzzleRules,
 		"Хижина", "Карта", "Записка", "Воздушный шар", "Мелодия на органе",
 		"Шашки с пиратом", "Esc", "сохраниться посреди головоломки нельзя",
 		"по Пятнице — он насвистит арию ещё раз",
-	} {
-		if !strings.Contains(puzzleRules, want) {
-			t.Errorf("the puzzle rules lack %q", want)
-		}
-	}
+	)
 	bare := strings.NewReplacer("90°", "", "300 м", "").Replace(puzzleRules)
 	for _, w := range strings.Fields(bare) {
 		if strings.IndexFunc(w, unicode.IsDigit) >= 0 {
@@ -494,7 +544,7 @@ func TestInstructionsRetellThePuzzleRules(t *testing.T) {
 }
 
 // A puzzle stands between calls, and the client is told so where it acts:
-// the instructions and the wait tool say a wait is the puzzle's time — the
+// the roles and the wait tool say a wait is the puzzle's time — the
 // balloon's flight too — and a move answers once the puzzle has played out.
 // The manual retold says nothing of it: the player's balloon flies on.
 func TestWaitIsThePuzzlesTime(t *testing.T) {
@@ -510,16 +560,11 @@ func TestWaitIsThePuzzlesTime(t *testing.T) {
 				tool.Description)
 		}
 	}
-	init := cs.InitializeResult()
-	for _, want := range []string{
+	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"между вызовами стоит", "wait с seconds", "летит воздушный шар",
 		"доиграла",
-	} {
-		if !strings.Contains(init.Instructions, want) {
-			t.Errorf("the instructions lack %q", want)
-		}
-	}
-	if strings.Contains(puzzleRules, "wait") {
+	)
+	if strings.Contains(puzzleRules(t), "wait") {
 		t.Error("the manual retold speaks of the wait tool")
 	}
 }
@@ -597,14 +642,9 @@ func TestGridIsOffered(t *testing.T) {
 			t.Errorf("%s: grid = %v %q", tool.Name, has, p.Type)
 		}
 	}
-	init := cs.InitializeResult()
-	for _, want := range []string{
+	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"с grid", "40 px", "x подписан сверху", "только в головоломке",
-	} {
-		if !strings.Contains(init.Instructions, want) {
-			t.Errorf("the instructions lack %q", want)
-		}
-	}
+	)
 }
 
 // images is how many pictures a reply carries.
@@ -697,13 +737,8 @@ func TestRegionIsOffered(t *testing.T) {
 			t.Errorf("region requires %v", p.Required)
 		}
 	}
-	init := cs.InitializeResult()
-	for _, want := range []string{
+	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"region {x0,y0,x1,y1}", "крупный план", "точнее прицелиться",
 		"экранные", "scale",
-	} {
-		if !strings.Contains(init.Instructions, want) {
-			t.Errorf("the instructions lack %q", want)
-		}
-	}
+	)
 }

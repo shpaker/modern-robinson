@@ -36,6 +36,7 @@ func main() {
 		go func() {
 			if err := mcp.ServeStdio(
 				context.Background(), hero, app.Version,
+				app.Roles(root)...,
 			); err != nil {
 				log.Print(err)
 			}
