@@ -947,6 +947,12 @@ func (g *Game) barClick(name string) (bool, error) {
 	if strings.EqualFold(g.gs.Active, inv[idx]) {
 		return true, nil
 	}
+	if g.gs.UI["barlock"] {
+		// LockBar: the script holds the item in hand for the player's click
+		// (awaitsClick), and the bar answers no click until it is used.
+		return false, fmt.Errorf("панель заперта: игра ждёт, что ты применишь "+
+			"«%s» — к чему-то вокруг или к себе", g.itemLabel(g.gs.Active))
+	}
 	if g.bar == nil {
 		return false, errors.New("панели нет")
 	}
@@ -1248,6 +1254,7 @@ func (g *Game) percept() types.Percept {
 	if p.Where == types.WherePause || p.Where == types.WherePuzzle {
 		return p
 	}
+	p.BarLocked = g.gs.UI["barlock"]
 	for _, s := range g.sights() {
 		t := types.Thing{Name: s.name, Side: s.side}
 		if s.exit {

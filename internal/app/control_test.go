@@ -1115,8 +1115,11 @@ func TestRopeEndWaitsForTheClick(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !out.Ready || !g.awaitsClick() {
-		t.Fatalf("ready = %v, awaits = %v: the rope end is not held for a click",
-			out.Ready, g.awaitsClick())
+		t.Fatalf(
+			"ready = %v, awaits = %v: the rope end is not held for a click",
+			out.Ready,
+			g.awaitsClick(),
+		)
 	}
 	if g.gs.Active != "rp1" {
 		t.Fatalf("in hand %q, want the rope end", g.gs.Active)
@@ -1141,6 +1144,76 @@ func TestRopeEndWaitsForTheClick(t *testing.T) {
 	}
 	if len(out.Said) == 0 || !out.Ready {
 		t.Errorf("said = %q ready = %v", out.Said, out.Ready)
+	}
+}
+
+// While the movie holds an item for the click (LockBar ON), the bar answers
+// no click: the driver says so instead of blaming the scroll, the percept
+// shows the bar shut, and the item in hand still takes no click at all.
+func TestLockedBarIsToldNotBlamedOnScroll(t *testing.T) {
+	g := heroGame(t, "SCENA3", nil)
+	g.gs.AddItem("rope")
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Бананы", "Веревка")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.awaitsClick() || !g.gs.UI["barlock"] {
+		t.Fatalf(
+			"awaits = %v barlock = %v: the rope end is not held for a click",
+			g.awaitsClick(),
+			g.gs.UI["barlock"],
+		)
+	}
+	if p := g.percept(); !p.BarLocked {
+		t.Errorf("percept = %+v, want the bar shown locked", p)
+	}
+	g.gs.AddItem("rope")
+	_, err := g.ctl.pickItem("Веревка")()
+	if err == nil || !strings.Contains(err.Error(), "заперта") ||
+		!strings.Contains(err.Error(), g.itemLabel("rp1")) {
+		t.Errorf("another item under LockBar: err = %v, want the bar told "+
+			"locked and the item in hand named", err)
+	}
+	if done, err := g.ctl.pickItem(g.itemLabel("rp1"))(); !done || err != nil {
+		t.Errorf(
+			"the item in hand: done = %v err = %v, want it kept",
+			done,
+			err,
+		)
+	}
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.Use(ctx, "Сухое дерево", "")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if p := g.percept(); p.BarLocked || g.gs.UI["barlock"] {
+		t.Errorf("tied: bar_locked = %v barlock = %v, want the bar open again",
+			p.BarLocked, g.gs.UI["barlock"])
+	}
+}
+
+// Under LockBar the bar click is refused before it is made, naming the item
+// the game waits on; the item already in hand needs no click and passes.
+func TestBarClickUnderLockBarSaysSo(t *testing.T) {
+	g := &Game{gs: types.NewGameState(), mode: modePlay}
+	g.gs.AddItem("pole")
+	g.gs.AddItem("rope")
+	g.gs.Active = "pole"
+	g.gs.UI["barlock"] = true
+	done, err := g.barClick("rope")
+	if done || err == nil || !strings.Contains(err.Error(), "заперта") ||
+		!strings.Contains(err.Error(), "«pole»") {
+		t.Errorf("done = %v err = %v, want the bar told locked over «pole»",
+			done, err)
+	}
+	if done, err := g.barClick("pole"); !done || err != nil {
+		t.Errorf("the item in hand: done = %v err = %v", done, err)
+	}
+	g.gs.UI["barlock"] = false
+	if _, err := g.barClick("rope"); err == nil ||
+		strings.Contains(err.Error(), "заперта") {
+		t.Errorf("bar open: err = %v, want the lock not blamed", err)
 	}
 }
 

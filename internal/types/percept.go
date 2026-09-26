@@ -15,6 +15,10 @@ type Percept struct {
 	Hands  string  `json:"hands,omitempty"`  // the item in hand; "Рука" is none
 	// EmptyHands says the hand holds nothing: Hands is the bare hand.
 	EmptyHands bool `json:"empty_hands,omitempty"`
+	// BarLocked says the game has shut the inventory bar: it waits for the
+	// item in hand to be used, and no other item (nor the bare hand) can be
+	// taken until then.
+	BarLocked bool `json:"bar_locked,omitempty"`
 	// Carry is the rest of what the hero has on him, in bar order.
 	Carry  []string   `json:"carry,omitempty"`
 	Friday *Companion `json:"friday,omitempty"` // Friday, while she is with him

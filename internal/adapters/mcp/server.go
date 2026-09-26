@@ -21,6 +21,9 @@ import (
 // projectURL is where the remake lives.
 const projectURL = "https://github.com/shpaker/modern-robinson"
 
+// issuesURL is where bugs in the game or this server are reported.
+const issuesURL = projectURL + "/issues"
+
 // instructions is the part the client plays and what the data it gets
 // means. The server hands out data only — names, sides, lines, what changed;
 // every word said as the hero is the client's own.
@@ -45,6 +48,9 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 	`можно уйти; на карте острова around — это места.
 - hands — что в руках (empty_hands — руки свободны), carry — что ещё с ` +
 	`собой; friday — Пятница рядом и её вещи; map — карту можно развернуть.
+- bar_locked — панель вещей заперта самой игрой: она ждёт, что ты ` +
+	`применишь то, что в руках (use без item или с ней же), к чему-то ` +
+	`вокруг или к себе; другую вещь и «Рука» до этого не взять.
 - hearing — реплика на экране; said — все реплики, прозвучавшие за ` +
 	`действие, твои и чужие.
 - heard — что прозвучало в головоломке за действие, по порядку: ` +
@@ -106,7 +112,11 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 	`знаешь только то, что видит и слышит герой: подсказок игра не даёт.
 
 Проект: ` + projectURL + `. Перед первым ходом поприветствуй игрока ` +
-	`своими словами, дай ему эту ссылку и пожелай хорошего выживания.`
+	`своими словами, дай ему эту ссылку и пожелай хорошего выживания.
+
+Ошибки игры и этого сервера — в issues проекта: ` + issuesURL + `. ` +
+	`Заметил ошибку — скажи игроку и предложи завести issue; в описании ` +
+	`обязательно платформа, версия игры и модель, которая играла.`
 
 // thinkFirst is how the client plays: a thought before every action, as the
 // user put it.
