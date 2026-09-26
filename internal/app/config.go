@@ -26,7 +26,7 @@ import (
 //	music: 0.7        # 0..1
 //	speed: 0.5        # 0..1, 0.5 is the original pace
 //	debug: false      # start with the F1 overlay on
-//	fullscreen: false # the whole screen, F in the game
+//	fullscreen: true  # the whole screen, F in the game
 //	crt: true         # the CRT tube, F3 in the game
 //	crt_scanlines: 0.65 # and the tube's other settings (TubeKeys)
 type Config struct {
@@ -48,8 +48,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Scale: 2, Sound: 1, Music: 0.7, Speed: 0.5,
-		Debug: DebugFlag == "true",
-		CRT:   true, Tube: crt.Defaults,
+		Debug:      DebugFlag == "true",
+		Fullscreen: true,
+		CRT:        true, Tube: crt.Defaults,
 	}
 }
 

@@ -27,6 +27,14 @@ func (g *Game) toggleFullscreen() {
 	g.keepSwitch("fullscreen", on)
 }
 
+// StartFullscreen is whether the game opens on the whole screen: as
+// config.yml says (on, unless it says otherwise), but in a window under an
+// MCP client, whose chat the player watches beside the game, and in a
+// headless run, whose snapshots expect the bare frame.
+func StartFullscreen(cfg Config, driven bool) bool {
+	return cfg.Fullscreen && !driven && !headless
+}
+
 // toggleTube is F3: the CRT on or off, kept in config.yml like F.
 func (g *Game) toggleTube() {
 	g.tube.Toggle()
