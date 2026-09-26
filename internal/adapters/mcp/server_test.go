@@ -246,6 +246,8 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"role", "who=coordinator", "narrator", "robinson", "friday",
 		"сабагент", "координатор без голоса", "Claude Desktop",
 		"по-старому", "Играй честно", projectURL,
+		"без остановок", "ничего у него не спрашивай", "соседнем месте",
+		"без JSON",
 	)
 	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"Ты — Роби", "Готовых фраз нет", "changes", "misses",
@@ -255,13 +257,18 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"Играй честно", "исходники ремейка", "перебор — не игра",
 		"уходит в чат до вызова", "следствие",
 		"bar_locked", "заперта самой игрой",
+		"changes.opened", "где путь был закрыт",
+		"«делай» не жди", "шкалы держи в уме",
 	)
 	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
 		"накормить и напоить", "жди новой просьбы",
 		projectURL+"/issues", "платформа, версия игры и модель",
+		"строкой-действием", "«Шкалы:» в чат не идут",
+		"второй раз не добавляй",
 	)
 	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
 		projectURL, "хорошего выживания",
+		"Шкалы героев видишь только ты", "ни чисел, ни названий шкал",
 	)
 	if init.ServerInfo.WebsiteURL != projectURL {
 		t.Errorf("website = %q", init.ServerInfo.WebsiteURL)
