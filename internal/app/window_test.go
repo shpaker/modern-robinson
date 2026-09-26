@@ -44,3 +44,16 @@ func TestTubeOn(t *testing.T) {
 		t.Error("ROBINSON_CRT=1 left the tube off")
 	}
 }
+
+// The game opens on the whole screen unless config.yml says otherwise, and
+// in a window under an MCP client either way.
+func TestStartFullscreen(t *testing.T) {
+	on, off := DefaultConfig(), DefaultConfig()
+	off.Fullscreen = false
+	if !StartFullscreen(on, false) || StartFullscreen(off, false) {
+		t.Error("the file's choice is not kept")
+	}
+	if StartFullscreen(on, true) {
+		t.Error("an MCP run opened on the whole screen")
+	}
+}

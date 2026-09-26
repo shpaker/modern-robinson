@@ -47,7 +47,7 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.CRT || !def.CRT {
 		t.Errorf("CRT = %v, want off by the file, on by default", cfg.CRT)
 	}
-	if cfg.Fullscreen {
+	if cfg.Fullscreen != def.Fullscreen {
 		t.Error("a line without a colon must not set anything")
 	}
 }
