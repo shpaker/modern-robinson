@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/shpaker/modern-robinson/compare/v0.3.0...v0.4.0) (2026-09-26)
+
+
+### Возможности
+
+* **release:** .mcp.json в архиве, игра через MCP из папки игры ([7921161](https://github.com/shpaker/modern-robinson/commit/7921161751a7d6086c5d0c6a75e12e886829d909))
+* **release:** .mcp.json и запускалка в архиве ([d6dedf8](https://github.com/shpaker/modern-robinson/commit/d6dedf8eff4da403a5113d9a34d9933770b654aa))
+
+
+### Документация
+
+* играть через MCP из папки игры ([11c7960](https://github.com/shpaker/modern-robinson/commit/11c79609462c9cd2851457804774c25c229511d7))
+
 ## [0.3.0](https://github.com/shpaker/modern-robinson/compare/v0.2.1...v0.3.0) (2026-09-26)
 
 
