@@ -6,7 +6,10 @@ name: release-artifacts
 # artifacts. Each binary is built on its own runner: macOS on a mac because
 # Ebitengine needs cgo there, Windows cross-compiles from Linux with cgo off.
 # The package job then puts the three binaries, the docs, the sample config,
-# the game folder's AGENTS.md and the MCP skill into one folder and zips it.
+# the game folder's AGENTS.md, the MCP skill and the game folder's .mcp.json
+# into one folder and zips it. .mcp.json has one command for every system:
+# ./robinson is a sh launcher that picks the macOS or Linux build, and Windows
+# appends .exe to a bare name, hence the Windows build is robinson.exe.
 on:
   workflow_call:
     inputs:
@@ -49,7 +52,7 @@ jobs:
             goos: windows
             goarch: amd64
             cgo: 0
-            binary: robinson_windows_amd64.exe
+            binary: robinson.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -108,9 +111,10 @@ jobs:
           stage="dist/$top"
           mkdir -p "$stage/skills"
           install -m 0755 dist/bin/robinson_darwin_arm64 \
-            dist/bin/robinson_linux_amd64 dist/bin/robinson_windows_amd64.exe \
-            "$stage/"
-          install -m 0644 README.md THIRD_PARTY.md packaging/config.yml "$stage/"
+            dist/bin/robinson_linux_amd64 dist/bin/robinson.exe \
+            packaging/robinson "$stage/"
+          install -m 0644 README.md THIRD_PARTY.md packaging/config.yml \
+            packaging/.mcp.json "$stage/"
           install -m 0644 packaging/AGENTS.md "$stage/AGENTS.md"
           cp -R skills/robinson "$stage/skills/"
           ( cd dist && zip -qrX "$top.zip" "$top" )
