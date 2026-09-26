@@ -1,0 +1,222 @@
+//kage:unit pixels
+
+// The frame on a CRT tube, the last pass over the whole screen (crt.go). The
+// picture sits where Ebiten puts the frame, smaller within a monitor case in
+// full screen. The glass bulges it; the beam draws it in soft scanlines
+// through a slot mask (after Timothy Lottes' public-domain CRT shader); a wide
+// blur of the frame (image 1, glow.kage) gives it glow; the hum, the grain
+// and the odd glitch of a worn set move over it.
+
+package main
+
+// Time is the tube's clock in seconds, wrapped to keep the float precise.
+var Time float
+
+// The look, each part 0..1 (crt.Look).
+var Curvature float
+var Scanlines float
+var Mask float
+var Glow float
+var Softness float
+var Convergence float
+var Vignette float
+var Noise float
+var Hum float
+var Flicker float
+var Interlace float
+
+// Field is the field of lines being drawn: 0 or 1, turn by turn.
+var Field float
+
+// MaskFine and ScanFine fade the mask and the scanlines out where the screen
+// has too few pixels to a frame pixel to show them without moiré.
+var MaskFine float
+var ScanFine float
+
+// Glitch is the glitch playing: line jitter, frame roll, snow, degauss.
+var Glitch vec4
+
+// Power squeezes the raster as the tube warms up or dies: its width and
+// height (1 when whole) and the flash of the beam.
+var Power vec3
+
+// Shrink is the picture's size within the frame's place: 1 in a window, less
+// in full screen, where the monitor case (Case = 1) takes the rest.
+var Shrink float
+var Case float
+
+func hash(p vec2) float {
+	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453)
+}
+
+// texel is the frame's pixel p in linear light (gamma 2); past the frame's
+// edge the edge repeats.
+func texel(p vec2) vec3 {
+	q := clamp(floor(p), vec2(0), imageSrc0Size()-1) + 0.5
+	c := imageSrc0At(q + imageSrc0Origin()).rgb
+	return c * c
+}
+
+// row is frame line y at x: the beam spreads between the line's pixels —
+// Softness blends them, 0 keeps them square.
+func row(y float, x float) vec3 {
+	xx := x - 0.5
+	x0 := floor(xx)
+	f := xx - x0
+	f = mix(step(0.5, f), smoothstep(0, 1, f), Softness)
+	return mix(texel(vec2(x0, y)), texel(vec2(x0+1, y)), f)
+}
+
+// guns is row with the red and blue beams d pixels out of register.
+func guns(y float, x float, d float) vec3 {
+	if d < 0.001 {
+		return row(y, x)
+	}
+	return vec3(row(y, x+d).r, row(y, x).g, row(y, x-d).b)
+}
+
+// beam is a scanline's light d lines off its centre: the brighter the line,
+// the wider it runs, but never so wide as to close the dark gap to the next.
+// Whatever its width, a line carries the same light over its height, so the
+// gaps darken the picture's texture, not the picture.
+func beam(d float, c vec3) vec3 {
+	w := mix(vec3(0.2), vec3(0.34), sqrt(c))
+	k := vec3(d) / w
+	return exp(-0.5*k*k) / (2.5066 * w)
+}
+
+// slotMask is the phosphors at screen pixel p: red, green and blue stripes,
+// cut by slots that step half a slot from one column of triads to the next.
+func slotMask(p vec2) vec3 {
+	m := Mask * MaskFine
+	if m < 0.001 {
+		return vec3(1)
+	}
+	lo := 1 - 0.5*m
+	hi := 1 + 0.5*m
+	q := floor(p)
+	odd := 0.0
+	if fract(q.x/6) < 0.5 {
+		odd = 1
+	}
+	slot := 1.0
+	if fract((q.y+odd)/2) < 0.5 {
+		slot = lo
+	}
+	x := fract(q.x / 3)
+	if x < 0.333 {
+		return vec3(hi, lo, lo) * slot
+	}
+	if x < 0.666 {
+		return vec3(lo, hi, lo) * slot
+	}
+	return vec3(lo, lo, hi) * slot
+}
+
+// glowAt is the blurred frame at p, bilinear between its pixels, in linear
+// light.
+func glowAt(p vec2) vec3 {
+	o := imageSrc0Origin()
+	last := imageSrc1Size() - 1
+	q := clamp(p-0.5, vec2(0), last)
+	i := floor(q)
+	f := q - i
+	j := min(i+1, last)
+	a := mix(imageSrc1At(o+i+0.5).rgb, imageSrc1At(o+vec2(j.x, i.y)+0.5).rgb, f.x)
+	b := mix(imageSrc1At(o+vec2(i.x, j.y)+0.5).rgb, imageSrc1At(o+j+0.5).rgb, f.x)
+	c := mix(a, b, f.y)
+	return c * c
+}
+
+// box is the signed distance from p to a box of half size h centred on the
+// origin, its corners rounded by r.
+func box(p vec2, h vec2, r float) float {
+	d := abs(p) - h + r
+	return length(max(d, vec2(0))) + min(max(d.x, d.y), 0) - r
+}
+
+// monitor is what surrounds the picture in full screen, at c in picture
+// coordinates (±1 at its edges): the tube's dark glass, the beige plastic of
+// a monitor of the day, the dim room beyond.
+func monitor(c vec2) vec3 {
+	a := c * vec2(4.0/3, 1) // square units: half the picture's height
+	h := vec2(4.0/3, 1)
+	glass := box(a, h+0.03, 0.1)
+	shell := box(a, h+0.15, 0.2)
+	if glass <= 0 {
+		return vec3(0.02, 0.022, 0.025) * (1.6 - 0.6*abs(c.y))
+	}
+	plastic := vec3(0.8, 0.77, 0.68) * (0.92 - 0.08*c.y)
+	plastic *= 1 + (hash(floor(a*300))-0.5)*0.03
+	plastic = mix(vec3(0.36, 0.34, 0.3), plastic, smoothstep(0, 0.05, glass))
+	plastic *= mix(0.8, 1, smoothstep(0, 0.02, -shell))
+	room := vec3(0.012, 0.012, 0.014)
+	return mix(plastic, room, smoothstep(-0.002, 0.002, shell))
+}
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	size := imageSrc0Size()
+	c := ((srcPos-imageSrc0Origin())/size - 0.5) / Shrink * 2
+
+	// Warming up or dying, the raster folds to a line and a dot.
+	q := c / max(Power.xy, vec2(0.001))
+	// The glass bulges the picture: its edges bow out of the tube's corners.
+	w := q * vec2(1+q.y*q.y*Curvature*0.06, 1+q.x*q.x*Curvature*0.08)
+	// Degauss: the coil shakes the mask and the picture wobbles.
+	w.x += Glitch.w * 0.02 * sin(w.y*18+Time*30)
+	w.y += Glitch.w * 0.01 * sin(w.x*14+Time*23)
+
+	t := w*0.5 + 0.5
+	blank := 1.0
+	if Glitch.y > 0 {
+		// Frame roll: the picture slips a whole height, the blanking bar
+		// crossing the screen with it.
+		t.y = fract(t.y + Glitch.y)
+		blank = smoothstep(0, 0.04, t.y) * smoothstep(0, 0.04, 1-t.y)
+	}
+	p := t * size
+	// Line jitter: bands of lines torn sideways.
+	ln := floor(p.y)
+	tear := step(0.55, hash(vec2(floor(ln/6), floor(Time*15))))
+	shift := (hash(vec2(ln, floor(Time*40)))-0.5)*18*tear + 6*sin(p.y*0.05+Time*50)
+	p.x += Glitch.x * shift
+
+	r0 := floor(p.y)
+	fy := p.y - r0 - 0.5
+	side := 1.0
+	if fy < 0 {
+		side = -1
+	}
+	d := Convergence * (0.35 + 0.35*dot(w, w)) * 1.6
+	a := guns(r0, p.x, d)
+	col := a
+	scan := Scanlines * ScanFine
+	if scan > 0.001 {
+		b := guns(r0+side, p.x, d)
+		col = mix(a, a*beam(fy, a)+b*beam(fy-side, b), scan)
+	}
+	if Interlace > 0.001 && mod(r0+Field, 2) >= 1 {
+		col *= 1 - 0.5*Interlace*ScanFine // this field's lines fade
+	}
+	if Glow > 0.001 {
+		col += Glow * 0.45 * glowAt(p)
+	}
+	col *= slotMask(dstPos.xy)
+
+	e := abs(w)
+	inside := 1 - smoothstep(-0.004, 0.004, box(w, vec2(1), 0.02+0.06*Curvature))
+	col *= mix(1, pow(max((1-e.x*e.x)*(1-e.y*e.y), 0), 0.35), Vignette)
+	col *= 1 - Hum*0.18*(0.5+0.5*sin((t.y+Time*0.07)*6.2832))
+	col *= 1 - Flicker*0.03*sin(Time*62.8)
+	col += Power.z
+	col = sqrt(clamp(col, 0, 1))
+	// Grain, gamma-encoded: even over the picture, no sparkle in the dark.
+	n := hash(dstPos.xy*0.37 + fract(Time*7)*311)
+	col += (n - 0.5) * Noise * 0.1
+	col = mix(col, vec3(n), clamp(Glitch.z, 0, 1)*0.75)
+	col = clamp(col, 0, 1) * inside * blank
+	if Case > 0.5 {
+		col = mix(monitor(c), col, inside)
+	}
+	return vec4(col, 1)
+}

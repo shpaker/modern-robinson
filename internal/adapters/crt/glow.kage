@@ -1,0 +1,25 @@
+//kage:unit pixels
+
+// The frame blurred wide for the tube's glow (crt.kage): 5×3 taps 1.7 pixels
+// apart, averaged in linear light and stored gamma-encoded, the way an 8-bit
+// buffer keeps the dark tones best.
+
+package main
+
+func Fragment(dstPos vec4, srcPos vec2, color vec4) vec4 {
+	o := imageSrc0Origin()
+	last := imageSrc0Size() - 1
+	p := srcPos - o
+	sum := vec3(0)
+	weight := 0.0
+	for i := -2; i <= 2; i++ {
+		for j := -1; j <= 1; j++ {
+			d := vec2(float(i), float(j)) * 1.7
+			k := exp(-0.5 * dot(d, d) / 6)
+			c := imageSrc0At(clamp(floor(p+d), vec2(0), last) + 0.5 + o).rgb
+			sum += c * c * k
+			weight += k
+		}
+	}
+	return vec4(sqrt(sum/weight), 1)
+}

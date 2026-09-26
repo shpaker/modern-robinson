@@ -48,7 +48,9 @@ var envFromQuery = map[string]string{
 // configFromQuery are the config.yml keys that make sense in a browser. scale
 // is not among them: Ebitengine sizes the canvas from the page on js, so the
 // window magnification is the page's business, not the game's.
-var configFromQuery = []string{"sound", "music", "speed", "debug"}
+var configFromQuery = append(
+	[]string{"sound", "music", "speed", "debug", "crt"}, app.TubeKeys...,
+)
 
 func main() {
 	// The resource set is ~279 MB live in a 32-bit heap, so the peak matters

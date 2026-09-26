@@ -10,7 +10,8 @@ internal/
   use_cases/    логика: изосетка, pathfinding (stateless)
   repositories/ доступ к файлам игры; codec/ — кодеки NGI; webfs/, webdata/ — веб
   adapters/     Ebiten-образы из Domain (анимации, звук); mouse/ — мышь мини-игр;
-                mcp/ — герой для MCP-клиента (через interfaces.IControl)
+                mcp/ — герой для MCP-клиента (через interfaces.IControl);
+                crt/ — ЭЛТ-кинескоп, последний проход кадра (Kage)
   minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
 cmd/main.go     игра
@@ -43,4 +44,5 @@ gy·GridShift`. Детали — [`../docs`](../docs).
 ## Проверка без окна
 
 `just snapshot` / `just demo` гоняют игру headless (Ebiten `exp/vmhost`) и пишут
-PNG-кадры.
+PNG-кадры. В такой сборке (тег `ebitenginevm`) ЭЛТ выключен, что бы ни говорил
+`config.yml`, а F/F3 ничего не записывают; `ROBINSON_CRT=1` включает фильтр.

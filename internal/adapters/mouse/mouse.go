@@ -49,12 +49,20 @@ func Release() { held = false }
 // Held reports whether a driver holds the pointer.
 func Held() bool { return held }
 
+// realPointer reads the real mouse: Ebiten's own reading unless the game
+// sets its own (SetReal).
+var realPointer = ebiten.CursorPosition
+
+// SetReal sets where the real mouse is read from: the game's reading, which
+// knows how its picture lies on the screen.
+func SetReal(f func() (int, int)) { realPointer = f }
+
 // Position is where the pointer is.
 func Position() (int, int) {
 	if held {
 		return cur.x, cur.y
 	}
-	return ebiten.CursorPosition()
+	return realPointer()
 }
 
 // JustPressed reports a button that went down this tick.

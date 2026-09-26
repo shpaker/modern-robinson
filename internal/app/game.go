@@ -15,6 +15,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shpaker/modern-robinson/internal/adapters"
+	"github.com/shpaker/modern-robinson/internal/adapters/crt"
+	"github.com/shpaker/modern-robinson/internal/adapters/mouse"
 	"github.com/shpaker/modern-robinson/internal/interfaces"
 	"github.com/shpaker/modern-robinson/internal/minigame"
 	"github.com/shpaker/modern-robinson/internal/repositories"
@@ -153,6 +155,8 @@ type Game struct {
 
 	ctl     *control    // a driver playing the hero from outside (control.go)
 	stopped atomic.Bool // Stop: end the loop on the next tick
+
+	tube *crt.Tube // the CRT the frame is shown on (window.go)
 }
 
 // NewGame builds a game over the given resources with the default settings.
@@ -186,6 +190,9 @@ func newGame(res interfaces.IResources, cfg Config, audio interfaces.IAudio) *Ga
 	}
 	// State commands never reach applyEffect; the trace hears them from here.
 	g.interp.Observe = g.trace
+	g.tube = newTube(cfg)
+	// The minigames' pointer bends with the picture on the tube.
+	mouse.SetReal(g.aim)
 	ebiten.SetCursorMode(ebiten.CursorModeHidden) // the game draws its own
 	g.loadCursors()
 	g.optHover, g.optDrag = -1, -1
@@ -622,6 +629,9 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
 		g.dbg.state = !g.dbg.state
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF3) {
+		g.toggleTube()
+	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
 		g.toggleFullscreen()
 	}
@@ -639,8 +649,19 @@ func (g *Game) Update() error {
 		g.toggleOptions() // inside a minigame Esc is the game's own quit
 	}
 	g.ctl.tick() // a driver's call, if one is running (control.go)
-	if g.quit || g.stopped.Load() {
-		return ebiten.Termination
+	g.tube.Update(1/float64(ebiten.TPS()), mousePressed())
+	if g.stopped.Load() {
+		return ebiten.Termination // the client is gone; its window may be hidden
+	}
+	if ebiten.IsWindowBeingClosed() {
+		g.quit = true // the window's close box, as the menu's "exit"
+	}
+	if g.quit {
+		if !g.tube.On() || g.tube.Dark() {
+			return ebiten.Termination
+		}
+		g.tube.PowerOff() // the picture folds away first
+		return nil
 	}
 	g.updateCursor() // every tick, whoever owns the frame, as OnIdle does
 	dt := 1.0 / float64(ebiten.TPS())

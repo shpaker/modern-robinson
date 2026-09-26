@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,7 @@ func TestLoadConfig(t *testing.T) {
 		"music: bogus\n" + // unparsable: keeps the default
 		"speed: 9\n" + // out of range: clamped
 		"debug: yes\n" +
+		"crt: off\n" +
 		"colour: purple\n" + // unknown key: ignored
 		"fullscreen\n" // no colon: ignored
 	if err := os.WriteFile(
@@ -41,6 +43,9 @@ func TestLoadConfig(t *testing.T) {
 	}
 	if !cfg.Debug {
 		t.Error("debug: yes should turn the overlay on")
+	}
+	if cfg.CRT || !def.CRT {
+		t.Errorf("CRT = %v, want off by the file, on by default", cfg.CRT)
 	}
 	if cfg.Fullscreen {
 		t.Error("a line without a colon must not set anything")
@@ -158,5 +163,54 @@ func TestSaveSwitch(t *testing.T) {
 	got, _ = os.ReadFile(fresh.Path)
 	if string(got) != "fullscreen: false\n" {
 		t.Errorf("new file = %q", got)
+	}
+}
+
+// Every CRT key reaches the tube's settings; a dial past 0..1 comes back
+// within it, and a key the file lacks keeps the default.
+func TestTubeKeys(t *testing.T) {
+	dir := t.TempDir()
+	var body strings.Builder
+	for _, k := range TubeKeys {
+		switch k {
+		case "crt_glitches":
+			body.WriteString(k + ": 30\n")
+		case "crt_ripple", "crt_case":
+			body.WriteString(k + ": off\n")
+		default:
+			body.WriteString(k + ": 0.123\n")
+		}
+	}
+	body.WriteString("crt_noise: 7\n") // out of range: clamped
+	if err := os.WriteFile(
+		filepath.Join(dir, ConfigName), []byte(body.String()), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	cfg := LoadConfig(dir)
+	for _, k := range TubeKeys {
+		if p := cfg.dial(k); p != nil && k != "crt_noise" && *p != 0.123 {
+			t.Errorf("%s = %v, want 0.123", k, *p)
+		}
+	}
+	tb := cfg.Tube
+	if tb.Noise != 1 || tb.Glitches != 30 || tb.Ripple || tb.Case {
+		t.Errorf("tube settings %+v", tb)
+	}
+	if def := DefaultConfig().Tube; !def.Ripple || def.Glitches != 90 {
+		t.Errorf("defaults %+v", def)
+	}
+}
+
+// The config.yml shipped with the game spells out the defaults: reading it
+// changes nothing.
+func TestPackagedConfigIsTheDefaults(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "packaging", ConfigName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if got, want := LoadConfigFrom(f), DefaultConfig(); got != want {
+		t.Errorf("packaged config =\n%+v\nwant the defaults\n%+v", got, want)
 	}
 }

@@ -52,3 +52,18 @@ func TestTakeOverWithButtonDownPresses(t *testing.T) {
 		t.Fatal("released pointer still held")
 	}
 }
+
+// The real mouse is read where the game says — through the bend of its
+// picture — and a driver's held pointer still wins over it.
+func TestSetRealReadsTheGamesPointer(t *testing.T) {
+	defer SetReal(ebiten.CursorPosition)
+	defer Release()
+	SetReal(func() (int, int) { return 7, 9 })
+	if x, y := Position(); x != 7 || y != 9 {
+		t.Errorf("real position %d,%d, want 7,9", x, y)
+	}
+	Hold(100, 200, false, false)
+	if x, y := Position(); x != 100 || y != 200 {
+		t.Errorf("held position %d,%d, want 100,200", x, y)
+	}
+}

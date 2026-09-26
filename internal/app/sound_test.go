@@ -263,6 +263,7 @@ func TestServiceKeysAreNotSkipKeys(t *testing.T) {
 		{"F9 loads", ebiten.KeyF9, true},
 		{"Esc opens the menu", ebiten.KeyEscape, true},
 		{"F toggles full screen", ebiten.KeyF, true},
+		{"F3 switches the CRT", ebiten.KeyF3, true},
 		{"Enter skips", ebiten.KeyEnter, false},
 		{"Space skips", ebiten.KeySpace, false},
 		{"a letter skips", ebiten.KeyA, false},

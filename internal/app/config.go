@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/shpaker/modern-robinson/internal/adapters/crt"
 )
 
 // Config is the player's own settings, read from config.yml beside the binary
@@ -25,6 +27,8 @@ import (
 //	speed: 0.5        # 0..1, 0.5 is the original pace
 //	debug: false      # start with the F1 overlay on
 //	fullscreen: false # the whole screen, F in the game
+//	crt: true         # the CRT tube, F3 in the game
+//	crt_scanlines: 0.65 # and the tube's other settings (TubeKeys)
 type Config struct {
 	Scale      int
 	Sound      float64
@@ -32,6 +36,8 @@ type Config struct {
 	Speed      float64
 	Debug      bool
 	Fullscreen bool
+	CRT        bool
+	Tube       crt.Options // the CRT's look and manners (config_crt.go)
 	// Path is the file the settings live in, where the sliders and the
 	// switches of the window's keys are written back; "" keeps them for this
 	// run only (the browser build).
@@ -43,6 +49,7 @@ func DefaultConfig() Config {
 	return Config{
 		Scale: 2, Sound: 1, Music: 0.7, Speed: 0.5,
 		Debug: DebugFlag == "true",
+		CRT:   true, Tube: crt.Defaults,
 	}
 }
 
@@ -123,6 +130,10 @@ func (c *Config) apply(r io.Reader) {
 			c.Debug = truthy(val)
 		case "fullscreen":
 			c.Fullscreen = truthy(val)
+		case "crt":
+			c.CRT = truthy(val)
+		default:
+			c.applyTube(key, val)
 		}
 	}
 }
@@ -134,6 +145,7 @@ func (c *Config) clamp() {
 	c.Sound = clampF(c.Sound, 0, 1)
 	c.Music = clampF(c.Music, 0, 1)
 	c.Speed = clampF(c.Speed, 0, 1)
+	c.clampTube()
 }
 
 // levelKeys are the settings the options screen changes, in the order a file
@@ -149,7 +161,7 @@ func (c Config) SaveLevels(sound, music, speed float64) error {
 }
 
 // SaveSwitch writes an on/off setting a key flips in the game — F, the full
-// screen — the way SaveLevels writes the sliders.
+// screen, and F3, the CRT — the way SaveLevels writes the sliders.
 func (c Config) SaveSwitch(key string, on bool) error {
 	return c.save([]string{key}, map[string]string{key: strconv.FormatBool(on)})
 }

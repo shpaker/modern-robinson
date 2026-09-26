@@ -165,7 +165,7 @@ http://localhost:8080/?data=http://localhost:8080/data/v1/
 | `?vars=`, `?items=`, `?ui=` | соответствующие | стартовое состояние квеста |
 | `?frid=2,3` | `ROBINSON_FRID` | Пятница в этой клетке (видна при `FridIs=1`: `&vars=FridIs=1`) |
 | `?trace=` | `ROBINSON_TRACE` | трасса команд квеста в консоль |
-| `?sound=`, `?music=`, `?speed=`, `?debug=` | — | то же, что в `config.yml` |
+| `?sound=`, `?music=`, `?speed=`, `?debug=`, `?crt=`, `?crt_…=` | — | то же, что в `config.yml` |
 
 `scale` не поддерживается: на js Ebitengine растягивает канвас по размеру
 страницы, так что масштаб — дело CSS, а не игры.

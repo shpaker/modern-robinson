@@ -255,8 +255,12 @@ func (g *Game) keepLevels() {
 }
 
 // keepSwitch writes a setting one of the window's keys flipped (window.go) to
-// config.yml, the way keepLevels keeps the sliders.
+// config.yml, the way keepLevels keeps the sliders. A headless run's keys are
+// a script's, no player's choice, and write nothing.
 func (g *Game) keepSwitch(key string, on bool) {
+	if headless {
+		return
+	}
 	if err := g.cfg.SaveSwitch(key, on); err != nil {
 		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
 	}

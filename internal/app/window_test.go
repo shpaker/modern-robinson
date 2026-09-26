@@ -25,3 +25,22 @@ func TestHoldToFrame(t *testing.T) {
 		}
 	}
 }
+
+// The tube is on unless config.yml says otherwise; ROBINSON_CRT has the last
+// word either way.
+func TestTubeOn(t *testing.T) {
+	on, off := DefaultConfig(), DefaultConfig()
+	off.CRT = false
+	t.Setenv("ROBINSON_CRT", "")
+	if !tubeOn(on) || tubeOn(off) {
+		t.Error("the file's choice is not kept")
+	}
+	t.Setenv("ROBINSON_CRT", "0")
+	if tubeOn(on) {
+		t.Error("ROBINSON_CRT=0 left the tube on")
+	}
+	t.Setenv("ROBINSON_CRT", "1")
+	if !tubeOn(off) {
+		t.Error("ROBINSON_CRT=1 left the tube off")
+	}
+}
