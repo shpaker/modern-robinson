@@ -254,9 +254,11 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"до первой октавы", "ария Пятницы", "на полтона выше или ниже",
 		"Играй честно", "исходники ремейка", "перебор — не игра",
 		"уходит в чат до вызова", "следствие",
+		"bar_locked", "заперта самой игрой",
 	)
 	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
 		"накормить и напоить", "жди новой просьбы",
+		projectURL+"/issues", "платформа, версия игры и модель",
 	)
 	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
 		projectURL, "хорошего выживания",
