@@ -1,10 +1,12 @@
 name: release-artifacts
 
-# One archive per OS, attached to a release. release-please.yml calls this
-# right after it cuts one. By hand: with a tag it re-attaches the archives to
-# that release, without one it is a test build kept in the run's artifacts.
-# macOS is built on a mac because Ebitengine needs cgo there; Windows
-# cross-compiles from Linux with cgo off.
+# One archive for every desktop system, attached to a release. release-please.yml
+# calls this right after it cuts one. By hand: with a tag it re-attaches the
+# archive to that release, without one it is a test build kept in the run's
+# artifacts. Each binary is built on its own runner: macOS on a mac because
+# Ebitengine needs cgo there, Windows cross-compiles from Linux with cgo off.
+# The package job then puts the three binaries, the docs, the sample config,
+# the game folder's AGENTS.md and the MCP skill into one folder and zips it.
 on:
   workflow_call:
     inputs:
@@ -14,12 +16,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the archives to; empty for a test build"
+        description: "Release tag to attach the archive to; empty for a test build"
         type: string
         default: ""
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  VERSION: ${{ inputs.tag || 'dev' }}
 
 jobs:
   build:
@@ -65,24 +70,62 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
-          VERSION: ${{ inputs.tag || 'dev' }}
         run: |
-          stage="dist/${{ matrix.name }}"
-          mkdir -p "$stage"
           go build -trimpath \
             -ldflags "-s -w -X github.com/shpaker/modern-robinson/internal/app.Version=${VERSION}" \
-            -o "$stage/${{ matrix.binary }}" ./cmd
-          cp README.md THIRD_PARTY.md packaging/config.yml "$stage/"
-          ( cd dist && zip -qr "modern-robinson_${VERSION}_${{ matrix.name }}.zip" "${{ matrix.name }}" )
+            -o "dist/${{ matrix.binary }}" ./cmd
+      # Only a hand-off to the package job, hence a day: enough to re-run the
+      # packing. The artifact drops the exec bit; the package job puts it back.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.name }}
+          path: dist/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  package:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bin-*
+          merge-multiple: true
+          path: dist/bin
+      # One top-level folder named like the archive: unzip does not spill files
+      # into the current directory, and Archive Utility on macOS unpacks it as
+      # is. Info-ZIP keeps unix modes, so the macOS and Linux binaries stay
+      # executable.
+      - name: Pack
+        run: |
+          top="modern-robinson_${VERSION}"
+          stage="dist/$top"
+          mkdir -p "$stage/skills"
+          install -m 0755 dist/bin/robinson_darwin_arm64 \
+            dist/bin/robinson_linux_amd64 dist/bin/robinson_windows_amd64.exe \
+            "$stage/"
+          install -m 0644 README.md THIRD_PARTY.md packaging/config.yml "$stage/"
+          install -m 0644 packaging/AGENTS.md "$stage/AGENTS.md"
+          cp -R skills/robinson "$stage/skills/"
+          ( cd dist && zip -qrX "$top.zip" "$top" )
+          zipinfo "dist/$top.zip"
       - name: Attach to the release
         if: inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
-        run: gh release upload "$TAG" dist/*.zip --clobber
+        run: gh release upload "$TAG" "dist/modern-robinson_${VERSION}.zip" --clobber
       - uses: actions/upload-artifact@v7
         if: inputs.tag == ''
         with:
-          name: modern-robinson-${{ matrix.name }}
-          path: dist/*.zip
+          name: modern-robinson-${{ env.VERSION }}
+          path: dist/modern-robinson_${{ env.VERSION }}.zip
+          if-no-files-found: error
+          overwrite: true
