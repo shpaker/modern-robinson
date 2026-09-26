@@ -212,6 +212,8 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"Сохраняйся регулярно", "слоты 10 и 11",
 		"heard", "видит и слышит", "puzzle_move", "серединой",
 		"до первой октавы", "ария Пятницы", "на полтона выше или ниже",
+		"Играй честно", "исходники ремейка", "перебор — не игра",
+		"напиши её в чат", "следствие",
 	} {
 		if !strings.Contains(init.Instructions, want) {
 			t.Errorf("the instructions lack %q", want)
@@ -361,8 +363,9 @@ func TestPuzzleSoundsComeAsData(t *testing.T) {
 	}
 }
 
-// Every action asks for its reason, and a blank one is turned away before
-// the game hears of it; looking and waiting need none.
+// Every action asks for its reason — the one first written in the chat — and
+// a blank one is turned away before the game hears of it; looking and
+// waiting need none.
 func TestActionsNeedAReason(t *testing.T) {
 	h := &hero{look: beach, out: types.Outcome{Look: beach}}
 	cs := connect(t, h)
@@ -377,13 +380,20 @@ func TestActionsNeedAReason(t *testing.T) {
 	for _, tool := range res.Tools {
 		raw, _ := json.Marshal(tool.InputSchema)
 		var schema struct {
-			Required []string `json:"required"`
+			Required   []string `json:"required"`
+			Properties map[string]struct {
+				Description string `json:"description"`
+			} `json:"properties"`
 		}
 		_ = json.Unmarshal(raw, &schema)
 		has := strings.Contains(","+strings.Join(schema.Required, ",")+",",
 			",why,")
 		if has != acts[tool.Name] {
 			t.Errorf("%s: why required = %v", tool.Name, has)
+		}
+		if has && !strings.Contains(
+			schema.Properties["why"].Description, "в чат") {
+			t.Errorf("%s: why does not point to the chat", tool.Name)
 		}
 	}
 	for _, args := range []map[string]any{
@@ -397,9 +407,15 @@ func TestActionsNeedAReason(t *testing.T) {
 	if len(h.calls) > 0 {
 		t.Errorf("an action without a reason reached the game: %q", h.calls)
 	}
-	if !strings.Contains(connect(t, h).InitializeResult().Instructions,
-		thinkFirst) {
+	instr := connect(t, h).InitializeResult().Instructions
+	if !strings.Contains(instr, thinkFirst) {
 		t.Error("the instructions lack the thought before every action")
+	}
+	if !strings.Contains(instr, fairPlay) {
+		t.Error("the instructions lack the rule of fair play")
+	}
+	if strings.Contains(instr, "пробуй другое") {
+		t.Error("the instructions still send the client to try the next thing")
 	}
 }
 

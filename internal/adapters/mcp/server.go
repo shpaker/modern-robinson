@@ -34,6 +34,8 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 
 ` + thinkFirst + `
 
+` + fairPlay + `
+
 Что приходит от игры (JSON):
 - where — где ты: остров, карта острова, головоломка, заставка, пауза; ` +
 	`busy — что сейчас идёт, пока действовать нельзя.
@@ -96,9 +98,10 @@ const instructions = `Ты — Роби, Робинзон: обычного го
 
 Не все пути открыты сразу: некоторые выходы появляются, только когда ` +
 	`сделаешь что-то нужное — здесь или в другом месте. Если reacted=false ` +
-	`и никто ничего не сказал — так не выйдет, пробуй другое. Имена вещей, ` +
-	`мест и выходов передавай в точности как в данных. Ты знаешь только то, ` +
-	`что видит и слышит герой: подсказок игра не даёт.
+	`и никто ничего не сказал — так не выйдет. Не бери наугад следующую ` +
+	`вещь — вернись к тому, что видел и слышал, и подумай, чего не хватает. ` +
+	`Имена вещей, мест и выходов передавай в точности как в данных. Ты ` +
+	`знаешь только то, что видит и слышит герой: подсказок игра не даёт.
 
 Проект: ` + projectURL + `. Перед первым ходом поприветствуй игрока ` +
 	`своими словами, дай ему эту ссылку и пожелай хорошего выживания.`
@@ -110,6 +113,23 @@ const thinkFirst = "Перед каждым действием модель пи
 	"короткая реакция. Не перебирать вещи на всём подряд, а связывать " +
 	"услышанное с увиденным. Если ничего не выходит, остановиться и " +
 	"подумать, что упускаешь."
+
+// fairPlay is what playing fair means: the world learnt from the game's
+// answers alone, moves made through these tools alone, no guessing down a
+// list — every action has its own reason, told in the chat before the call,
+// and what came of it is told after.
+const fairPlay = "Играй честно: мир ты узнаёшь только из ответов игры. " +
+	"Не открывай и не разбирай её файлы — ресурсы, скрипты, сохранения — " +
+	"и исходники ремейка, не ищи прохождения и подсказки ни в сети, ни в " +
+	"файлах: подсказать может только сам игрок. В игре действуй только " +
+	"инструментами этого сервера, без своих скриптов, циклов и обёрток " +
+	"вокруг неё. Не перебирай вслепую — вещь за вещью на всём подряд, " +
+	"клики наугад: перебор — не игра. Пробовать можно, но каждая попытка " +
+	"— из своей догадки о том, что видел и слышал. У каждого действия " +
+	"своя причина, не общая на серию и не заготовка: перед вызовом напиши " +
+	"её в чат, а why — её короткий пересказ, не замена. После ответа " +
+	"напиши в чат и следствие: что вышло и что ты из этого понял. С wait " +
+	"в головоломке — так же."
 
 // puzzleRules is what the player knows of the puzzles: the game's manual
 // retold, each game by the name it goes by on screen — the controls and the
@@ -160,23 +180,23 @@ type lookOut struct {
 type useIn struct {
 	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — самому: надеть или положить рядом"`
 	Item   string `json:"item,omitempty" jsonschema:"какую вещь взять в руки перед этим; пусто — ту, что уже в руках"`
-	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why    string `json:"why"            jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 type goIn struct {
 	To  string `json:"to"  jsonschema:"куда: имя из exits, а на карте острова — место из around"`
-	Why string `json:"why" jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why string `json:"why" jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 type askIn struct {
 	Target string `json:"target"         jsonschema:"к чему: имя из around или exits; «себя» — Пятница сама, без цели"`
 	Item   string `json:"item,omitempty" jsonschema:"какую свою вещь ей взять; пусто — ту, что у неё в руках"`
-	Why    string `json:"why"            jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why    string `json:"why"            jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 // whyIn is an action that takes nothing but its reason.
 type whyIn struct {
-	Why string `json:"why" jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why string `json:"why" jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 type waitIn struct {
@@ -189,7 +209,7 @@ type clickIn struct {
 	Y      int    `json:"y"                jsonschema:"y на экране головоломки, 0..479"`
 	Button string `json:"button,omitempty" jsonschema:"left (по умолчанию) или right"`
 	Grid   bool   `json:"grid,omitempty"   jsonschema:"сетка координат через 40 px на картинке ответа"`
-	Why    string `json:"why"              jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why    string `json:"why"              jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 type moveIn struct {
@@ -199,7 +219,7 @@ type moveIn struct {
 	ToY   int    `json:"to_y"            jsonschema:"y, куда её положить (туда придёт её середина), 0..479"`
 	Turns int    `json:"turns,omitempty" jsonschema:"сколько раз повернуть её у цели правой кнопкой, 0..3"`
 	Grid  bool   `json:"grid,omitempty"  jsonschema:"сетка координат через 40 px на картинке ответа"`
-	Why   string `json:"why"             jsonschema:"зачем это действие: чего хочешь добиться и почему именно так"`
+	Why   string `json:"why"             jsonschema:"зачем это действие — коротко то, что перед вызовом написал в чат: чего хочешь добиться и почему именно так"`
 }
 
 type slotIn struct {
@@ -420,11 +440,13 @@ func (s *server) load(
 }
 
 // errNoWhy refuses an action taken without a reason.
-var errNoWhy = errors.New("why пуст: сначала напиши, зачем это действие")
+var errNoWhy = errors.New(
+	"why пуст: сначала напиши в чат, зачем это действие, и коротко повтори в why",
+)
 
 // reasoned refuses an action whose reason is blank: every action is meant to
-// come after a thought (thinkFirst). The reason stays with the client; the
-// game never sees it.
+// come after a thought written in the chat (thinkFirst, fairPlay). The reason
+// stays with the client; the game never sees it.
 func reasoned(why string) error {
 	if strings.TrimSpace(why) == "" {
 		return errNoWhy
