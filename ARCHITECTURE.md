@@ -11,6 +11,8 @@ internal/
   repositories/ доступ к файлам игры; codec/ — кодеки NGI; webfs/, webdata/ — веб
   adapters/     Ebiten-образы из Domain (анимации, звук); mouse/ — мышь мини-игр;
                 mcp/ — герой для MCP-клиента (через interfaces.IControl);
+                mcp/roles/ — тексты ролей: координатор, рассказчик, Роби,
+                Пятница (встроены и идут в релиз папкой roles/);
                 crt/ — ЭЛТ-кинескоп, последний проход кадра (Kage)
   minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
