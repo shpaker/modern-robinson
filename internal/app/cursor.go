@@ -96,7 +96,7 @@ func (g *Game) cursorFor(mx, my int) (name string, system bool) {
 // falls back to the system one, so a copy of the game without ROBY.EXE still
 // has a pointer.
 func (g *Game) updateCursor() {
-	name, system := g.cursorFor(ebiten.CursorPosition())
+	name, system := g.cursorFor(g.pointer())
 	if _, ok := g.cursors[name]; name != "" && !ok {
 		system = true
 	}
@@ -117,7 +117,7 @@ func (g *Game) drawCursor(screen *ebiten.Image) {
 	if g.cursorSystem || !ok {
 		return
 	}
-	mx, my := ebiten.CursorPosition()
+	mx, my := g.pointer()
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(float64(mx-c.hotX), float64(my-c.hotY))
 	screen.DrawImage(c.img, op)

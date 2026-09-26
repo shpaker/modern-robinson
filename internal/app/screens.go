@@ -40,9 +40,8 @@ type mouseState struct {
 	pressed  bool // held down
 }
 
-// readMouse samples the cursor and the left button for this frame.
-func readMouse() mouseState {
-	x, y := ebiten.CursorPosition()
+// readMouse samples the left button for this frame, with the cursor at x,y.
+func readMouse(x, y int) mouseState {
 	return mouseState{
 		x:        x,
 		y:        y,
@@ -53,14 +52,23 @@ func readMouse() mouseState {
 }
 
 // serviceKey reports whether a key already has a job of its own (debug, quick
-// save/load, the options menu) and so must not double as "skip".
+// save/load, the options menu, the window's keys) and so must not double as
+// "skip".
 func serviceKey(k ebiten.Key) bool {
 	switch k {
 	case ebiten.KeyF1, ebiten.KeyF2, ebiten.KeyF5, ebiten.KeyF9,
 		ebiten.KeyEscape:
 		return true
 	}
-	return false
+	return windowKey(k)
+}
+
+// windowKey reports a key that changes only how the window shows the game —
+// F puts it on the whole screen and back, F3 switches the CRT — and so is no
+// move in it: it skips nothing and does not take a driven puzzle over
+// (keyPressed).
+func windowKey(k ebiten.Key) bool {
+	return k == ebiten.KeyF || k == ebiten.KeyF3
 }
 
 // skipKeyPressed reports a fresh press of any key that means "get on with it".
@@ -202,6 +210,7 @@ func (g *Game) startFade(to *types.Exit) {
 	if len(g.fadeCurve) < 2 {
 		// No fade table: swap immediately.
 		g.loadScene(to.Scene, &[2]int{to.GX, to.GY}, to.Entry, to.EntryFrid)
+		g.tube.Ripple() // a new scene, as if the set changed channel
 		return
 	}
 	g.fadeTo = to
@@ -229,6 +238,7 @@ func (g *Game) updateFade(dt float64) bool {
 			if to != nil {
 				g.loadScene(to.Scene, &[2]int{to.GX, to.GY},
 					to.Entry, to.EntryFrid)
+				g.tube.Ripple() // it shivers as the new scene fades in
 				if c := g.res.SceneFade(g.sceneName); len(c) >= 2 {
 					g.fadeCurve = c
 				}

@@ -46,6 +46,7 @@ func main() {
 	// The original is a fixed 640x480; the scale only magnifies it.
 	ebiten.SetWindowSize(app.ViewW*cfg.Scale, app.ViewH*cfg.Scale)
 	ebiten.SetFullscreen(cfg.Fullscreen)
+	ebiten.SetWindowClosingHandled(true) // the CRT dies first (Game.Update)
 	ebiten.SetWindowTitle("Новый Робинзон — " + app.Version)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

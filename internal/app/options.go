@@ -164,7 +164,7 @@ func (g *Game) updateOptions(dt float64) bool {
 	default:
 		return false
 	}
-	m := readMouse()
+	m := readMouse(g.aim())
 	switch g.mode {
 	case modeOptions:
 		g.updateOptionsMenu(m.x, m.y, m.clicked)
@@ -250,6 +250,18 @@ func (g *Game) setSlider(i, mx int) {
 // one, so the game starts with them next time.
 func (g *Game) keepLevels() {
 	if err := g.cfg.SaveLevels(g.volSound, g.volMusic, g.speed); err != nil {
+		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
+	}
+}
+
+// keepSwitch writes a setting one of the window's keys flipped (window.go) to
+// config.yml, the way keepLevels keeps the sliders. A headless run's keys are
+// a script's, no player's choice, and write nothing.
+func (g *Game) keepSwitch(key string, on bool) {
+	if headless {
+		return
+	}
+	if err := g.cfg.SaveSwitch(key, on); err != nil {
 		fmt.Fprintf(os.Stderr, "settings: %v\n", err)
 	}
 }
@@ -368,7 +380,7 @@ func (g *Game) drawOptions(screen *ebiten.Image) {
 		// Both buttons are painted into each backdrop in their raised state;
 		// the pack ships the pushed-in one as a bitmap per screen, so it only
 		// goes up while the player holds that button down.
-		cx, cy := ebiten.CursorPosition()
+		cx, cy := g.aim()
 		if btn := g.btnDown; btn >= 0 && slotButtonAt(cx, cy) == btn {
 			r := slotButtonRect(btn)
 			g.blitOpt(screen, slotButtons(g.mode)[btn], r.Min.X, r.Min.Y)
