@@ -94,8 +94,10 @@ func TestRolesComeFromTheFoldersBesideTheGame(t *testing.T) {
 // the words out at once; the narrator is out of the heroes' hearing;
 // Robinson decides, having heard Friday out; the scales are each hero's own;
 // a puzzle is Robinson's to play; a hero low on the wish to be saved may
-// refuse. Friday is a wary sceptic who speaks Robinson's tongue badly, on
-// purpose, but keeps the names and his scales straight.
+// refuse. Robinson is a quick, self-assured townsman who owns up when
+// Friday's "why?" finds the hole; Friday is a wary sceptic who speaks
+// Robinson's tongue badly, on purpose, but keeps the names and his scales
+// straight.
 func TestThePartyPlaysByTheRules(t *testing.T) {
 	cs := connect(t, &hero{look: beach})
 	if got := strings.Join(newRoles().names(), ","); got !=
@@ -118,7 +120,8 @@ func TestThePartyPlaysByTheRules(t *testing.T) {
 	)
 	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"решающий голос — за тобой", "выслушай его", "решаешь её сам",
-		"«делай»", "остров 3, спасение 9",
+		"«делай»", "остров 3, спасение 9", "горожанин до мозга костей",
+		"признаёшь и передумываешь", "переспроси",
 	)
 	lacks(t, "Friday's role", roleOf(t, cs, "friday"),
 		"Решает Роби", "ask_friday", "осторожный скептик", "зачем?",
