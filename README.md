@@ -61,7 +61,9 @@ just build
 ```
 Либо положить `robinson` прямо в папку игры и запустить без аргументов.
 Кросс-сборки: `just build-macos|build-linux|build-windows` (все три —
-`just build-all`), архив для раздачи, как в релизе, — `just release`.
+`just build-all`), архив для раздачи, как в релизе, — `just release`: все три
+сборки в `_build/release/modern-robinson_<версия>.zip`, версия — из
+`git describe` (на теге — сам тег), или своя: `just release v0.3.0-test`.
 Браузерная версия — [docs/11-web-build.md](docs/11-web-build.md).
 
 ## Управление

@@ -116,9 +116,12 @@ web-push-data host=env_var_or_default("ROBINSON_HOST", "") path=env_var_or_defau
     echo "Ресурсы $(du -sh "$src" | cut -f1) -> {{host}}:{{path}}/v{{version}}/"
     rsync -a --delete --partial -v "$src" "{{host}}:{{path}}/v{{version}}/"
 
-# Собрать архив для раздачи, как в релизе: бинарники всех систем, запускалку,
-# README, образец настроек, AGENTS.md и .mcp.json для папки игры и скилл
-release version="dev":
+# Архив как в релизе: бинарники всех систем, запускалка, README, образец
+# настроек, AGENTS.md и .mcp.json для папки игры и скилл. Версия — из git (на
+# теге — сам тег), её видно в заголовке окна. Linux — без cgo: Ebitengine и
+# звук ходят в X11, GL и ALSA через purego.
+# Готовый zip для раздачи со сборками трёх систем -> _build/release/
+release version=`git describe --tags --always --dirty`:
     #!/usr/bin/env bash
     set -euo pipefail
     out=_build/release; top="modern-robinson_{{version}}"; stage="$out/$top"
@@ -137,7 +140,7 @@ release version="dev":
     cp -R skills/robinson "$stage/skills/"
     ( cd "$out" && zip -qrX "$top.zip" "$top" -x '*.DS_Store' )
     rm -rf "$stage"
-    ls -la "$out"
+    ls -lh "$out/$top.zip"
     echo "Один архив на все системы: всё из него, и .mcp.json тоже, положить рядом с DATA/ игры, см. README.md."
 
 
