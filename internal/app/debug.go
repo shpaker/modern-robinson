@@ -91,7 +91,7 @@ func (g *Game) drawLattice(dst *ebiten.Image, col color.Color) {
 // never spills over the bar.
 func (g *Game) drawDebug(screen *ebiten.Image) {
 	world := screen.SubImage(image.Rect(0, 0, ViewW, PlayH)).(*ebiten.Image)
-	pv := g.previewClick(ebiten.CursorPosition())
+	pv := g.previewClick(g.pointer())
 	g.drawCells(world)
 	g.drawFences(world)
 	g.drawZones(world, pv.hot)
@@ -393,7 +393,7 @@ func (g *Game) drawPreview(dst *ebiten.Image, pv clickPreview) {
 // drawHUD writes the frame's numbers at the top of the play area, where the
 // scenes keep their scenery — every walk grid lies in the lower half.
 func (g *Game) drawHUD(dst *ebiten.Image, pv clickPreview) {
-	mx, my := ebiten.CursorPosition()
+	mx, my := g.pointer()
 	wx := mx + g.camX
 	cx, cy := g.grid.ToCell(wx, my)
 	lines := []string{

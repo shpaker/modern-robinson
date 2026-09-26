@@ -24,7 +24,7 @@ import (
 //	music: 0.7        # 0..1
 //	speed: 0.5        # 0..1, 0.5 is the original pace
 //	debug: false      # start with the F1 overlay on
-//	fullscreen: false
+//	fullscreen: false # the whole screen, F in the game
 type Config struct {
 	Scale      int
 	Sound      float64
@@ -32,8 +32,9 @@ type Config struct {
 	Speed      float64
 	Debug      bool
 	Fullscreen bool
-	// Path is the file the settings live in, where SaveLevels writes the
-	// sliders back; "" keeps them for this run only (the browser build).
+	// Path is the file the settings live in, where the sliders and the
+	// switches of the window's keys are written back; "" keeps them for this
+	// run only (the browser build).
 	Path string
 }
 
@@ -140,15 +141,26 @@ func (c *Config) clamp() {
 var levelKeys = []string{"sound", "music", "speed"}
 
 // SaveLevels writes the sliders into the settings file, so the next start
-// begins where the player left them. Only the sound, music and speed lines
-// change — every one of them, should a key repeat — and the rest of the file,
-// comments included, stays as written; a key the file lacks goes at the end.
+// begins where the player left them.
 func (c Config) SaveLevels(sound, music, speed float64) error {
+	return c.save(levelKeys, map[string]string{
+		"sound": level(sound), "music": level(music), "speed": level(speed),
+	})
+}
+
+// SaveSwitch writes an on/off setting a key flips in the game — F, the full
+// screen — the way SaveLevels writes the sliders.
+func (c Config) SaveSwitch(key string, on bool) error {
+	return c.save([]string{key}, map[string]string{key: strconv.FormatBool(on)})
+}
+
+// save puts the given keys into the settings file. Only their lines change —
+// every one of them, should a key repeat — and the rest of the file, comments
+// included, stays as written; a key the file lacks goes at the end, in the
+// order given.
+func (c Config) save(keys []string, vals map[string]string) error {
 	if c.Path == "" {
 		return nil
-	}
-	vals := map[string]string{
-		"sound": level(sound), "music": level(music), "speed": level(speed),
 	}
 	raw, err := os.ReadFile(c.Path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -171,7 +183,7 @@ func (c Config) SaveLevels(sound, music, speed float64) error {
 			seen[k] = true
 		}
 	}
-	for _, k := range levelKeys {
+	for _, k := range keys {
 		if !seen[k] {
 			lines = append(lines, k+": "+vals[k])
 		}

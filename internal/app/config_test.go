@@ -126,3 +126,37 @@ func TestSaveLevelsCreatesTheFile(t *testing.T) {
 		t.Errorf("in-memory config: %v", err)
 	}
 }
+
+// F writes its switch like a slider: the line changes in place, comment and
+// all, or joins the end; the next start reads it back.
+func TestSaveSwitch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ConfigName)
+	body := "scale: 2\n" +
+		"fullscreen: false # the whole screen\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := LoadConfig(dir)
+	if err := cfg.SaveSwitch("fullscreen", true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	want := "scale: 2\n" +
+		"fullscreen: true  # the whole screen\n"
+	if string(got) != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	if !LoadConfig(dir).Fullscreen {
+		t.Error("the switch did not come back on the next start")
+	}
+
+	fresh := LoadConfig(t.TempDir())
+	if err := fresh.SaveSwitch("fullscreen", false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(fresh.Path)
+	if string(got) != "fullscreen: false\n" {
+		t.Errorf("new file = %q", got)
+	}
+}

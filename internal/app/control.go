@@ -817,8 +817,16 @@ func mousePressed() bool {
 		ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight)
 }
 
-// keyPressed reports a key of the real keyboard gone down this tick.
-func keyPressed() bool { return len(inpututil.AppendJustPressedKeys(nil)) > 0 }
+// keyPressed reports a key of the real keyboard gone down this tick. The
+// window's own keys do not count: full screen is no move in the puzzle.
+func keyPressed() bool {
+	for _, k := range inpututil.AppendJustPressedKeys(nil) {
+		if !windowKey(k) {
+			return true
+		}
+	}
+	return false
+}
 
 // where says where the hero is.
 func (g *Game) where() string {

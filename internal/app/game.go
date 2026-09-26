@@ -622,6 +622,9 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
 		g.dbg.state = !g.dbg.state
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
+		g.toggleFullscreen()
+	}
 	// The quick save/load keys work only in play: anywhere else a load would
 	// swap the run out from under the boot screens and menus.
 	if g.mode == modePlay {
@@ -670,7 +673,7 @@ func (g *Game) Update() error {
 		return nil // a scene transition is fading
 	}
 	if clickedThisTick() {
-		g.click(ebiten.CursorPosition())
+		g.click(g.pointer())
 	} else if g.act != nil && skipKeyPressed() {
 		// A key means only "skip" — it carries no cursor position, so it goes
 		// straight past click()'s hotspot logic. skipCutscene itself checks
@@ -678,7 +681,7 @@ func (g *Game) Update() error {
 		g.idleAct = nil
 		g.skipCutscene()
 	}
-	mx, my := ebiten.CursorPosition()
+	mx, my := g.pointer()
 	g.updateHover(mx, my)
 	g.edgeScroll(mx, my, dt)
 

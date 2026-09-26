@@ -40,9 +40,8 @@ type mouseState struct {
 	pressed  bool // held down
 }
 
-// readMouse samples the cursor and the left button for this frame.
-func readMouse() mouseState {
-	x, y := ebiten.CursorPosition()
+// readMouse samples the left button for this frame, with the cursor at x,y.
+func readMouse(x, y int) mouseState {
 	return mouseState{
 		x:        x,
 		y:        y,
@@ -53,14 +52,22 @@ func readMouse() mouseState {
 }
 
 // serviceKey reports whether a key already has a job of its own (debug, quick
-// save/load, the options menu) and so must not double as "skip".
+// save/load, the options menu, the window's keys) and so must not double as
+// "skip".
 func serviceKey(k ebiten.Key) bool {
 	switch k {
 	case ebiten.KeyF1, ebiten.KeyF2, ebiten.KeyF5, ebiten.KeyF9,
 		ebiten.KeyEscape:
 		return true
 	}
-	return false
+	return windowKey(k)
+}
+
+// windowKey reports a key that changes only how the window shows the game —
+// F puts it on the whole screen and back — and so is no move in it: it skips
+// nothing and does not take a driven puzzle over (keyPressed).
+func windowKey(k ebiten.Key) bool {
+	return k == ebiten.KeyF
 }
 
 // skipKeyPressed reports a fresh press of any key that means "get on with it".
