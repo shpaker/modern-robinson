@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/shpaker/modern-robinson/compare/v0.2.1...v0.3.0) (2026-09-26)
+
+
+### Возможности
+
+* **mcp:** игрок может попросить не всю игру, а кусок ([ba0b63a](https://github.com/shpaker/modern-robinson/commit/ba0b63ae84b5490bf71692f27ed039892c0b7ad5))
+* **mcp:** правило честной игры — без файлов игры и перебора ([0bf09dc](https://github.com/shpaker/modern-robinson/commit/0bf09dc174c4103711c3df194922444cba8ddac7))
+* **mcp:** скилл robinson для запуска игры через MCP ([57f3c61](https://github.com/shpaker/modern-robinson/commit/57f3c6111eb8708e3cb3472059fe522ee3639980))
+* **release:** один архив со сборками для всех систем ([ef1170f](https://github.com/shpaker/modern-robinson/commit/ef1170f91c733bd1d46e688043bb24655198b3cc))
+
+
+### Документация
+
+* AGENTS.md — игра через MCP без моста ([5b90d4c](https://github.com/shpaker/modern-robinson/commit/5b90d4c689247582cf22a63acd6371aa78fd542a))
+
 ## [0.2.1](https://github.com/shpaker/modern-robinson/compare/v0.2.0...v0.2.1) (2026-09-25)
 
 
