@@ -181,10 +181,9 @@ func newServer(
 			"когда она доиграла начатое.",
 	}, s.puzzleGiveUp)
 	add(srv, &sdk.Tool{
-		Name:  "save",
-		Title: "Сохранить (вне роли)",
-		Description: "Вне роли: сохранить партию в слот 0–11. Сохраняйся " +
-			"после каждого успеха, чередуя слоты 10 и 11.",
+		Name:        "save",
+		Title:       "Сохранить (вне роли)",
+		Description: "Вне роли: сохранить партию в слот 0–11.",
 	}, s.save)
 	add(srv, &sdk.Tool{
 		Name:        "load",

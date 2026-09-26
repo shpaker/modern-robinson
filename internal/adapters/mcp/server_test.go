@@ -256,7 +256,6 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"уходит в чат до вызова", "следствие",
 	)
 	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
-		"сохраняйся регулярно", "слоты 10 и 11",
 		"накормить и напоить", "жди новой просьбы",
 	)
 	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
@@ -522,8 +521,7 @@ func TestRolesRetellThePuzzleRules(t *testing.T) {
 	}
 	lacks(t, "the puzzle rules", puzzleRules,
 		"Хижина", "Карта", "Записка", "Воздушный шар", "Мелодия на органе",
-		"Шашки с пиратом", "Esc", "сохраниться посреди головоломки нельзя",
-		"по Пятнице — он насвистит арию ещё раз",
+		"Шашки с пиратом", "Esc", "по Пятнице — он насвистит арию ещё раз",
 	)
 	bare := strings.NewReplacer("90°", "", "300 м", "").Replace(puzzleRules)
 	for _, w := range strings.Fields(bare) {

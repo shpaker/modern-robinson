@@ -123,3 +123,26 @@ func TestThePartyPlaysByTheRules(t *testing.T) {
 		"Решает Роби", "ask_friday", "Роби 5, остров 5, спасение 5",
 	)
 }
+
+// The instructions and the roles say nothing of saving: the party neither
+// saves nor loads of its own accord. Only the save files stay among those
+// not to open.
+func TestRolesSayNothingOfSaving(t *testing.T) {
+	cs := connect(t, &hero{look: beach})
+	texts := map[string]string{
+		"the instructions": cs.InitializeResult().Instructions,
+	}
+	for _, who := range newRoles().names() {
+		texts[who+"'s role"] = roleOf(t, cs, who)
+	}
+	for what, s := range texts {
+		low := strings.ToLower(s)
+		for _, w := range []string{
+			"сохраняйся", "сохранись", "сохраниться", "слот", "save", "load",
+		} {
+			if strings.Contains(low, w) {
+				t.Errorf("%s speaks of saving: %q", what, w)
+			}
+		}
+	}
+}
