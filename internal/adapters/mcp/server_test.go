@@ -243,7 +243,7 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	}
 	init := cs.InitializeResult()
 	lacks(t, "the instructions", init.Instructions,
-		"role", "who=coordinator", "narrator", "robinson", "friday",
+		"role", "who=coordinator", "robinson", "friday",
 		"сабагент", "координатор без голоса", "Claude Desktop",
 		"по-старому", "Играй честно", projectURL,
 		"без остановок", "ничего у него не спрашивай", "соседнем месте",
@@ -259,17 +259,13 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 		"bar_locked", "заперта самой игрой",
 		"changes.opened", "где путь был закрыт",
 		"«делай» не жди", "шкалы держи в уме",
+		projectURL, "хорошего выживания",
 	)
 	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
 		"накормить и напоить", "жди новой просьбы",
 		projectURL+"/issues", "платформа, версия игры и модель",
-		"строкой-действием", "«Шкалы:» в чат не идут",
+		"строкой-действием", "«Шкалы:» никуда не идут",
 		"второй раз не добавляй",
-	)
-	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
-		projectURL, "хорошего выживания",
-		"Шкалы героев видишь только ты", "ни чисел, ни названий шкал",
-		"До первой встречи с Пятницей",
 	)
 	if init.ServerInfo.WebsiteURL != projectURL {
 		t.Errorf("website = %q", init.ServerInfo.WebsiteURL)
