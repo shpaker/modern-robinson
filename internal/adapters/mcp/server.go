@@ -1,7 +1,6 @@
 // Package mcp serves the game over the Model Context Protocol to a client —
 // a language model — and the subagents it runs: the coordinator passes the
-// game's answers on, the narrator tells the story, Robinson decides, Friday
-// advises. The server hands out data only: what the hero sees, holds and
+// game's answers on, Robinson decides, Friday advises. The server hands out data only: what the hero sees, holds and
 // hears, and what changed (interfaces.IControl); every word said is the
 // client's own. Who plays what is told by text files, the roles (roles.go).
 // The game starts it with -mcp and talks over stdin/stdout.
@@ -90,7 +89,7 @@ type savedOut struct {
 }
 
 type roleIn struct {
-	Who string `json:"who" jsonschema:"чья роль: coordinator — основная модель, narrator — рассказчик, robinson — Роби, friday — Пятница"`
+	Who string `json:"who" jsonschema:"чья роль: coordinator — основная модель, robinson — Роби, friday — Пятница"`
 }
 
 type server struct {

@@ -50,10 +50,10 @@ func TestRolesComeFromTheFoldersBesideTheGame(t *testing.T) {
 	}
 	robi := roleOf(t, cs, "robinson")
 	for who, head := range map[string]string{
-		"robinson": "# Свой Роби\n\n# Как идёт партия",
-		"friday":   "# Пятница у бинарника\n\n",
-		"narrator": "# Рассказчик\n",
-		"pirate":   "# Пират\n\n",
+		"robinson":    "# Свой Роби\n\n# Как идёт партия",
+		"friday":      "# Пятница у бинарника\n\n",
+		"coordinator": "# Координатор\n",
+		"pirate":      "# Пират\n\n",
 	} {
 		if got := roleOf(t, cs, who); !strings.HasPrefix(got, head) {
 			t.Errorf("%s = %.60q…, want it to open with %q", who, got, head)
@@ -68,7 +68,7 @@ func TestRolesComeFromTheFoldersBesideTheGame(t *testing.T) {
 			t.Errorf("robinson lacks the built-in %s", name)
 		}
 	}
-	names := "coordinator, friday, narrator, pirate, robinson"
+	names := "coordinator, friday, pirate, robinson"
 	for _, who := range []string{
 		"instructions", "world", "../robinson", "Роби", "",
 	} {
@@ -91,8 +91,7 @@ func TestRolesComeFromTheFoldersBesideTheGame(t *testing.T) {
 }
 
 // The roles carry the party's rules: the coordinator has no voice and puts
-// the words out at once; the narrator is out of the heroes' hearing;
-// Robinson decides, having heard Friday out; the scales are each hero's own;
+// the words out at once; Robinson decides, having heard Friday out; the scales are each hero's own;
 // a puzzle is Robinson's to play; a hero low on the wish to be saved may
 // refuse. Robinson is a quick, self-assured townsman who owns up when
 // Friday's "why?" finds the hole; Friday is a wary sceptic who speaks
@@ -101,7 +100,7 @@ func TestRolesComeFromTheFoldersBesideTheGame(t *testing.T) {
 func TestThePartyPlaysByTheRules(t *testing.T) {
 	cs := connect(t, &hero{look: beach})
 	if got := strings.Join(newRoles().names(), ","); got !=
-		"coordinator,friday,narrator,robinson" {
+		"coordinator,friday,robinson" {
 		t.Errorf("roles = %s", got)
 	}
 	lacks(t, "the coordinator's role", roleOf(t, cs, "coordinator"),
@@ -110,16 +109,13 @@ func TestThePartyPlaysByTheRules(t *testing.T) {
 		"«Ход:» сам не исполняй", "Agent с name", "SendMessage",
 	)
 	lacks(t, "the shared rules", roleOf(t, cs, "friday"),
-		"Решающий голос — у Роби", "герои его не слышат", "Решение:",
+		"Решающий голос — у Роби", "Решение:",
 		"Ход:", "Шкалы:", "Игроку:", "к другу", "остров", "спасение",
 		"Другой герой их не видит", "может отказаться от задачи игрока",
 		"сам не пиши (SendMessage)",
 		"не ждите подсказок игрока", "Как выглядит чат", "JSON",
 		"Шкал в чате нет", "Ответа не жди",
 		"До неё Роби его не знает", "прочерк и не меняется",
-	)
-	lacks(t, "the narrator's role", roleOf(t, cs, "narrator"),
-		"тебя не слышат", "«—»", "Не подсказывай",
 	)
 	lacks(t, "Robinson's role", roleOf(t, cs, "robinson"),
 		"решающий голос — за тобой", "выслушай его", "решаешь её сам",
