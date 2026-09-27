@@ -4,6 +4,8 @@
 **Go + Ebitengine**. Форматы игры вскрыты, ремейк — новый интерпретатор
 оригинальных ресурсов. Работает на macOS, Linux, Windows и в браузере.
 
+![Дворец вождя: Робинзон перед троном, ЭЛТ-фильтр включён](docs/screenshot.webp)
+
 Репозиторий — <https://github.com/shpaker/modern-robinson>, готовые сборки —
 [Releases](https://github.com/shpaker/modern-robinson/releases).
 
