@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/shpaker/modern-robinson/compare/v0.5.0...v0.6.0) (2026-09-27)
+
+
+### Возможности
+
+* **mcp:** в чате только оформленные реплики, без JSON и служебного ([6f92fad](https://github.com/shpaker/modern-robinson/commit/6f92fadc629eb93e44bd762323829003e57c1c51))
+* **mcp:** до встречи с Пятницей его шкалы и симпатия к нему не меняются ([d3000b8](https://github.com/shpaker/modern-robinson/commit/d3000b86c774556e635324a2317073833259977c))
+* **mcp:** партия без остановок, удача открывает выходы рядом ([f244baf](https://github.com/shpaker/modern-robinson/commit/f244bafb276701e85a2c4629fa5598ca3993eb01))
+* **mcp:** убран рассказчик, игрока приветствует Роби ([446d1b1](https://github.com/shpaker/modern-robinson/commit/446d1b17b76fe2f71d5b79ff6fda468b9832bcf5))
+* **mcp:** шкалы видит только рассказчик, действие для чата пишет Роби ([3eb8a9b](https://github.com/shpaker/modern-robinson/commit/3eb8a9b42418cb2ac6fb2d06a60e139f417d8c43))
+* игра по умолчанию во весь экран, под MCP — окном ([fa43d14](https://github.com/shpaker/modern-robinson/commit/fa43d144b217a937c2eb9d04afccfefa6e38705a))
+
+
+### Документация
+
+* скриншот дворца вождя в README ([d7b513c](https://github.com/shpaker/modern-robinson/commit/d7b513ce87a2f18ddc5a8466ea15f64d14ddbbe0))
+
 ## [0.5.0](https://github.com/shpaker/modern-robinson/compare/v0.4.0...v0.5.0) (2026-09-26)
 
 
