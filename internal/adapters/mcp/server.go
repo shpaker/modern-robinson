@@ -70,6 +70,13 @@ type clickIn struct {
 	Why    string `json:"why"              jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
 }
 
+type pointIn struct {
+	X    int    `json:"x"              jsonschema:"x на экране головоломки, 0..639"`
+	Y    int    `json:"y"              jsonschema:"y на экране головоломки, 0..479"`
+	Grid bool   `json:"grid,omitempty" jsonschema:"сетка координат через 40 px на картинке ответа"`
+	Why  string `json:"why"            jsonschema:"зачем это действие — коротко причина героя, которую перед вызовом выложили в чат: чего он хочет добиться и почему именно так"`
+}
+
 type moveIn struct {
 	FromX int    `json:"from_x"          jsonschema:"x детали на экране головоломки, 0..639"`
 	FromY int    `json:"from_y"          jsonschema:"y детали на экране головоломки, 0..479"`
@@ -163,6 +170,14 @@ func newServer(
 			"когда она доиграла начатое, картинкой и тем, что прозвучало " +
 			"(heard).",
 	}, s.puzzleClick)
+	add(srv, &sdk.Tool{
+		Name:  "puzzle_point",
+		Title: "Подвести указатель",
+		Description: "Подвести указатель к точке экрана головоломки без " +
+			"клика: взятая деталь висит на нём серединой — так её " +
+			"примеряют к месту, прежде чем повернуть или положить. " +
+			"Отвечает картинкой.",
+	}, s.puzzlePoint)
 	add(srv, &sdk.Tool{
 		Name:  "puzzle_move",
 		Title: "Перенести в головоломке",
@@ -309,6 +324,15 @@ func (s *server) puzzleClick(
 	}
 	right := strings.EqualFold(in.Button, "right")
 	return s.answer(ctx, in.Grid)(s.c.PuzzleClick(ctx, in.X, in.Y, right))
+}
+
+func (s *server) puzzlePoint(
+	ctx context.Context, _ *sdk.CallToolRequest, in pointIn,
+) (*sdk.CallToolResult, types.Outcome, error) {
+	if err := reasoned(in.Why); err != nil {
+		return nil, types.Outcome{}, err
+	}
+	return s.answer(ctx, in.Grid)(s.c.PuzzlePoint(ctx, in.X, in.Y))
 }
 
 func (s *server) puzzleMove(

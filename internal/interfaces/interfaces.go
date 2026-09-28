@@ -142,6 +142,10 @@ type IControl interface {
 		x, y int,
 		right bool,
 	) (types.Outcome, error)
+	// PuzzlePoint brings the pointer over a puzzle screen to x,y without a
+	// press: a piece in hand goes with it, to be tried against its place
+	// before it is turned or put down.
+	PuzzlePoint(ctx context.Context, x, y int) (types.Outcome, error)
 	// PuzzleMove carries a piece across a puzzle screen with the player's
 	// clicks: one at from takes it, turns right clicks at to turn it there
 	// (0..3), and one at to puts it down. A first click that takes nothing

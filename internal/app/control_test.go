@@ -512,6 +512,67 @@ func TestPuzzleMoveClicksLikeThePlayer(t *testing.T) {
 	}
 }
 
+// A point brings the pointer over the puzzle with no press: the piece taken
+// up stays in hand and hangs over that spot until a click lets it go there;
+// a point off the screen, or with no puzzle, is refused.
+func TestPuzzlePointCarriesWithoutAPress(t *testing.T) {
+	g := heroGame(t, "SCENA0", nil)
+	defer mouse.Release()
+	pad := &padGame{offers: true}
+	g.mg = pad
+	point := func(x, y int) (types.Outcome, error) {
+		return drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+			return g.ctl.PuzzlePoint(ctx, x, y)
+		})
+	}
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, 10, 20, false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := point(150, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameList(pad.presses, []string{"left 10,20"}) || !pad.held ||
+		pad.taken != 1 {
+		t.Errorf("presses = %q held = %v taken = %d, want the piece kept",
+			pad.presses, pad.held, pad.taken)
+	}
+	if !out.Reacted || out.Look.Where != types.WherePuzzle {
+		t.Errorf("reacted = %v where = %q", out.Reacted, out.Look.Where)
+	}
+	for range 120 {
+		_ = g.Update()
+	}
+	if x, y := mouse.Position(); !mouse.Held() || x != 150 || y != 60 {
+		t.Errorf("pointer held = %v at %d,%d, want it kept at 150,60",
+			mouse.Held(), x, y)
+	}
+	if _, err := point(640, 10); err == nil {
+		t.Error("a point off the screen is not refused")
+	}
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, 150, 60, false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !sameList(pad.presses, []string{"left 10,20", "left 150,60"}) ||
+		pad.held {
+		t.Errorf("presses = %q held = %v, want it put down at the point",
+			pad.presses, pad.held)
+	}
+	pad.quits = true
+	if _, err := drive(t, g, func(ctx context.Context) (types.Outcome, error) {
+		return g.ctl.PuzzleClick(ctx, 1, 1, false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := point(1, 1); err == nil {
+		t.Error("no puzzle, yet the point went")
+	}
+}
+
 // openPuzzle is a game with puzzle id open, as the quest opens it.
 func openPuzzle(t *testing.T, id int) *Game {
 	t.Helper()
