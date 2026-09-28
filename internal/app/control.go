@@ -545,6 +545,16 @@ func (c *control) PuzzleClick(
 	return c.puzzle(ctx, []image.Point{{x, y}}, c.click(x, y, right)...)
 }
 
+// PuzzlePoint brings the pointer to x,y with no button down, and leaves it
+// there: what is carried hangs on it over that spot, as the player holds a
+// piece against its place before letting it go.
+func (c *control) PuzzlePoint(
+	ctx context.Context, x, y int,
+) (types.Outcome, error) {
+	return c.puzzle(ctx, []image.Point{{x, y}},
+		c.point(x, y, false, false), ticks(moveBeat, nil))
+}
+
 // A move lets the puzzle take in each of its clicks for a beat, and turns a
 // piece at most three quarters round: a fourth brings it back.
 const (
@@ -877,7 +887,7 @@ func (g *Game) canAct() error {
 	switch g.where() {
 	case types.WherePuzzle:
 		return errors.New("сейчас головоломка: puzzle_click, " +
-			"puzzle_move или puzzle_give_up")
+			"puzzle_point, puzzle_move или puzzle_give_up")
 	case types.WherePause:
 		return errors.New("пауза: открыто меню")
 	}

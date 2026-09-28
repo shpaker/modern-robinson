@@ -94,6 +94,14 @@ func (h *hero) PuzzleClick(
 	return h.out, h.err
 }
 
+func (h *hero) PuzzlePoint(
+	_ context.Context,
+	x, y int,
+) (types.Outcome, error) {
+	h.note("point", strconv.Itoa(x), strconv.Itoa(y))
+	return h.out, h.err
+}
+
 func (h *hero) PuzzleMove(
 	_ context.Context,
 	fromX, fromY, toX, toY, turns int,
@@ -235,8 +243,8 @@ func TestServerOffersTheHerosTools(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		"ask_friday", "go", "load", "look", "map",
-		"puzzle_click", "puzzle_give_up", "puzzle_move", "role", "save",
-		"use", "wait",
+		"puzzle_click", "puzzle_give_up", "puzzle_move", "puzzle_point",
+		"role", "save", "use", "wait",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("tools = %v, want %v", got, want)
@@ -334,6 +342,9 @@ func TestActionsReachTheHero(t *testing.T) {
 		"puzzle_click",
 		map[string]any{"x": 10, "y": 20, "button": "right", "why": "повернуть"},
 	)
+	call(t, cs, "puzzle_point", map[string]any{
+		"x": 150, "y": 50, "why": "примерить бревно",
+	})
 	call(t, cs, "puzzle_move", map[string]any{
 		"from_x": 400, "from_y": 100, "to_x": 150, "to_y": 60, "turns": 2,
 		"why": "бревно на место",
@@ -350,7 +361,7 @@ func TestActionsReachTheHero(t *testing.T) {
 	want := []string{
 		"use Краб ", "use себя Панама", "go налево", "map",
 		"friday Пальма ", "wait", "click 10 20 right",
-		"move 400 100 150 60 2", "move 1 2 3 4 0", "give up", "save 3",
+		"point 150 50", "move 400 100 150 60 2", "move 1 2 3 4 0", "give up", "save 3",
 		"load 3",
 	}
 	if strings.Join(h.calls, "|") != strings.Join(want, "|") {
@@ -386,6 +397,10 @@ func TestPuzzleRepliesCarryThePicture(t *testing.T) {
 		"from_x": 1, "from_y": 2, "to_x": 3, "to_y": 4, "why": "переношу",
 	})) {
 		t.Error("a puzzle move answers with the picture")
+	}
+	if !hasImage(call(t, cs, "puzzle_point",
+		map[string]any{"x": 1, "y": 2, "why": "примеряю"})) {
+		t.Error("a puzzle point answers with the picture")
 	}
 }
 
@@ -423,7 +438,8 @@ func TestActionsNeedAReason(t *testing.T) {
 	}
 	acts := map[string]bool{
 		"use": true, "go": true, "map": true, "ask_friday": true,
-		"puzzle_click": true, "puzzle_move": true, "puzzle_give_up": true,
+		"puzzle_click": true, "puzzle_point": true, "puzzle_move": true,
+		"puzzle_give_up": true,
 	}
 	for _, tool := range res.Tools {
 		raw, _ := json.Marshal(tool.InputSchema)
@@ -528,6 +544,9 @@ func TestRolesRetellThePuzzleRules(t *testing.T) {
 	lacks(t, "the puzzle rules", puzzleRules,
 		"Хижина", "Карта", "Записка", "Воздушный шар", "Мелодия на органе",
 		"Шашки с пиратом", "Esc", "по Пятнице — он насвистит арию ещё раз",
+		"пока ведёт мышь", "ложится на уже стоящие под ней", "падает вниз",
+		"выше можно, ниже нельзя", "концами наоборот", "не перебор",
+		"puzzle_point", "в кучу справа",
 	)
 	bare := strings.NewReplacer("90°", "", "300 м", "").Replace(puzzleRules)
 	for _, w := range strings.Fields(bare) {
@@ -536,8 +555,8 @@ func TestRolesRetellThePuzzleRules(t *testing.T) {
 		}
 	}
 	known := map[string]bool{
-		"Esc": true, "puzzle_click": true, "puzzle_move": true,
-		"puzzle_give_up": true,
+		"Esc": true, "puzzle_click": true, "puzzle_point": true,
+		"puzzle_move": true, "puzzle_give_up": true,
 	}
 	for _, w := range regexp.MustCompile(`[A-Za-z_]+`).
 		FindAllString(puzzleRules, -1) {
@@ -588,7 +607,8 @@ func TestGridOnRequest(t *testing.T) {
 		"from_x": 1, "from_y": 2, "to_x": 3, "to_y": 4, "why": "переношу",
 	}
 	for name, args := range map[string]map[string]any{
-		"look": nil, "puzzle_click": click, "puzzle_move": move, "wait": nil,
+		"look": nil, "puzzle_click": click, "puzzle_point": click,
+		"puzzle_move": move, "wait": nil,
 	} {
 		if got := picture(call(t, cs, name, args)); !bytes.Equal(got, screen) {
 			t.Errorf("%s without grid changed the picture", name)
@@ -631,7 +651,8 @@ func TestGridIsOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]bool{
-		"look": true, "puzzle_click": true, "puzzle_move": true, "wait": true,
+		"look": true, "puzzle_click": true, "puzzle_point": true,
+		"puzzle_move": true, "wait": true,
 	}
 	for _, tool := range res.Tools {
 		raw, _ := json.Marshal(tool.InputSchema)
