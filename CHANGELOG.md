@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/shpaker/modern-robinson/compare/v0.6.0...v0.7.0) (2026-09-28)
+
+
+### Возможности
+
+* **mcp:** примерка детали и правила хижины ([32be60c](https://github.com/shpaker/modern-robinson/commit/32be60cf0ea1eb5279ccccecdbb5410212ac2068))
+* **mcp:** примерка детали и правила хижины ([143badb](https://github.com/shpaker/modern-robinson/commit/143badbff09e03de32d027d5be8fdc36aef8acc7))
+
 ## [0.6.0](https://github.com/shpaker/modern-robinson/compare/v0.5.0...v0.6.0) (2026-09-27)
 
 
