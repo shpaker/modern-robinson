@@ -28,36 +28,26 @@ func TestShadersCompile(t *testing.T) {
 }
 
 // The pointer bends the way the picture does: the middle stays put, the
-// bend is symmetric, a corner shows frame pixels further out, a flat tube in
-// a window bends nothing, and full screen's case makes the picture smaller.
+// bend is symmetric, a corner shows frame pixels further out, and a flat
+// tube bends nothing.
 func TestWarp(t *testing.T) {
 	const w, h = 640, 480
 	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
 	tube := newTube(t, Defaults)
-	for _, full := range []bool{false, true} {
-		if x, y := tube.Warp(320, 240, w, h, full); !near(x, 320) ||
-			!near(y, 240) {
-			t.Errorf("full %v: the middle moved to %v,%v", full, x, y)
-		}
+	if x, y := tube.Warp(320, 240, w, h); !near(x, 320) || !near(y, 240) {
+		t.Errorf("the middle moved to %v,%v", x, y)
 	}
-	x1, y1 := tube.Warp(100, 60, w, h, false)
-	x2, y2 := tube.Warp(540, 420, w, h, false)
+	x1, y1 := tube.Warp(100, 60, w, h)
+	x2, y2 := tube.Warp(540, 420, w, h)
 	if !near(x1+x2, w) || !near(y1+y2, h) {
 		t.Errorf("not symmetric: %v,%v and %v,%v", x1, y1, x2, y2)
 	}
 	if x1 >= 100 || y1 >= 60 {
 		t.Errorf("a corner's pointer did not bow out: %v,%v", x1, y1)
 	}
-	flat := newTube(t, Options{Case: true})
-	if x, y := flat.Warp(100, 60, w, h, false); !near(x, 100) || !near(y, 60) {
+	flat := newTube(t, Options{})
+	if x, y := flat.Warp(100, 60, w, h); !near(x, 100) || !near(y, 60) {
 		t.Errorf("a flat tube bent 100,60 to %v,%v", x, y)
-	}
-	if x, _ := flat.Warp(0, 240, w, h, true); x >= 0 {
-		t.Errorf("the case left the frame's edge on the picture: %v", x)
-	}
-	bare := newTube(t, Options{})
-	if x, _ := bare.Warp(0, 240, w, h, true); !near(x, 0) {
-		t.Errorf("without its case the picture still shrank: %v", x)
 	}
 }
 
@@ -73,20 +63,12 @@ func TestGlitchSchedule(t *testing.T) {
 	}
 }
 
-// The dials reach the tube; the case rests until full screen.
+// The dials reach the tube.
 func TestDials(t *testing.T) {
 	tube := newTube(t, Defaults)
-	tube.Update(tick, false)
 	x := tube.tv.Value(kinescope.CurvatureX)
 	if math.Abs(float64(x)-0.045) > 1e-6 {
 		t.Errorf("curvature x %v", x)
-	}
-	if m := tube.tv.Value(kinescope.CabinetMargin); m != 0 {
-		t.Errorf("the case shows in a window: %v", m)
-	}
-	tube.setFull(true)
-	if m := tube.tv.Value(kinescope.CabinetMargin); m != caseMargin {
-		t.Errorf("the case in full screen %v, want %v", m, caseMargin)
 	}
 }
 

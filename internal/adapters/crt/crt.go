@@ -15,21 +15,12 @@ import (
 	"github.com/shpaker/kinescope/ebitengine"
 )
 
-// fullScreen is the tube's signal of full screen: there the monitor case
-// goes around the picture (Options.Case).
-const fullScreen = "fullscreen"
-
-// caseMargin is the case's width in full screen: 0.15 of the picture's
-// half-height on every side, case and all fitting the screen's height.
-const caseMargin = 0.15
-
 // Tube is the CRT the frame is shown on. A nil Tube is one switched off.
 type Tube struct {
 	opts     Options
 	on       bool
 	tv       *kinescope.TV
 	renderer *ebitengine.Renderer
-	full     *kinescope.Level
 }
 
 // New builds the tube, on or off; switched on, it warms up. Should its
@@ -41,10 +32,6 @@ func New(on bool, o Options) (*Tube, error) {
 		return t, err
 	}
 	tv.Apply(o.values())
-	full, err := tv.Signal(fullScreen)
-	if err != nil {
-		return t, err
-	}
 	renderer, err := ebitengine.NewRenderer()
 	if err != nil {
 		return t, err
@@ -52,7 +39,7 @@ func New(on bool, o Options) (*Tube, error) {
 	if err := renderer.Prepare(tv); err != nil {
 		return t, err
 	}
-	t.tv, t.renderer, t.full, t.on = tv, renderer, full, on
+	t.tv, t.renderer, t.on = tv, renderer, on
 	if on {
 		tv.PowerOn()
 	}
@@ -60,17 +47,10 @@ func New(on bool, o Options) (*Tube, error) {
 }
 
 // setup is the tube's kinescope setup: Rubin, its glitches as often as the
-// options say, its case only in full screen and only if the options want
-// it.
+// options say.
 func setup(o Options, seed uint64) kinescope.Setup {
 	s := kinescope.Rubin()
 	s.Seed = seed
-	s.Sources = map[string]kinescope.Source{fullScreen: kinescope.Signal{}}
-	if o.Case {
-		s.Drives = append(s.Drives, kinescope.Drive{
-			From: fullScreen, To: kinescope.CabinetMargin, Weight: caseMargin,
-		})
-	}
 	if o.Glitches > 0 {
 		every := s.Schedules["glitches"]
 		every.Mean = float32(o.Glitches)
@@ -128,36 +108,22 @@ func (t *Tube) Dark() bool { return t.On() && t.tv.Dark() }
 // Warp is the bend of the glass, for the pointer. x,y is a point on a w×h
 // frame as Ebiten maps the mouse, in a straight line from the screen; Warp
 // gives the frame pixel the tube shows there, the one the shader samples, so
-// a click lands on what is under the pointer. full is full screen, where the
-// picture is smaller for the case around it (Options.Case).
-func (t *Tube) Warp(x, y float64, w, h int, full bool) (float64, float64) {
+// a click lands on what is under the pointer.
+func (t *Tube) Warp(x, y float64, w, h int) (float64, float64) {
 	if !t.On() {
 		return x, y
 	}
-	t.setFull(full)
 	return t.tv.Map(x, y, w, h)
 }
 
 // Draw shows the frame on the tube over the whole final screen: the picture
-// where geoM puts the frame — in full screen smaller, within a monitor case
-// (Options.Case) — and the black, or the case and the room, around it.
+// where geoM puts the frame, and black around it.
 func (t *Tube) Draw(
 	screen ebiten.FinalScreen,
 	frame *ebiten.Image,
 	geoM ebiten.GeoM,
-	full bool,
 ) {
-	t.setFull(full)
 	if err := t.renderer.Draw(screen, frame, t.tv, geoM); err != nil {
 		ebiten.DefaultDrawFinalScreen(screen, frame, geoM)
 	}
-}
-
-// setFull tells the tube whether it fills the screen.
-func (t *Tube) setFull(full bool) {
-	level := float32(0)
-	if full {
-		level = 1
-	}
-	t.full.Set(level)
 }

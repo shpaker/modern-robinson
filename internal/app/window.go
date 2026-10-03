@@ -69,7 +69,7 @@ func (g *Game) DrawFinalScreen(
 	geoM ebiten.GeoM,
 ) {
 	if g.tube.On() {
-		g.tube.Draw(screen, frame, geoM, ebiten.IsFullscreen())
+		g.tube.Draw(screen, frame, geoM)
 		return
 	}
 	ebiten.DefaultDrawFinalScreen(screen, frame, geoM)
@@ -84,7 +84,7 @@ func (g *Game) frameAt() (x, y float64, over bool) {
 	x, y = ebiten.CursorPositionF()
 	over = x >= 0 && x < ViewW && y >= 0 && y < ViewH
 	if g.tube.On() {
-		x, y = g.tube.Warp(x, y, ViewW, ViewH, ebiten.IsFullscreen())
+		x, y = g.tube.Warp(x, y, ViewW, ViewH)
 	}
 	return x, y, over
 }
