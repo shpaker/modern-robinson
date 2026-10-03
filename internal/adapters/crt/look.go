@@ -22,7 +22,6 @@ type Options struct {
 	Look
 	Glitches float64 // mean seconds between random glitches; 0: none
 	Ripple   bool    // a shiver on a change of scene
-	Case     bool    // the monitor case around the picture in full screen
 }
 
 // Defaults is the set the game plays on: a well-worn one, bulging, grainy
@@ -42,7 +41,6 @@ var Defaults = Options{
 	},
 	Glitches: 90,
 	Ripple:   true,
-	Case:     true,
 }
 
 // halfHeight is half the frame's height in pixels: the game's frame is
@@ -50,14 +48,11 @@ var Defaults = Options{
 const halfHeight = 240
 
 // values are the tube's dials as kinescope params: each dial at 1 is the
-// strongest the game's tube goes. The case's margin rests at none: full
-// screen drives it (Options.Case).
+// strongest the game's tube goes.
 func (o Options) values() map[kinescope.ParamKey]float32 {
 	l := o.Look
 	corner := (0.02 + 0.06*l.Curvature) * halfHeight
 	return map[kinescope.ParamKey]float32{
-		kinescope.CabinetMargin:     0,
-		kinescope.CabinetRadius:     corner,
 		kinescope.CornersRadius:     corner,
 		kinescope.CurvatureX:        0.06 * l.Curvature,
 		kinescope.CurvatureY:        0.08 * l.Curvature,

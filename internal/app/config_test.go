@@ -175,7 +175,7 @@ func TestTubeKeys(t *testing.T) {
 		switch k {
 		case "crt_glitches":
 			body.WriteString(k + ": 30\n")
-		case "crt_ripple", "crt_case":
+		case "crt_ripple":
 			body.WriteString(k + ": off\n")
 		default:
 			body.WriteString(k + ": 0.123\n")
@@ -194,7 +194,7 @@ func TestTubeKeys(t *testing.T) {
 		}
 	}
 	tb := cfg.Tube
-	if tb.Noise != 1 || tb.Glitches != 30 || tb.Ripple || tb.Case {
+	if tb.Noise != 1 || tb.Glitches != 30 || tb.Ripple {
 		t.Errorf("tube settings %+v", tb)
 	}
 	if def := DefaultConfig().Tube; !def.Ripple || def.Glitches != 90 {
