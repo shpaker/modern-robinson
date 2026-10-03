@@ -7,14 +7,13 @@ import (
 
 // TubeKeys are the CRT's settings in config.yml beyond its switch (crt): the
 // dials of its look, each 0..1, then how it misbehaves — the mean seconds
-// between its glitches (0: none), the shiver on a change of scene and the
-// monitor case in full screen. The browser build takes the same keys from
-// the page's address.
+// between its glitches (0: none) and the shiver on a change of scene. The
+// browser build takes the same keys from the page's address.
 var TubeKeys = []string{
 	"crt_curvature", "crt_scanlines", "crt_mask", "crt_glow",
 	"crt_softness", "crt_convergence", "crt_vignette", "crt_noise",
 	"crt_hum", "crt_flicker", "crt_interlace",
-	"crt_glitches", "crt_ripple", "crt_case",
+	"crt_glitches", "crt_ripple",
 }
 
 // dial is the part of the tube's look a crt_ key turns, if it is one.
@@ -64,8 +63,6 @@ func (c *Config) applyTube(key, val string) {
 		}
 	case "crt_ripple":
 		c.Tube.Ripple = truthy(val)
-	case "crt_case":
-		c.Tube.Case = truthy(val)
 	}
 }
 
