@@ -1,5 +1,7 @@
 package crt
 
+import "github.com/shpaker/kinescope"
+
 // Look is how the tube shows the frame, each part from 0 (none) to 1.
 type Look struct {
 	Curvature   float32 // the bulge of the glass
@@ -41,4 +43,34 @@ var Defaults = Options{
 	Glitches: 90,
 	Ripple:   true,
 	Case:     true,
+}
+
+// halfHeight is half the frame's height in pixels: the game's frame is
+// 640×480 (app.ViewH), and the glass's rounding is measured in it.
+const halfHeight = 240
+
+// values are the tube's dials as kinescope params: each dial at 1 is the
+// strongest the game's tube goes. The case's margin rests at none: full
+// screen drives it (Options.Case).
+func (o Options) values() map[kinescope.ParamKey]float32 {
+	l := o.Look
+	corner := (0.02 + 0.06*l.Curvature) * halfHeight
+	return map[kinescope.ParamKey]float32{
+		kinescope.CabinetMargin:     0,
+		kinescope.CabinetRadius:     corner,
+		kinescope.CornersRadius:     corner,
+		kinescope.CurvatureX:        0.06 * l.Curvature,
+		kinescope.CurvatureY:        0.08 * l.Curvature,
+		kinescope.ScanlinesDepth:    0.7 * l.Scanlines,
+		kinescope.SlotMaskStrength:  l.Mask,
+		kinescope.GlowStrength:      0.5 * l.Glow,
+		kinescope.SoftnessAmount:    l.Softness,
+		kinescope.ConvergenceAmount: 0,
+		kinescope.ConvergenceOffset: 1.12 * l.Convergence,
+		kinescope.VignetteStrength:  0.74 * l.Vignette,
+		kinescope.GrainStrength:     0.0625 * l.Noise,
+		kinescope.HumStrength:       -0.17 * l.Hum,
+		kinescope.FlickerStrength:   0.03 * l.Flicker,
+		kinescope.InterlaceStrength: l.Interlace,
+	}
 }

@@ -4,75 +4,97 @@
 // the set hums and snows — with a glitch every minute or two and a ripple on
 // a change of scene. It is the frame's last pass, onto the screen itself, so
 // whatever reads the frame (save thumbnails, the MCP driver's picture) never
-// sees it.
+// sees it. The tube is a kinescope TV: its Rubin, tuned by the game's dials.
 package crt
 
 import (
-	_ "embed"
-	"image"
-	"math"
 	"math/rand/v2"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/shpaker/kinescope"
+	"github.com/shpaker/kinescope/ebitengine"
 )
 
-var (
-	//go:embed crt.kage
-	crtKage []byte
-	//go:embed glow.kage
-	glowKage []byte
-)
+// fullScreen is the tube's signal of full screen: there the monitor case
+// goes around the picture (Options.Case).
+const fullScreen = "fullscreen"
 
-// caseShrink is the picture's size in full screen: the monitor case adds
-// 0.15 of the picture's half-height on every side (crt.kage, monitor), and
-// case and all have to fit the screen's height.
-const caseShrink = 1 / 1.15
-
-// quad is the two triangles over the whole screen.
-var quad = []uint32{0, 1, 2, 1, 2, 3}
+// caseMargin is the case's width in full screen: 0.15 of the picture's
+// half-height on every side, case and all fitting the screen's height.
+const caseMargin = 0.15
 
 // Tube is the CRT the frame is shown on. A nil Tube is one switched off.
 type Tube struct {
-	opts   Options
-	on     bool
-	shader *ebiten.Shader // crt.kage
-	blur   *ebiten.Shader // glow.kage
-	glow   *ebiten.Image  // the frame blurred for the glow
-	clock
-
-	vs  [4]ebiten.Vertex
-	uni map[string]any
+	opts     Options
+	on       bool
+	tv       *kinescope.TV
+	renderer *ebitengine.Renderer
+	full     *kinescope.Level
 }
 
-// New builds the tube, on or off. Should its shaders not compile, it stays
-// off for good and the error says why.
+// New builds the tube, on or off; switched on, it warms up. Should its
+// shaders not compile, it stays off for good and the error says why.
 func New(on bool, o Options) (*Tube, error) {
-	rnd := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	t := &Tube{opts: o, clock: newClock(rnd, o.Glitches), uni: map[string]any{}}
-	sh, err := ebiten.NewShader(crtKage)
+	t := &Tube{opts: o}
+	tv, err := kinescope.NewTV(setup(o, rand.Uint64()))
 	if err != nil {
 		return t, err
 	}
-	blur, err := ebiten.NewShader(glowKage)
+	tv.Apply(o.values())
+	full, err := tv.Signal(fullScreen)
 	if err != nil {
 		return t, err
 	}
-	t.shader, t.blur, t.on = sh, blur, on
+	renderer, err := ebitengine.NewRenderer()
+	if err != nil {
+		return t, err
+	}
+	if err := renderer.Prepare(tv); err != nil {
+		return t, err
+	}
+	t.tv, t.renderer, t.full, t.on = tv, renderer, full, on
+	if on {
+		tv.PowerOn()
+	}
 	return t, nil
+}
+
+// setup is the tube's kinescope setup: Rubin, its glitches as often as the
+// options say, its case only in full screen and only if the options want
+// it.
+func setup(o Options, seed uint64) kinescope.Setup {
+	s := kinescope.Rubin()
+	s.Seed = seed
+	s.Sources = map[string]kinescope.Source{fullScreen: kinescope.Signal{}}
+	if o.Case {
+		s.Drives = append(s.Drives, kinescope.Drive{
+			From: fullScreen, To: kinescope.CabinetMargin, Weight: caseMargin,
+		})
+	}
+	if o.Glitches > 0 {
+		every := s.Schedules["glitches"]
+		every.Mean = float32(o.Glitches)
+		every.Spread = float32(o.Glitches) / 3
+		s.Schedules["glitches"] = every
+	} else {
+		delete(s.Schedules, "glitches")
+	}
+	return s
 }
 
 // On reports whether the frame goes through the tube.
 func (t *Tube) On() bool { return t != nil && t.on }
 
 // Toggle is the player's switch: off shows the bare frame at once; on again,
-// the tube warms up, quicker than from cold.
+// the tube warms up.
 func (t *Tube) Toggle() {
-	if t == nil || t.shader == nil {
+	if t == nil || t.tv == nil {
 		return
 	}
 	t.on = !t.on
 	if t.on {
-		t.warm, t.warmRate, t.dying = 0, 1.6, false
+		t.tv.Reset()
+		t.tv.PowerOn()
 	}
 }
 
@@ -80,27 +102,28 @@ func (t *Tube) Toggle() {
 // button is down: a glitch falling due then waits for its release.
 func (t *Tube) Update(dt float64, held bool) {
 	if t.On() {
-		t.tick(dt, held)
+		t.tv.Hold(held)
+		t.tv.Update(dt)
 	}
 }
 
 // Ripple is a change of scene: the signal shivers for a moment, unless the
 // tube is set not to (Options.Ripple).
 func (t *Tube) Ripple() {
-	if t != nil && t.opts.Ripple {
-		t.start(ripple)
+	if t.On() && t.opts.Ripple {
+		t.tv.Play(kinescope.Ripple())
 	}
 }
 
 // PowerOff starts the picture folding away; Dark reports it gone.
 func (t *Tube) PowerOff() {
-	if t != nil && !t.dying {
-		t.dying, t.cold = true, 0
+	if t.On() {
+		t.tv.PowerOff()
 	}
 }
 
 // Dark reports the tube dead after PowerOff.
-func (t *Tube) Dark() bool { return t != nil && t.dark() }
+func (t *Tube) Dark() bool { return t.On() && t.tv.Dark() }
 
 // Warp is the bend of the glass, for the pointer. x,y is a point on a w×h
 // frame as Ebiten maps the mouse, in a straight line from the screen; Warp
@@ -108,22 +131,11 @@ func (t *Tube) Dark() bool { return t != nil && t.dark() }
 // a click lands on what is under the pointer. full is full screen, where the
 // picture is smaller for the case around it (Options.Case).
 func (t *Tube) Warp(x, y float64, w, h int, full bool) (float64, float64) {
-	shrink := t.shrink(full)
-	cx := (x/float64(w) - 0.5) / shrink * 2
-	cy := (y/float64(h) - 0.5) / shrink * 2
-	k := float64(t.opts.Curvature)
-	bx := cx * (1 + cy*cy*k*0.06)
-	by := cy * (1 + cx*cx*k*0.08)
-	return (bx*0.5 + 0.5) * float64(w), (by*0.5 + 0.5) * float64(h)
-}
-
-// shrink is the picture's size within the frame's place: smaller in full
-// screen, where the monitor case goes around it.
-func (t *Tube) shrink(full bool) float64 {
-	if full && t.opts.Case {
-		return caseShrink
+	if !t.On() {
+		return x, y
 	}
-	return 1
+	t.setFull(full)
+	return t.tv.Map(x, y, w, h)
 }
 
 // Draw shows the frame on the tube over the whole final screen: the picture
@@ -135,83 +147,17 @@ func (t *Tube) Draw(
 	geoM ebiten.GeoM,
 	full bool,
 ) {
-	fb := frame.Bounds()
-	if t.glow == nil || t.glow.Bounds().Size() != fb.Size() {
-		if t.glow != nil {
-			t.glow.Deallocate()
-		}
-		t.glow = ebiten.NewImageWithOptions(
-			image.Rect(0, 0, fb.Dx(), fb.Dy()),
-			&ebiten.NewImageOptions{Unmanaged: true},
-		)
+	t.setFull(full)
+	if err := t.renderer.Draw(screen, frame, t.tv, geoM); err != nil {
+		ebiten.DefaultDrawFinalScreen(screen, frame, geoM)
 	}
-	if t.opts.Glow > 0 {
-		op := &ebiten.DrawRectShaderOptions{Blend: ebiten.BlendCopy}
-		op.Images[0] = frame
-		t.glow.DrawRectShader(fb.Dx(), fb.Dy(), t.blur, op)
-	}
-
-	// The quad covers the screen; its source corners are where the screen's
-	// corners fall on the frame, off it beside the picture.
-	inv := geoM
-	inv.Invert()
-	sb := screen.Bounds()
-	corners := [4]image.Point{
-		sb.Min, {sb.Max.X, sb.Min.Y}, {sb.Min.X, sb.Max.Y}, sb.Max,
-	}
-	for i, p := range corners {
-		sx, sy := inv.Apply(float64(p.X), float64(p.Y))
-		t.vs[i] = ebiten.Vertex{
-			DstX: float32(p.X), DstY: float32(p.Y),
-			SrcX:   float32(sx) + float32(fb.Min.X),
-			SrcY:   float32(sy) + float32(fb.Min.Y),
-			ColorR: 1, ColorG: 1, ColorB: 1, ColorA: 1,
-		}
-	}
-	op := &ebiten.DrawTrianglesShaderOptions{
-		Uniforms: t.uniforms(geoM.Element(0, 0), t.shrink(full)),
-		Blend:    ebiten.BlendCopy,
-	}
-	op.Images[0] = frame
-	op.Images[1] = t.glow
-	screen.DrawTrianglesShader32(t.vs[:], quad, t.shader, op)
 }
 
-// uniforms are the shader's inputs for a frame drawn scale screen pixels to
-// a frame pixel, the picture shrunk into its case by shrink.
-func (t *Tube) uniforms(scale, shrink float64) map[string]any {
-	box := float32(0)
-	if shrink < 1 {
-		box = 1
+// setFull tells the tube whether it fills the screen.
+func (t *Tube) setFull(full bool) {
+	level := float32(0)
+	if full {
+		level = 1
 	}
-	fine := scale * shrink
-	w, h, flash := t.power()
-	g := t.shape()
-	l := t.opts.Look
-	u := t.uni
-	u["Time"] = float32(math.Mod(t.now, 600))
-	u["Curvature"] = l.Curvature
-	u["Scanlines"] = l.Scanlines
-	u["Mask"] = l.Mask
-	u["Glow"] = l.Glow
-	u["Softness"] = l.Softness
-	u["Convergence"] = l.Convergence
-	u["Vignette"] = l.Vignette
-	u["Noise"] = l.Noise
-	u["Hum"] = l.Hum
-	u["Flicker"] = l.Flicker
-	u["Interlace"] = l.Interlace
-	u["Field"] = float32(t.ticks % 2)
-	u["MaskFine"] = float32(smoothstep(2, 3, fine))
-	u["ScanFine"] = float32(smoothstep(1, 2, fine))
-	u["Glitch"] = g[:]
-	u["Power"] = []float32{float32(w), float32(h), float32(flash)}
-	u["Shrink"] = float32(shrink)
-	u["Case"] = box
-	return u
-}
-
-func smoothstep(e0, e1, x float64) float64 {
-	k := math.Min(math.Max((x-e0)/(e1-e0), 0), 1)
-	return k * k * (3 - 2*k)
+	t.full.Set(level)
 }
