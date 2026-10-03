@@ -15,6 +15,7 @@
 |---|---|
 | github.com/hajimehoshi/ebiten/v2 | Apache-2.0 |
 | github.com/hajimehoshi/bitmapfont/v4 | Apache-2.0 (глифы — см. LICENSE модуля) |
+| github.com/shpaker/kinescope | MIT |
 | github.com/ebitengine/oto/v3 | Apache-2.0 |
 | github.com/ebitengine/purego | Apache-2.0 |
 | github.com/ebitengine/gomobile | BSD-3-Clause |

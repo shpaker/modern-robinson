@@ -2,23 +2,29 @@ package crt
 
 import (
 	"math"
-	"math/rand/v2"
 	"testing"
 
-	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/shpaker/kinescope"
 )
 
 const tick = 1.0 / 60
 
-// Both passes compile: Kage is checked on the CPU, no window needed.
-func TestShadersCompile(t *testing.T) {
-	for name, src := range map[string][]byte{
-		"crt.kage": crtKage, "glow.kage": glowKage,
-	} {
-		if _, err := ebiten.NewShader(src); err != nil {
-			t.Errorf("%s: %v", name, err)
-		}
+// newTube is a tube switched on and warmed up: the picture whole.
+func newTube(t *testing.T, o Options) *Tube {
+	t.Helper()
+	tube, err := New(true, o)
+	if err != nil {
+		t.Fatal(err)
 	}
+	for range 40 {
+		tube.Update(tick, false)
+	}
+	return tube
+}
+
+// The tube's shaders compile: Kage is checked on the CPU, no window needed.
+func TestShadersCompile(t *testing.T) {
+	newTube(t, Defaults)
 }
 
 // The pointer bends the way the picture does: the middle stays put, the
@@ -26,12 +32,12 @@ func TestShadersCompile(t *testing.T) {
 // a window bends nothing, and full screen's case makes the picture smaller.
 func TestWarp(t *testing.T) {
 	const w, h = 640, 480
-	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
-	tube := &Tube{opts: Defaults}
-	for _, withCase := range []bool{false, true} {
-		if x, y := tube.Warp(320, 240, w, h, withCase); !near(x, 320) ||
+	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
+	tube := newTube(t, Defaults)
+	for _, full := range []bool{false, true} {
+		if x, y := tube.Warp(320, 240, w, h, full); !near(x, 320) ||
 			!near(y, 240) {
-			t.Errorf("case %v: the middle moved to %v,%v", withCase, x, y)
+			t.Errorf("full %v: the middle moved to %v,%v", full, x, y)
 		}
 	}
 	x1, y1 := tube.Warp(100, 60, w, h, false)
@@ -42,108 +48,81 @@ func TestWarp(t *testing.T) {
 	if x1 >= 100 || y1 >= 60 {
 		t.Errorf("a corner's pointer did not bow out: %v,%v", x1, y1)
 	}
-	flat := &Tube{opts: Options{Case: true}}
+	flat := newTube(t, Options{Case: true})
 	if x, y := flat.Warp(100, 60, w, h, false); !near(x, 100) || !near(y, 60) {
 		t.Errorf("a flat tube bent 100,60 to %v,%v", x, y)
 	}
 	if x, _ := flat.Warp(0, 240, w, h, true); x >= 0 {
 		t.Errorf("the case left the frame's edge on the picture: %v", x)
 	}
-	bare := &Tube{}
+	bare := newTube(t, Options{})
 	if x, _ := bare.Warp(0, 240, w, h, true); !near(x, 0) {
 		t.Errorf("without its case the picture still shrank: %v", x)
 	}
 }
 
-// A random glitch comes a minute or two after the last one began, with the
-// default 90 seconds between them, and never when they are set to 0.
-func TestGlitchesKeepQuietAMinuteOrTwo(t *testing.T) {
-	c := newClock(rand.New(rand.NewPCG(1, 2)), 90)
-	starts, last := 0, 0.0
-	for range 60 * 60 * 10 {
-		was := c.g
-		c.tick(tick, false)
-		if was != calm || c.g == calm {
-			continue
-		}
-		if gap := c.now - last; gap < 60 || gap > 120+tick {
-			t.Errorf("glitch %d came after %.1f s", starts, gap)
-		}
-		starts, last = starts+1, c.now
+// The glitches come as often as the options say, and never when they are
+// set to 0.
+func TestGlitchSchedule(t *testing.T) {
+	every := setup(Defaults, 1).Schedules["glitches"]
+	if every.Mean != 90 || every.Spread != 30 || len(every.Episodes) != 4 {
+		t.Errorf("glitches %+v", every)
 	}
-	if starts < 5 || starts > 10 {
-		t.Errorf("%d glitches in ten minutes", starts)
-	}
-	never := newClock(rand.New(rand.NewPCG(1, 2)), 0)
-	for range 60 * 60 * 10 {
-		if never.tick(tick, false); never.g != calm {
-			t.Fatal("a glitch with glitches off")
-		}
+	if _, ok := setup(Options{}, 1).Schedules["glitches"]; ok {
+		t.Error("a glitch schedule with glitches off")
 	}
 }
 
-// With a mouse button down a glitch that falls due waits for the release.
-func TestHeldMouseDefersAGlitch(t *testing.T) {
-	c := newClock(rand.New(rand.NewPCG(3, 4)), 90)
-	for c.now < c.next+5 {
-		c.tick(tick, true)
+// The dials reach the tube; the case rests until full screen.
+func TestDials(t *testing.T) {
+	tube := newTube(t, Defaults)
+	tube.Update(tick, false)
+	x := tube.tv.Value(kinescope.CurvatureX)
+	if math.Abs(float64(x)-0.045) > 1e-6 {
+		t.Errorf("curvature x %v", x)
 	}
-	if c.g != calm {
-		t.Fatalf("glitch %d started during a drag", c.g)
+	if m := tube.tv.Value(kinescope.CabinetMargin); m != 0 {
+		t.Errorf("the case shows in a window: %v", m)
 	}
-	c.tick(tick, false)
-	if c.g == calm {
-		t.Error("no glitch after the release")
+	tube.setFull(true)
+	if m := tube.tv.Value(kinescope.CabinetMargin); m != caseMargin {
+		t.Errorf("the case in full screen %v, want %v", m, caseMargin)
 	}
 }
 
-// The ripple of a scene change shivers and dies out within half a second.
-func TestRippleDiesOut(t *testing.T) {
-	c := newClock(rand.New(rand.NewPCG(5, 6)), 90)
-	c.start(ripple)
-	c.tick(tick, false)
-	if s := c.shape(); s[0] <= 0 || s[2] <= 0 {
-		t.Errorf("ripple shape %v", s)
+// The ripple of a scene change shivers and dies out within half a second;
+// a tube set against ripples keeps still.
+func TestRipple(t *testing.T) {
+	tube := newTube(t, Defaults)
+	tube.Ripple()
+	tube.Update(tick, false)
+	if s := tube.tv.Value(kinescope.TearStrength); s <= 0 {
+		t.Errorf("no tear in a ripple: %v", s)
 	}
 	for range 30 {
-		c.tick(tick, false)
+		tube.Update(tick, false)
 	}
-	if c.g != calm || c.shape() != [4]float32{} {
-		t.Errorf("still rippling: %d %v", c.g, c.shape())
+	if s := tube.tv.Value(kinescope.TearStrength); s != 0 {
+		t.Errorf("still rippling: %v", s)
+	}
+
+	still := newTube(t, Options{Ripple: false})
+	still.Ripple()
+	still.Update(tick, false)
+	if s := still.tv.Value(kinescope.TearStrength); s != 0 {
+		t.Errorf("rippled with ripples off: %v", s)
 	}
 }
 
-// Power on shows a dot, a line and the picture; power off folds it back
-// and the tube goes dark.
-func TestPower(t *testing.T) {
-	c := newClock(rand.New(rand.NewPCG(7, 8)), 90)
-	if w, h, flash := c.power(); w >= 0.1 || h >= 0.1 || flash <= 0 {
-		t.Errorf("cold tube: %v %v %v", w, h, flash)
+// Power off folds the picture away and the tube goes dark.
+func TestPowerOff(t *testing.T) {
+	tube := newTube(t, Defaults)
+	tube.PowerOff()
+	for range 60 {
+		tube.Update(tick, false)
 	}
-	for c.warm < warmUp {
-		c.tick(tick, false)
-	}
-	if w, h, flash := c.power(); w != 1 || h != 1 || flash != 0 {
-		t.Errorf("warm tube: %v %v %v", w, h, flash)
-	}
-	c.dying = true
-	for !c.dark() {
-		if c.cold > coolDown+tick {
-			t.Fatal("never went dark")
-		}
-		c.tick(tick, false)
-	}
-	if w, h, flash := c.power(); w != 0 || h != 0 || flash != 0 {
-		t.Errorf("dead tube: %v %v %v", w, h, flash)
-	}
-}
-
-// A tube set against ripples keeps still on a change of scene.
-func TestRippleCanBeOff(t *testing.T) {
-	tube := &Tube{opts: Options{Ripple: false}}
-	tube.Ripple()
-	if tube.g != calm {
-		t.Error("rippled with ripples off")
+	if !tube.Dark() {
+		t.Error("never went dark")
 	}
 }
 

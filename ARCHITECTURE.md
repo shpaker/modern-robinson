@@ -13,7 +13,7 @@ internal/
                 mcp/ — герой для MCP-клиента (через interfaces.IControl);
                 mcp/roles/ — тексты ролей: координатор, Роби, Пятница
                 (встроены и идут в релиз папкой roles/);
-                crt/ — ЭЛТ-кинескоп, последний проход кадра (Kage)
+                crt/ — ЭЛТ-кинескоп, последний проход кадра (github.com/shpaker/kinescope)
   minigame/     шесть мини-игр, по пакету на игру; catalog/ — таблица по id
   app/          сборка графа, game loop, версия
 cmd/main.go     игра
