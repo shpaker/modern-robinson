@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/shpaker/modern-robinson/compare/v0.6.0...v0.7.0) (2026-10-03)
+
+
+### Возможности
+
+* **mcp:** примерка детали и правила хижины ([32be60c](https://github.com/shpaker/modern-robinson/commit/32be60cf0ea1eb5279ccccecdbb5410212ac2068))
+* **mcp:** примерка детали и правила хижины ([143badb](https://github.com/shpaker/modern-robinson/commit/143badbff09e03de32d027d5be8fdc36aef8acc7))
+
+
+### Рефакторинг
+
+* the CRT on the kinescope library ([7922e96](https://github.com/shpaker/modern-robinson/commit/7922e965d71a2ff463e4a0666928e2645ca87c26))
+* the CRT on the kinescope library ([f36c932](https://github.com/shpaker/modern-robinson/commit/f36c93222778095357240a18f951fdbac2059242))
+
 ## [0.6.0](https://github.com/shpaker/modern-robinson/compare/v0.5.0...v0.6.0) (2026-09-27)
 
 
