@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/shpaker/modern-robinson/compare/v0.7.0...v0.7.1) (2026-10-03)
+
+
+### Рефакторинг
+
+* the CRT without the monitor case ([1920af0](https://github.com/shpaker/modern-robinson/commit/1920af0c6579f9630f2700a0c2c0d6cb8bf03c78))
+
 ## [0.7.0](https://github.com/shpaker/modern-robinson/compare/v0.6.0...v0.7.0) (2026-10-03)
 
 
